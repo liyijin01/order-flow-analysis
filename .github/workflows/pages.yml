@@ -56,7 +56,7 @@ jobs:
           node --check web/live.js
           node --check web/render.js
           node --check web/app.js
-          node --check web/chart/main.js
+          for f in web/chart/*.js; do node --check "$f"; done
 
       - name: Ban large-array argument spreading
         run: |
@@ -113,7 +113,7 @@ jobs:
           set -euo pipefail
           cd datarepo
           git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.email '41898282+liyijin01@users.noreply.github.com'
           git add ladders .data-branch 2>/dev/null || git add ladders
           if ! git diff --cached --quiet; then
             git commit -m 'data: refresh daily ladders'
@@ -154,7 +154,7 @@ jobs:
           cp index.html _site/index.html
           cp chart.html _site/chart.html
           cp web/core.js web/live.js web/render.js web/app.js _site/web/
-          cp web/chart/main.js _site/web/chart/main.js
+          cp web/chart/*.js _site/web/chart/
           cp config/symbols.js _site/config/symbols.js
           cp _generated/profiles-*.json _site/
           touch _site/.nojekyll
