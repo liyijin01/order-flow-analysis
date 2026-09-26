@@ -14,7 +14,7 @@
     draw(ctx,size){
       const i=this.item;let x1=this.x(i.from,size.width),x2=this.x(i.to,size.width);
       if(x1==null||x2==null||!Array.isArray(i.rows)||!i.rows.length)return;
-      const max=Math.max(...i.rows.map(r=>Number(r[1])||0),1);
+      let max=1;for(const row of i.rows){const count=Number(row[1])||0;if(count>max)max=count;}
       const width=Math.max(8,Math.abs(x2-x1));const dir=x2>=x1?1:-1;
       ctx.save();ctx.fillStyle=i.fill||'rgba(185,193,205,0.24)';
       for(const row of i.rows){
