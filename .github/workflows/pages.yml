@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'index.html'
+      - 'chart.html'
       - 'config/**'
       - 'web/**'
       - 'pipeline/**'
@@ -55,6 +56,7 @@ jobs:
           node --check web/live.js
           node --check web/render.js
           node --check web/app.js
+          node --check web/chart/main.js
 
       - name: Ban large-array argument spreading
         run: |
@@ -148,9 +150,11 @@ jobs:
 
       - name: Prepare static site
         run: |
-          mkdir -p _site/web _site/config
+          mkdir -p _site/web/chart _site/config
           cp index.html _site/index.html
+          cp chart.html _site/chart.html
           cp web/core.js web/live.js web/render.js web/app.js _site/web/
+          cp web/chart/main.js _site/web/chart/main.js
           cp config/symbols.js _site/config/symbols.js
           cp _generated/profiles-*.json _site/
           touch _site/.nojekyll
