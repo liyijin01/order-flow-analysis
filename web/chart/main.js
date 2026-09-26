@@ -5,6 +5,8 @@
   const T = window.OrderFlowChartTheme;
   const D = window.OrderFlowChartData;
   const E = window.OrderFlowChartExport;
+  const AR = window.OrderFlowAnnotationRenderer;
+  const PRESETS = window.OrderFlowChartPresets || {};
   const SYMBOLS = window.ORDER_FLOW_SYMBOLS || {};
 
   const $ = (id) => document.getElementById(id);
@@ -28,6 +30,9 @@
     countdownLine: null,
     loadToken: 0,
     latestRefreshBusy: false,
+    fixture: 'none',
+    annotations: null,
+    annotationStats: { rendered: 0, skipped: 0, errors: [] },
   };
 
   function setStatus(message, isError) {
@@ -194,6 +199,7 @@
     state.candles = candles;
     state.volume = volume;
     state.watermark = watermark;
+    state.annotations = new AR.AnnotationRenderer(chart, candles);
   }
 
   function updateWatermark() {
@@ -283,12 +289,16 @@
       updateCountdown();
       const first = rows[0];
       const last = rows[rows.length - 1];
-      setStatus(
+      const baseStatus =
         'Loaded ' + rows.length + ' candles · ' +
         D.formatLocalDateTime(first.time, false) + ' → ' +
         D.formatLocalDateTime(last.time, false) +
-        ' · browser time zone: ' + D.localTimeZone()
-      );
+        ' · browser time zone: ' + D.localTimeZone();
+      setStatus(baseStatus);
+      if (state.fixture !== 'none') {
+        const stats = await renderSelectedFixture();
+        setStatus(baseStatus + ' · annotations ' + stats.rendered + '/' + (stats.total || stats.rendered));
+      }
     } catch (error) {
       console.error(error);
       setStatus('Unable to load Binance candles: ' + error.message, true);
@@ -346,6 +356,14 @@
     const symbol = q.get('symbol');
     const market = q.get('market');
     const interval = q.get('interval');
+    const fixture = q.get('fixture');
+    if (fixture && PRESETS[fixture]) {
+      $('fixture').value = fixture;
+      $('symbol').value = PRESETS[fixture].symbol;
+      $('market').value = PRESETS[fixture].market;
+      $('interval').value = PRESETS[fixture].interval;
+      return;
+    }
     if (symbol && SYMBOLS[symbol]) $('symbol').value = symbol;
     if (market === 'um' || market === 'spot') $('market').value = market;
     if (['15m','30m','1h','2h','4h','1d'].includes(interval)) $('interval').value = interval;
@@ -381,7 +399,51 @@
     }
   }
 
+  async function renderSelectedFixture() {
+    if (!state.annotations) return { rendered: 0, skipped: 0, errors: [], total: 0 };
+    if (state.fixture === 'none') {
+      state.annotations.clear();
+      state.annotationStats = { rendered: 0, skipped: 0, errors: [] };
+      return { ...state.annotationStats, total: 0 };
+    }
+    const preset = PRESETS[state.fixture];
+    if (!preset) {
+      state.annotations.clear();
+      state.annotationStats = { rendered: 0, skipped: 0, errors: ['unknown fixture'] };
+      return { ...state.annotationStats, total: 0 };
+    }
+    const doc = await AR.loadAnnotationFixture(preset.fixture);
+    const stats = state.annotations.render(doc);
+    state.annotationStats = stats;
+    return { ...stats, total: Array.isArray(doc.items) ? doc.items.length : 0 };
+  }
+
   async function onSelectionChange() {
+    if (state.fixture !== 'none') {
+      state.fixture = 'none';
+      $('fixture').value = 'none';
+      if (state.annotations) state.annotations.clear();
+    }
+    syncFromControls();
+    await loadData();
+  }
+
+  async function onFixtureChange() {
+    const id = $('fixture').value;
+    state.fixture = id;
+    if (id === 'none') {
+      if (state.annotations) state.annotations.clear();
+      setStatus('Annotations cleared.');
+      return;
+    }
+    const preset = PRESETS[id];
+    if (!preset) {
+      setStatus('Unknown fixture: ' + id, true);
+      return;
+    }
+    $('symbol').value = preset.symbol;
+    $('market').value = preset.market;
+    $('interval').value = preset.interval;
     syncFromControls();
     await loadData();
   }
@@ -396,6 +458,7 @@
     state.market = $('market').value;
     state.interval = $('interval').value;
     state.candleStyle = $('candleStyle').value;
+    state.fixture = $('fixture').value;
 
     createChart();
     applyUiState();
@@ -407,9 +470,18 @@
       state.candleStyle = $('candleStyle').value;
       state.candles.applyOptions(candleOptions());
     });
+    $('fixture').addEventListener('change', onFixtureChange);
     $('exportBtn').addEventListener('click', exportCurrent);
 
     footerLocal.textContent = 'Display time: browser local · ' + D.localTimeZone();
+
+    window.__orderFlowChartDebug = {
+      state,
+      get chart() { return state.chart; },
+      get annotations() { return state.annotations; },
+      annotationStats: () => state.annotationStats,
+      annotationCoordinates: () => state.annotations ? state.annotations.debugCoordinates() : [],
+    };
 
     await loadData();
     setInterval(updateCountdown, 1000);
