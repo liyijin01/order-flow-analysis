@@ -1,0 +1,41 @@
+{
+  "schema": "annotations-v1",
+  "symbol": "BTCUSDT",
+  "market": "um",
+  "interval": "1h",
+  "generatedAt": "2026-09-26T00:00:00Z",
+  "items": [
+    {
+      "id": "p5-range",
+      "type": "range",
+      "from": 1788566400,
+      "to": 1789862400,
+      "high": 83800,
+      "low": 80200,
+      "labels": [
+        "1",
+        "0"
+      ],
+      "color": "#ffffff",
+      "source": "manual"
+    },
+    {
+      "id": "p5-cross",
+      "type": "marker",
+      "shape": "cross",
+      "time": 1788998400,
+      "price": 82800,
+      "text": "cross",
+      "source": "manual"
+    },
+    {
+      "id": "p5-arrow",
+      "type": "marker",
+      "shape": "arrow",
+      "time": 1789430400,
+      "price": 80800,
+      "text": "event",
+      "source": "manual"
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "schema": "annotations-v1",
+  "symbol": "BTCUSDT",
+  "market": "um",
+  "interval": "1h",
+  "generatedAt": "2026-09-26T00:00:00Z",
+  "items": [
+    {
+      "id": "p3-band",
+      "type": "band",
+      "label": "Q VWAP",
+      "points": [
+        [
+          1788220800,
+          81800,
+          82600,
+          81000
+        ],
+        [
+          1788566400,
+          82000,
+          82850,
+          81150
+        ],
+        [
+          1788998400,
+          82200,
+          83000,
+          81400
+        ],
+        [
+          1789430400,
+          82450,
+          83300,
+          81600
+        ],
+        [
+          1789862400,
+          82700,
+          83600,
+          81800
+        ]
+      ],
+      "color": "#5cb85c",
+      "source": "approx"
+    },
+    {
+      "id": "p3-touch",
+      "type": "marker",
+      "shape": "circle",
+      "time": 1789430400,
+      "price": 82450,
+      "text": "touch Q VWAP",
+      "pane": 0,
+      "source": "approx"
+    }
+  ]
+}

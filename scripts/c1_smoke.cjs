@@ -16,68 +16,73 @@ function fixtureRows(symbol) {
     const low = Math.min(open, close) - base * 0.0025;
     const volume = 100 + (i % 37) * 7;
     rows.push([
-      openTime,
-      open.toFixed(4),
-      high.toFixed(4),
-      low.toFixed(4),
-      close.toFixed(4),
-      volume.toFixed(3),
-      openTime + 3599999,
-      (volume * close).toFixed(3),
-      100 + (i % 50),
-      (volume * 0.53).toFixed(3),
-      (volume * close * 0.53).toFixed(3),
-      '0'
+      openTime, open.toFixed(4), high.toFixed(4), low.toFixed(4), close.toFixed(4),
+      volume.toFixed(3), openTime + 3599999, (volume * close).toFixed(3),
+      100 + (i % 50), (volume * 0.53).toFixed(3), (volume * close * 0.53).toFixed(3), '0'
     ]);
   }
   return rows;
 }
 
+async function installKlineRoute(page, defaultSymbol) {
+  await page.route(/https:\/\/(fapi\.binance\.com|api\.binance\.com)\/.*klines.*/, async (route) => {
+    const url = new URL(route.request().url());
+    const requested = url.searchParams.get('symbol') || defaultSymbol;
+    const all = fixtureRows(requested);
+    const limit = Math.max(1, Math.min(Number(url.searchParams.get('limit')) || 500, all.length));
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(all.slice(-limit)) });
+  });
+}
+
+async function exportPage(page, outDir, name) {
+  await page.selectOption('#exportSize', '1920x1080');
+  const downloadPromise = page.waitForEvent('download', { timeout: 30000 });
+  await page.click('#exportBtn');
+  const download = await downloadPromise;
+  const target = path.join(outDir, name + '-1920x1080.png');
+  await download.saveAs(target);
+  const stat = fs.statSync(target);
+  if (stat.size < 10000) throw new Error(name + ' export too small: ' + stat.size);
+  await page.screenshot({ path: path.join(outDir, name + '-page.png'), fullPage: true });
+}
+
 (async () => {
-  const outDir = path.resolve('c1-smoke-artifacts');
+  const outDir = path.resolve('chart-smoke-artifacts');
   fs.mkdirSync(outDir, { recursive: true });
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
-  const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
   const consoleErrors = [];
 
   try {
-    for (const symbol of symbols) {
+    for (const symbol of ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']) {
       const page = await browser.newPage({ viewport: { width: 1500, height: 900 }, deviceScaleFactor: 1 });
-      page.on('console', (msg) => {
-        if (msg.type() === 'error') consoleErrors.push(symbol + ': ' + msg.text());
-      });
+      page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(symbol + ': ' + msg.text()); });
       page.on('pageerror', (err) => consoleErrors.push(symbol + ': ' + err.message));
+      await installKlineRoute(page, symbol);
+      await page.goto('http://127.0.0.1:8000/chart.html?symbol=' + symbol + '&market=um&interval=1h', { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await page.waitForFunction(() => document.getElementById('status')?.textContent.startsWith('Loaded '), { timeout: 30000 });
+      await exportPage(page, outDir, symbol + '-1h');
+      await page.close();
+    }
 
-      await page.route(/https:\/\/(fapi\.binance\.com|api\.binance\.com)\/.*klines.*/, async (route) => {
-        const url = new URL(route.request().url());
-        const requested = url.searchParams.get('symbol') || symbol;
-        const all = fixtureRows(requested);
-        const limit = Math.max(1, Math.min(Number(url.searchParams.get('limit')) || 500, all.length));
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify(all.slice(-limit)),
-        });
-      });
+    for (const fixture of ['P1','P2','P3','P4','P5']) {
+      const page = await browser.newPage({ viewport: { width: 1500, height: 900 }, deviceScaleFactor: 1 });
+      page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(fixture + ': ' + msg.text()); });
+      page.on('pageerror', (err) => consoleErrors.push(fixture + ': ' + err.message));
+      await installKlineRoute(page, 'BTCUSDT');
+      await page.goto('http://127.0.0.1:8000/chart.html?symbol=BTCUSDT&market=um&interval=1h&fixture=' + fixture, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await page.waitForFunction((f) => document.getElementById('status')?.textContent.startsWith('Sample ' + f), fixture, { timeout: 30000 });
 
-      const url = 'http://127.0.0.1:8000/chart.html?symbol=' + symbol + '&market=um&interval=1h';
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-      await page.waitForFunction(() => {
-        const s = document.getElementById('status');
-        return s && s.textContent.startsWith('Loaded ');
-      }, { timeout: 30000 });
+      const box = await page.locator('#chart').boundingBox();
+      if (box) {
+        await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.45);
+        await page.mouse.wheel(0, -450);
+        await page.mouse.move(box.x + box.width * 0.65, box.y + box.height * 0.45);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width * 0.48, box.y + box.height * 0.45, { steps: 8 });
+        await page.mouse.up();
+      }
 
-      await page.selectOption('#exportSize', '1920x1080');
-      const downloadPromise = page.waitForEvent('download', { timeout: 30000 });
-      await page.click('#exportBtn');
-      const download = await downloadPromise;
-      const target = path.join(outDir, symbol + '-1h-1920x1080.png');
-      await download.saveAs(target);
-      const stat = fs.statSync(target);
-      if (stat.size < 10000) throw new Error(symbol + ' export too small: ' + stat.size);
-
-      const pageShot = path.join(outDir, symbol + '-page.png');
-      await page.screenshot({ path: pageShot, fullPage: true });
+      await exportPage(page, outDir, fixture + '-sample');
       await page.close();
     }
   } finally {
@@ -88,8 +93,5 @@ function fixtureRows(symbol) {
     console.error(consoleErrors.join('\n'));
     process.exit(1);
   }
-  console.log('C1 browser smoke passed for BTCUSDT, ETHUSDT, SOLUSDT with deterministic kline fixtures.');
-})().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+  console.log('Chart browser smoke passed for BTC/ETH/SOL and annotation fixtures P1-P5.');
+})().catch((err) => { console.error(err); process.exit(1); });
