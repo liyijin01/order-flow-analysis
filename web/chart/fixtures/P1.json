@@ -1,0 +1,48 @@
+{
+  "schema": "annotations-v1",
+  "symbol": "BTCUSDT",
+  "market": "um",
+  "interval": "1h",
+  "generatedAt": "2026-09-26T00:00:00Z",
+  "items": [
+    {
+      "id": "p1-pq-val",
+      "type": "level",
+      "price": 81000,
+      "label": "PQ VAL",
+      "from": 1788220800,
+      "to": null,
+      "style": "dashed",
+      "color": "#e6e6e6",
+      "axisLabel": true,
+      "group": "quarter",
+      "source": "exact"
+    },
+    {
+      "id": "p1-pm-poc",
+      "type": "level",
+      "price": 82350,
+      "label": "PM POC",
+      "from": 1788566400,
+      "to": null,
+      "style": "dashed",
+      "color": "#b7c2d6",
+      "axisLabel": true,
+      "group": "month",
+      "source": "exact"
+    },
+    {
+      "id": "p1-zone",
+      "type": "zone",
+      "top": 83200,
+      "bottom": 82600,
+      "from": 1788998400,
+      "to": null,
+      "label": "PY Sep",
+      "border": "#ffffff",
+      "fill": "rgba(79,195,247,0.10)",
+      "group": "month",
+      "source": "exact"
+    }
+  ]
+}

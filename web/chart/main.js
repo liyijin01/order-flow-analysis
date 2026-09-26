@@ -5,6 +5,7 @@
   const T = window.OrderFlowChartTheme;
   const D = window.OrderFlowChartData;
   const E = window.OrderFlowChartExport;
+  const AnnotationRenderer = window.OrderFlowAnnotationRenderer && window.OrderFlowAnnotationRenderer.Renderer;
   const SYMBOLS = window.ORDER_FLOW_SYMBOLS || {};
 
   const $ = (id) => document.getElementById(id);
@@ -26,6 +27,8 @@
     volume: null,
     watermark: null,
     countdownLine: null,
+    annotationRenderer: null,
+    sampleMode: '',
     loadToken: 0,
     latestRefreshBusy: false,
   };
@@ -194,6 +197,7 @@
     state.candles = candles;
     state.volume = volume;
     state.watermark = watermark;
+    state.annotationRenderer = AnnotationRenderer ? new AnnotationRenderer(candles) : null;
   }
 
   function updateWatermark() {
@@ -281,6 +285,7 @@
       state.chart.timeScale().fitContent();
       updateInfo(rows[rows.length - 1]);
       updateCountdown();
+      if (state.sampleMode) await loadSampleAnnotations();
       const first = rows[0];
       const last = rows[rows.length - 1];
       setStatus(
@@ -292,6 +297,36 @@
     } catch (error) {
       console.error(error);
       setStatus('Unable to load Binance candles: ' + error.message, true);
+    }
+  }
+
+  async function loadSampleAnnotations() {
+    if (!state.annotationRenderer) return;
+    if (!state.sampleMode) {
+      state.annotationRenderer.clear();
+      return;
+    }
+    const response = await fetch('web/chart/fixtures/' + state.sampleMode + '.json', { cache: 'no-store' });
+    if (!response.ok) throw new Error('fixture HTTP ' + response.status);
+    const doc = await response.json();
+    const result = state.annotationRenderer.render(doc);
+    if (!result.ok) throw new Error('fixture schema invalid: ' + result.errors.join('; '));
+    setStatus('Sample ' + state.sampleMode + ' · ' + result.count + ' annotation primitives · browser time zone: ' + D.localTimeZone());
+  }
+
+  async function onSampleChange() {
+    state.sampleMode = $('sampleMode').value;
+    if (state.sampleMode) {
+      $('symbol').value = 'BTCUSDT';
+      $('market').value = 'um';
+      $('interval').value = '1h';
+      syncFromControls();
+      await loadData();
+      await loadSampleAnnotations();
+      state.chart.timeScale().fitContent();
+    } else if (state.annotationRenderer) {
+      state.annotationRenderer.clear();
+      setStatus('Sample mode off.');
     }
   }
 
@@ -346,9 +381,11 @@
     const symbol = q.get('symbol');
     const market = q.get('market');
     const interval = q.get('interval');
+    const fixture = q.get('fixture');
     if (symbol && SYMBOLS[symbol]) $('symbol').value = symbol;
     if (market === 'um' || market === 'spot') $('market').value = market;
     if (['15m','30m','1h','2h','4h','1d'].includes(interval)) $('interval').value = interval;
+    if (['P1','P2','P3','P4','P5'].includes(fixture)) $('sampleMode').value = fixture;
   }
 
   function footerText() {
@@ -396,6 +433,7 @@
     state.market = $('market').value;
     state.interval = $('interval').value;
     state.candleStyle = $('candleStyle').value;
+    state.sampleMode = $('sampleMode').value;
 
     createChart();
     applyUiState();
@@ -403,6 +441,7 @@
     $('symbol').addEventListener('change', onSelectionChange);
     $('market').addEventListener('change', onSelectionChange);
     $('interval').addEventListener('change', onSelectionChange);
+    $('sampleMode').addEventListener('change', onSampleChange);
     $('candleStyle').addEventListener('change', () => {
       state.candleStyle = $('candleStyle').value;
       state.candles.applyOptions(candleOptions());

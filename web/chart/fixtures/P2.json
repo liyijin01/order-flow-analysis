@@ -1,0 +1,70 @@
+{
+  "schema": "annotations-v1",
+  "symbol": "BTCUSDT",
+  "market": "um",
+  "interval": "1h",
+  "generatedAt": "2026-09-26T00:00:00Z",
+  "items": [
+    {
+      "id": "p2-tpo",
+      "type": "profile",
+      "kind": "tpo",
+      "from": 1788566400,
+      "to": 1789430400,
+      "binSize": 100,
+      "rows": [
+        [
+          80500,
+          5
+        ],
+        [
+          80700,
+          9
+        ],
+        [
+          80900,
+          14
+        ],
+        [
+          81100,
+          18
+        ],
+        [
+          81300,
+          22
+        ],
+        [
+          81500,
+          16
+        ],
+        [
+          81700,
+          10
+        ],
+        [
+          81900,
+          6
+        ]
+      ],
+      "poc": 81300,
+      "vah": 81700,
+      "val": 80900,
+      "maxWidthBars": 40,
+      "showLetters": false,
+      "label": "Monthly TPO",
+      "source": "approx"
+    },
+    {
+      "id": "p2-poc",
+      "type": "level",
+      "price": 81300,
+      "label": "TPO POC",
+      "from": 1788566400,
+      "to": 1789430400,
+      "style": "solid",
+      "color": "#ffffff",
+      "axisLabel": true,
+      "source": "approx"
+    }
+  ]
+}

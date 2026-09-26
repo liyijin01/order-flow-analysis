@@ -1,0 +1,1 @@
+(function(g){'use strict';const B=g.OrderFlowPrimitiveBase.BasePrimitive;class TextPrimitive extends B{draw(ctx){const x=this.x(this.item.time),y=this.y(this.item.price);if(x==null||y==null)return;this.text(ctx,this.item.text,x,y,this.item.color||'#fff',this.item.background||'rgba(27,33,48,.72)');}}g.OrderFlowTextPrimitive=TextPrimitive;})(globalThis);

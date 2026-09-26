@@ -1,0 +1,34 @@
+{
+  "schema": "annotations-v1",
+  "symbol": "BTCUSDT",
+  "market": "um",
+  "interval": "1h",
+  "generatedAt": "2026-09-26T00:00:00Z",
+  "items": [
+    {
+      "id": "p4-call",
+      "type": "callout",
+      "time": 1788998400,
+      "price": 82900,
+      "text": "2026 9.10",
+      "source": "manual"
+    },
+    {
+      "id": "p4-v",
+      "type": "vline",
+      "time": 1789430400,
+      "label": "2026-09-15",
+      "color": "#8993a5",
+      "source": "manual"
+    },
+    {
+      "id": "p4-text",
+      "type": "text",
+      "time": 1789862400,
+      "price": 81500,
+      "text": "sample note",
+      "color": "#ffffff",
+      "source": "manual"
+    }
+  ]
+}
