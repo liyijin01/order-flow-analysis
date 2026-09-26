@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Order Flow Analysis</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:#111;background:#fff}
+*{box-sizing:border-box}body{margin:0}main{max-width:1480px;margin:auto;padding:28px}
+header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}.eyebrow{font-size:10px;letter-spacing:.18em;color:#777}
+h1{font-size:28px;margin:8px 0 4px;letter-spacing:-.035em}h2{font-size:15px;margin:0 0 10px}p{font-size:12px;line-height:1.6}
+.badge{border:1px solid #999;padding:8px 10px;font-size:10px;white-space:nowrap}.toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:18px 0 12px}
+button,select,input{font:inherit;color:inherit;background:#fff;border:1px solid #aaa;border-radius:4px;padding:8px 10px;font-size:11px}button{cursor:pointer}input{width:78px}
+.status,.notice{border:1px solid #bbb;padding:11px 13px;font-size:11px;line-height:1.55}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+.card{border:1px solid #ccc;padding:14px}.card label{font-size:9px;color:#777;display:block}.value{font-size:24px;margin-top:6px;font-variant-numeric:tabular-nums}
+.section{margin-top:24px}.chart{border:1px solid #ccc;min-height:220px;overflow:auto}.chart svg{display:block;width:100%;height:auto;min-width:760px}.footprint{max-height:560px}
+.fp{border-collapse:collapse;width:100%;font-size:10px;font-variant-numeric:tabular-nums}.fp th,.fp td{border:1px solid #ddd;padding:4px 6px;text-align:right;white-space:nowrap}.fp th{position:sticky;top:0;background:#fff;z-index:2}.fp .buy{background:#eef8f0}.fp .sell{background:#fff0f0}.fp .price{background:#f8f8f8}
+details{margin-top:24px;border-top:1px solid #bbb;padding-top:14px}summary{cursor:pointer;font-size:12px;font-weight:600}footer{margin-top:26px;border-top:1px solid #ccc;padding-top:12px;font-size:10px;color:#777}
+@media(max-width:800px){main{padding:16px}.metrics{grid-template-columns:1fr 1fr}header{display:block}.badge{display:inline-block;margin-top:8px}}
+</style>
+</head>
+<body><main>
+<header><div><div class="eyebrow">ORDER FLOW LAB / WEB MVP</div><h1>BTCUSDT Order Flow</h1><p>Binance USD-M public market data · read only</p></div><div id="liveBadge" class="badge">DISCONNECTED</div></header>
+<div class="toolbar">
+<label>Symbol <select id="symbol"><option>BTCUSDT</option><option>ETHUSDT</option></select></label>
+<button id="connect">Connect live</button><button id="disconnect">Disconnect</button>
+<label>Flow window <select id="window"><option value="900000">15m</option><option value="3600000">1h</option><option value="14400000" selected>4h</option><option value="28800000">8h</option><option value="43200000">12h</option></select></label>
+<label>Price row <input id="row" type="number" value="10" min="0.1" step="0.1"></label>
+<label>Footprint <select id="interval"><option value="1000">1s</option><option value="5000">5s</option><option value="15000" selected>15s</option><option value="60000">1m</option><option value="300000">5m</option></select></label>
+</div>
+<div id="status" class="status">Page loaded. Live data has not been requested yet.</div>
+<section class="metrics">
+<div class="card"><label>LAST / USDT</label><div id="last" class="value">n/a</div></div>
+<div class="card"><label>CVD / BTC</label><div id="cvd" class="value">n/a</div></div>
+<div class="card"><label>VP POC / USDT</label><div id="poc" class="value">n/a</div></div>
+<div class="card"><label>CAPTURED AGG EVENTS</label><div id="count" class="value">0</div></div>
+</section>
+<p id="coverage" class="notice">No captured flow.</p>
+<div class="section"><h2>01 / Executed-volume profile</h2><div id="profile" class="chart"></div></div>
+<div class="section"><h2>02 / Bid x Ask footprint</h2><div id="footprint" class="chart footprint"></div></div>
+<div class="section"><h2>03 / Trade-sequenced CVD</h2><div id="cvdChart" class="chart"></div></div>
+<div class="section"><h2>04 / Weekly VP from data.binance.vision</h2>
+<div class="toolbar"><label>Week <select id="week"><option value="previous">Previous completed ISO week</option><option value="current">Current week archived days</option></select></label>
+<label>Weekly row <select id="weekRow"><option>5</option><option>10</option><option>25</option><option selected>50</option><option>100</option></select></label>
+<button id="weeklyReload">Reload weekly file</button></div>
+<p id="weeklyStatus" class="notice">Loading generated archive profile...</p><div id="weekly" class="chart"></div></div>
+<details><summary>Data rules</summary>
+<p><b>Aggressor side:</b> Binance aggTrade <code>m=true</code> means buyer is maker, therefore taker sell; <code>m=false</code> means taker buy.</p>
+<p><b>Hot flow:</b> the browser seeds only the latest public aggregate trades, then accumulates WebSocket data while the tab stays open. A selected 4h/8h/12h window never implies that much history unless the coverage line actually shows it.</p>
+<p><b>Weekly VP:</b> GitHub Actions downloads official Binance Vision daily USD-M aggTrades archives, verifies SHA-256 checksums, and aggregates actual reported trade prices.</p>
+<p>No order placement, private account API, wallet access, liquidation reconstruction, or order-book heatmap.</p></details>
+<footer>Research prototype. Actual coverage is shown explicitly; missing history is not synthesized.</footer>
+<script>
+(function(){'use strict';
+const $=id=>document.getElementById(id);let trades=[],ws=null,weeklyData=null;const MAX=250000;
+const fmt=(n,d=2)=>n==null||!isFinite(n)?'n/a':Number(n).toLocaleString(undefined,{maximumFractionDigits:d});
+const jst=ms=>new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(ms));
+const setStatus=s=>$('status').textContent=s;
+async function fetchJson(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);try{const r=await fetch(url,{signal:c.signal,cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(t)}}
+function norm(x){const id=Number(x.a),t=Number(x.T),p=Number(x.p),q=Number(x.q),m=!!x.m;if(!Number.isSafeInteger(id)||!isFinite(t)||!isFinite(p)||!isFinite(q)||q<=0)return null;return{id,t,p,q,m}}
+async function seed(){const sym=$('symbol').value,bases=['https://fapi.binance.com','https://fapi1.binance.com','https://fapi2.binance.com'];let err;for(const base of bases){try{const a=await fetchJson(base+'/fapi/v1/aggTrades?symbol='+sym+'&limit=1000');trades=a.map(norm).filter(Boolean);setStatus('Seeded '+trades.length+' recent aggregate events from '+base+'. Opening WebSocket...');render();return}catch(e){err=e}}throw err||new Error('No REST endpoint reachable')}
+function add(x){const t=norm(x);if(!t)return;if(trades.length&&t.id<=trades[trades.length-1].id)return;trades.push(t);const cutoff=Date.now()-12*3600000;while(trades.length&&trades[0].t<cutoff)trades.shift();if(trades.length>MAX)trades.splice(0,trades.length-MAX)}
+function disconnect(){if(ws){try{ws.close()}catch(e){}ws=null}$('liveBadge').textContent='DISCONNECTED'}
+async function connect(){disconnect();$('liveBadge').textContent='CONNECTING';try{await seed()}catch(e){$('liveBadge').textContent='REST FAILED';setStatus('REST seed failed: '+e.message+'. Trying WebSocket anyway.')}const sym=$('symbol').value.toLowerCase();try{ws=new WebSocket('wss://fstream.binance.com/ws/'+sym+'@aggTrade');ws.onopen=()=>{$('liveBadge').textContent='LIVE';setStatus('Live WebSocket connected. Only actual captured flow is retained.');};ws.onmessage=e=>{try{add(JSON.parse(e.data));if(trades.length%25===0)render()}catch(_){}};ws.onerror=()=>{$('liveBadge').textContent='WS ERROR'};ws.onclose=()=>{if($('liveBadge').textContent==='LIVE')$('liveBadge').textContent='CLOSED'}}catch(e){$('liveBadge').textContent='WS FAILED';setStatus('WebSocket failed: '+e.message)}}
+function selected(){if(!trades.length)return[];const end=trades[trades.length-1].t,start=end-Number($('window').value);return trades.filter(x=>x.t>=start)}
+function analyze(list,row,interval){const bins=new Map(),cols=new Map(),cv=[];let sum=0;for(const t of list){const k=Math.floor(t.p/row)*row,b=bins.get(k)||{buy:0,sell:0};if(t.m)b.sell+=t.q;else b.buy+=t.q;bins.set(k,b);const c=Math.floor(t.t/interval)*interval,cm=cols.get(c)||new Map(),cb=cm.get(k)||{buy:0,sell:0};if(t.m)cb.sell+=t.q;else cb.buy+=t.q;cm.set(k,cb);cols.set(c,cm);sum+=t.m?-t.q:t.q;cv.push([t.t,sum])}const rows=[...bins.entries()].sort((a,b)=>a[0]-b[0]);let poc=null,mx=-1;for(const r of rows){const v=r[1].buy+r[1].sell;if(v>mx){mx=v;poc=r[0]+row/2}}return{rows,cols,cv,poc,delta:sum}}
+function lineSvg(points,title){if(!points.length)return '<div class="notice">No data.</div>';const W=1200,H=270,L=70,R=1180,T=40,B=225,xv=points.map(p=>p[0]),yv=points.map(p=>p[1]),xmin=Math.min(...xv),xmax=Math.max(...xv),ymin=Math.min(0,...yv),ymax0=Math.max(0,...yv),ymax=ymax0===ymin?ymin+1:ymax0,x=v=>L+(v-xmin)/(xmax-xmin||1)*(R-L),y=v=>B-(v-ymin)/(ymax-ymin)*(B-T),d=points.map((p,i)=>(i?'L':'M')+x(p[0]).toFixed(1)+' '+y(p[1]).toFixed(1)).join(' ');return '<svg viewBox="0 0 '+W+' '+H+'"><text x="70" y="24" font-size="12" font-weight="600">'+title+'</text><line x1="70" y1="'+y(0)+'" x2="1180" y2="'+y(0)+'" stroke="#aaa"/><path d="'+d+'" fill="none" stroke="#111" stroke-width="1.4"/><text x="70" y="255" font-size="10">'+jst(xmin)+' JST</text><text x="1080" y="255" font-size="10">'+jst(xmax)+' JST</text></svg>'}
+function profileSvg(rows,row,title){if(!rows.length)return '<div class="notice">No data.</div>';const W=1200,H=Math.min(700,Math.max(260,rows.length*9+70)),L=90,R=1160,T=35,B=H-30,max=Math.max(...rows.map(r=>r[1].buy+r[1].sell)),rh=(B-T)/rows.length;let s='<svg viewBox="0 0 '+W+' '+H+'"><text x="90" y="22" font-size="12" font-weight="600">'+title+'</text>';rows.forEach((r,i)=>{const y=B-(i+1)*rh,sw=(r[1].sell/max)*(R-L),bw=(r[1].buy/max)*(R-L);s+='<rect x="'+L+'" y="'+y+'" width="'+sw+'" height="'+Math.max(1,rh-1)+'" fill="#f0caca"/><rect x="'+(L+sw)+'" y="'+y+'" width="'+bw+'" height="'+Math.max(1,rh-1)+'" fill="#cce8d2"/><text x="6" y="'+(y+rh*.72)+'" font-size="9">'+fmt(r[0]+row/2,1)+'</text>'});return s+'</svg>'}
+function footprintHtml(cols,row){let times=[...cols.keys()].sort((a,b)=>a-b);if(!times.length)return '<div class="notice">No footprint data.</div>';times=times.slice(-20);const ps=new Set();times.forEach(t=>cols.get(t).forEach((v,k)=>ps.add(k)));const prices=[...ps].sort((a,b)=>b-a).slice(0,80);let h='<table class="fp"><thead><tr><th>Price</th>';times.forEach(t=>h+='<th colspan="2">'+jst(t).split(' ')[1]+'</th>');h+='</tr><tr><th></th>';times.forEach(()=>h+='<th>Bid</th><th>Ask</th>');h+='</tr></thead><tbody>';prices.forEach(p=>{h+='<tr><td class="price">'+fmt(p+row/2,1)+'</td>';times.forEach(t=>{const b=cols.get(t).get(p)||{buy:0,sell:0};h+='<td class="sell">'+fmt(b.sell,3)+'</td><td class="buy">'+fmt(b.buy,3)+'</td>'});h+='</tr>'});return h+'</tbody></table>'}
+function render(){const list=selected(),row=Number($('row').value)||10,interval=Number($('interval').value)||15000;if(!list.length){$('coverage').textContent='No captured flow.';return}const a=analyze(list,row,interval),f=list[0],l=list[list.length-1];$('last').textContent=fmt(l.p,1);$('cvd').textContent=(a.delta>=0?'+':'')+fmt(a.delta,3);$('poc').textContent=fmt(a.poc,1);$('count').textContent=fmt(list.length,0);$('coverage').textContent='Actual captured coverage: '+jst(f.t)+' to '+jst(l.t)+' JST ('+fmt((l.t-f.t)/60000,2)+' min). Requested window: '+fmt(Number($('window').value)/3600000,2)+' h.';$('profile').innerHTML=profileSvg(a.rows,row,'CAPTURED VP / sell + buy');$('footprint').innerHTML=footprintHtml(a.cols,row);$('cvdChart').innerHTML=lineSvg(a.cv,'CVD / BTC / captured aggregate events')}
+function rebinWeekly(rows,size){const m=new Map();rows.forEach(r=>{const k=Math.floor(Number(r[0])/size)*size,b=m.get(k)||{buy:0,sell:0};b.buy+=Number(r[1]);b.sell+=Number(r[2]);m.set(k,b)});return[...m.entries()].sort((a,b)=>a[0]-b[0])}
+async function loadWeekly(){try{weeklyData=await fetchJson('weekly-vp.json?ts='+Date.now());renderWeekly()}catch(e){$('weeklyStatus').textContent='Weekly archive file not available yet: '+e.message+'. Live section still works.';$('weekly').innerHTML=''}}
+function renderWeekly(){if(!weeklyData)return;const p=weeklyData[$('week').value];if(!p||!p.rows||!p.rows.length){$('weeklyStatus').textContent='No archived rows for selected week.';$('weekly').innerHTML='';return}const size=Number($('weekRow').value),rows=rebinWeekly(p.rows,size);$('weeklyStatus').textContent=p.label+' | archived UTC days: '+p.days.join(', ')+' | generated '+weeklyData.generatedAt+' | Binance Vision aggTrades, checksum verified.';$('weekly').innerHTML=profileSvg(rows,size,'WEEKLY VP / '+p.label)}
+$('connect').onclick=connect;$('disconnect').onclick=disconnect;$('symbol').onchange=()=>{disconnect();trades=[];render()};['window','row','interval'].forEach(id=>$(id).onchange=render);$('weeklyReload').onclick=loadWeekly;$('week').onchange=renderWeekly;$('weekRow').onchange=renderWeekly;setInterval(()=>{if(ws&&ws.readyState===1)render()},3000);loadWeekly();
+})();
+</script>
+</main></body></html>
