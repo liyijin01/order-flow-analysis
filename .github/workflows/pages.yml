@@ -1,4 +1,5 @@
 name: Deploy Order Flow Dashboard
+# static browser dashboard + verified Binance Vision weekly VP
 
 on:
   push:
