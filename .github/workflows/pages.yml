@@ -56,7 +56,7 @@ jobs:
           node --check web/live.js
           node --check web/render.js
           node --check web/app.js
-          node --check web/chart/main.js
+          for f in web/chart/*.js; do node --check "$f"; done
 
       - name: Ban large-array argument spreading
         run: |
@@ -64,6 +64,48 @@ jobs:
             echo 'Math.min/max argument spreading is forbidden.' >&2
             exit 1
           fi
+
+  chart-smoke:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'c1-')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright core
+        run: npm install --no-save playwright-core@1.55.0
+
+      - name: Start local site
+        shell: bash
+        run: |
+          python3 -m http.server 8000 >/tmp/order-flow-http.log 2>&1 &
+          echo $! > /tmp/order-flow-http.pid
+          sleep 2
+
+      - name: Export BTC ETH SOL 1h PNGs
+        run: node scripts/c1_smoke.cjs
+
+      - name: Upload C1 screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c1-chart-screenshots
+          path: c1-smoke-artifacts/
+          if-no-files-found: error
+          retention-days: 7
 
   data:
     if: github.event_name != 'pull_request'
@@ -154,7 +196,7 @@ jobs:
           cp index.html _site/index.html
           cp chart.html _site/chart.html
           cp web/core.js web/live.js web/render.js web/app.js _site/web/
-          cp web/chart/main.js _site/web/chart/main.js
+          cp web/chart/*.js _site/web/chart/
           cp config/symbols.js _site/config/symbols.js
           cp _generated/profiles-*.json _site/
           touch _site/.nojekyll
