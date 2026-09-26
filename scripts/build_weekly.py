@@ -1,4 +1,4 @@
-"""Compatibility wrapper. The implementation lives in pipeline.build."""
+"""Compatibility wrapper for the multi-symbol archive pipeline."""
 from pathlib import Path
 import sys
 
@@ -10,4 +10,4 @@ from pipeline.build import main
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
