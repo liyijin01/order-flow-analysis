@@ -56,7 +56,7 @@ jobs:
           node --check web/live.js
           node --check web/render.js
           node --check web/app.js
-          for f in web/chart/*.js; do node --check "$f"; done
+          find web/chart -name '*.js' -print0 | xargs -0 -n1 node --check
 
       - name: Ban large-array argument spreading
         run: |
@@ -66,7 +66,7 @@ jobs:
           fi
 
   chart-smoke:
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'c1-')
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'c2-')
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -95,15 +95,15 @@ jobs:
           echo $! > /tmp/order-flow-http.pid
           sleep 2
 
-      - name: Export BTC ETH SOL 1h PNGs
-        run: node scripts/c1_smoke.cjs
+      - name: Render P1-P5 and export PNGs
+        run: node scripts/c2_smoke.cjs
 
-      - name: Upload C1 screenshots
+      - name: Upload C2 screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: c1-chart-screenshots
-          path: c1-smoke-artifacts/
+          name: c2-chart-screenshots
+          path: c2-smoke-artifacts/
           if-no-files-found: error
           retention-days: 7
 
@@ -192,11 +192,11 @@ jobs:
 
       - name: Prepare static site
         run: |
-          mkdir -p _site/web/chart _site/config
+          mkdir -p _site/web _site/config
           cp index.html _site/index.html
           cp chart.html _site/chart.html
           cp web/core.js web/live.js web/render.js web/app.js _site/web/
-          cp web/chart/*.js _site/web/chart/
+          cp -R web/chart _site/web/
           cp config/symbols.js _site/config/symbols.js
           cp _generated/profiles-*.json _site/
           touch _site/.nojekyll
