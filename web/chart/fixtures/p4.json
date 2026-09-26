@@ -1,0 +1,12 @@
+{
+  "schema":"annotations-v1",
+  "symbol":"SOLUSDT",
+  "market":"um",
+  "interval":"2h",
+  "generatedAt":"2026-09-26T07:00:00Z",
+  "items":[
+    {"id":"p4-py-oct","type":"zone","top":194,"bottom":177,"from":1788825600,"to":null,"label":"py oct","border":"#ffffff","fill":"rgba(79,195,247,0.10)","group":"month","source":"exact"},
+    {"id":"p4-vline","type":"vline","time":1789344000,"label":"period start","style":"dashed","color":"rgba(244,246,251,.55)","source":"exact"},
+    {"id":"p4-text","type":"text","time":1789516800,"price":192,"text":"value area","color":"#4fc3f7","source":"exact"}
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema":"annotations-v1",
+  "symbol":"SOLUSDT",
+  "market":"um",
+  "interval":"30m",
+  "generatedAt":"2026-09-26T07:00:00Z",
+  "items":[
+    {"id":"p2-month-profile","type":"profile","kind":"tpo","from":1788998400,"to":1789516800,"binSize":1,
+      "rows":[[176,3],[177,6],[178,10],[179,15],[180,19],[181,16],[182,12],[183,8],[184,4]],
+      "poc":180,"vah":183,"val":177,"maxWidthBars":40,"showLetters":false,"source":"exact"},
+    {"id":"p2-npoc","type":"level","price":185,"label":"nPOC M","from":1789516800,"to":null,"style":"dashed","color":"#ff7043","axisLabel":true,"source":"exact"},
+    {"id":"p2-single-print","type":"zone","top":188,"bottom":186,"from":1789344000,"to":null,"label":"single prints","border":"#f4f6fb","fill":"rgba(244,246,251,0.07)","group":"month","source":"exact"}
+  ]
+}

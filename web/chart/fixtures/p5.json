@@ -1,0 +1,14 @@
+{
+  "schema":"annotations-v1",
+  "symbol":"BTCUSDT",
+  "market":"um",
+  "interval":"4h",
+  "generatedAt":"2026-09-26T07:00:00Z",
+  "items":[
+    {"id":"p5-range","type":"range","from":1788998400,"to":1789689600,"high":84600,"low":79200,"labels":["1","0"],"border":"#f4f6fb","fill":"rgba(244,246,251,.04)","source":"exact"},
+    {"id":"p5-divergence","type":"marker","shape":"arrowDown","time":1789516800,"price":83800,"text":"price / OI divergence","color":"#f4f6fb","source":"exact"},
+    {"id":"p5-callout","type":"callout","time":1789344000,"price":80500,"text":"range response","color":"#f4f6fb","source":"exact"},
+    {"id":"p5-vline","type":"vline","time":1789171200,"label":"event","style":"dotted","color":"rgba(244,246,251,.5)","source":"exact"},
+    {"id":"p5-text","type":"text","time":1789689600,"price":80000,"text":"derivatives context","color":"#f4f6fb","source":"exact"}
+  ]
+}

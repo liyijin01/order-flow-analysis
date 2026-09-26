@@ -1,0 +1,14 @@
+{
+  "schema":"annotations-v1",
+  "symbol":"BTCUSDT",
+  "market":"um",
+  "interval":"30m",
+  "generatedAt":"2026-09-26T07:00:00Z",
+  "items":[
+    {"id":"p3-week-profile","type":"profile","kind":"tpo","from":1789171200,"to":1789689600,"binSize":250,
+      "rows":[[79500,3],[79750,7],[80000,12],[80250,18],[80500,14],[80750,9],[81000,4]],
+      "poc":80250,"vah":80750,"val":79750,"maxWidthBars":40,"showLetters":false,"source":"exact"},
+    {"id":"p3-vah","type":"level","price":80750,"label":"PW VAH","from":1789689600,"to":null,"style":"dashed","color":"#4fc3f7","axisLabel":true,"source":"exact"},
+    {"id":"p3-touch","type":"marker","shape":"circle","time":1789689600,"price":80750,"text":"touch PW VAH","pane":0,"color":"#f4f6fb","source":"exact"}
+  ]
+}
