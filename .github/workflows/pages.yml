@@ -1,5 +1,4 @@
 name: Deploy Order Flow Dashboard
-# static browser dashboard + verified Binance Vision weekly VP
 
 on:
   push:
@@ -28,6 +27,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify Pages is enabled
+        uses: actions/configure-pages@v5
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -50,11 +52,6 @@ jobs:
           cp index.html _site/index.html
           cp weekly-vp.json _site/weekly-vp.json
           touch _site/.nojekyll
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
