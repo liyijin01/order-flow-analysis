@@ -1,61 +1,128 @@
 from __future__ import annotations
 
+import argparse
 import json
-import os
-from datetime import datetime, timedelta, timezone
+import sys
+import tempfile
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from pipeline.ladder import parse_day_zip
-from pipeline.profiles import merge_days
-from pipeline.vision import download_day
+from pipeline.ladder import load_ladder_gz, parse_day_zip, write_ladder_gz
+from pipeline.profiles import build_period
+from pipeline.vision import download_verified_day
 
-SYMBOL = os.environ.get("SYMBOL", "BTCUSDT")
+SOURCE = "data.binance.vision futures/um daily aggTrades"
 ROOT = Path(__file__).resolve().parents[1]
-CACHE = ROOT / ".cache" / "binance"
-OUT = ROOT / "weekly-vp.json"
 
 
-def parse_day(day):
-    zip_path = download_day(SYMBOL, day, CACHE)
-    if zip_path is None:
-        return None
-    return parse_day_zip(zip_path)
+def load_config(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def main():
-    now = datetime.now(timezone.utc)
-    today = now.date()
+def period_days(today: date):
     monday = today - timedelta(days=today.weekday())
-    prev_start = monday - timedelta(days=7)
-    previous = [prev_start + timedelta(days=i) for i in range(7)]
+    previous_start = monday - timedelta(days=7)
+    previous = [previous_start + timedelta(days=i) for i in range(7)]
     current = [monday + timedelta(days=i) for i in range(max(0, (today - monday).days))]
-    previous_days, previous_rows = merge_days(previous, parse_day)
-    current_days, current_rows = merge_days(current, parse_day)
-    data = {
-        "schema": "binance-vision-weekly-vp-v1",
-        "symbol": SYMBOL,
-        "generatedAt": now.isoformat().replace("+00:00", "Z"),
-        "priceBin": "1 USDT",
-        "previous": {
-            "label": f"{prev_start.isoformat()} to {(monday - timedelta(days=1)).isoformat()}",
-            "days": previous_days,
-            "rows": previous_rows,
-        },
-        "current": {
-            "label": f"{monday.isoformat()} to completed archived UTC days before {today.isoformat()}",
-            "days": current_days,
-            "rows": current_rows,
-        },
-    }
-    OUT.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
-    print(
-        "wrote", OUT,
-        "previous_days", len(previous_days),
-        "current_days", len(current_days),
-        "rows", len(previous_rows), len(current_rows),
-        flush=True,
-    )
+    return monday, previous_start, previous, current
+
+
+def ensure_day(symbol: str, cfg: dict, day: date, data_dir: Path, temp_dir: Path):
+    path = data_dir / "ladders" / symbol / f"{day.isoformat()}.json.gz"
+    if path.exists():
+        return "existing", load_ladder_gz(path), None
+    result = download_verified_day(symbol, day, temp_dir)
+    if result.status != "ok":
+        return result.status, None, result.error
+    try:
+        ladder, trades = parse_day_zip(result.zip_path, cfg["ladderBin"])
+        write_ladder_gz(
+            path,
+            symbol=symbol,
+            date=day.isoformat(),
+            bin_size=cfg["ladderBin"],
+            source=SOURCE,
+            zip_sha256=result.sha256,
+            trades=trades,
+            ladder=ladder,
+        )
+        return "created", load_ladder_gz(path), None
+    finally:
+        if result.zip_path:
+            result.zip_path.unlink(missing_ok=True)
+
+
+def build_all(config: dict, data_dir: Path, output_dir: Path, today: date):
+    output_dir.mkdir(parents=True, exist_ok=True)
+    monday, previous_start, previous, current = period_days(today)
+    any_usable = False
+    summary = {}
+    with tempfile.TemporaryDirectory(prefix="order-flow-vision-") as tmp:
+        temp_dir = Path(tmp)
+        for symbol, cfg in config.items():
+            daily = {}
+            failed = []
+            statuses = {}
+            for day in previous + current:
+                status, payload, error = ensure_day(symbol, cfg, day, data_dir, temp_dir)
+                statuses[day.isoformat()] = status
+                if payload:
+                    daily[day.isoformat()] = payload
+                    any_usable = True
+                elif status == "failed":
+                    failed.append(day.isoformat())
+                    print(f"::warning::{symbol} {day.isoformat()} failed: {error}")
+            previous_profile = build_period(
+                f"{previous_start.isoformat()} to {(monday - timedelta(days=1)).isoformat()}",
+                previous,
+                daily,
+                failed,
+            )
+            current_profile = build_period(
+                f"{monday.isoformat()} to completed archived UTC days before {today.isoformat()}",
+                current,
+                daily,
+                failed,
+            )
+            if not previous_profile["complete"]:
+                print(f"::warning::{symbol} previous completed week is incomplete; missing: {', '.join(previous_profile['missingDays'])}")
+            payload = {
+                "schema": "profiles-v2",
+                "symbol": symbol,
+                "base": cfg["base"],
+                "binSize": cfg["ladderBin"],
+                "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "source": SOURCE,
+                "statuses": statuses,
+                "profiles": {"previous": previous_profile, "current": current_profile},
+            }
+            out = output_dir / f"profiles-{symbol}.json"
+            out.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+            summary[symbol] = payload
+    if not any_usable:
+        raise RuntimeError("No usable Binance Vision ladder data is available for any configured symbol; refusing to publish empty profiles.")
+    return summary
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=Path, default=ROOT / "config" / "symbols.json")
+    parser.add_argument("--data-dir", type=Path, default=ROOT / "data")
+    parser.add_argument("--output-dir", type=Path, default=ROOT / "_generated")
+    parser.add_argument("--today", type=date.fromisoformat, default=datetime.now(timezone.utc).date())
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    config = load_config(args.config)
+    try:
+        build_all(config, args.data_dir, args.output_dir, args.today)
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

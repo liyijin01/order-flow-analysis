@@ -1,7 +1,7 @@
 import io
 import unittest
 
-from pipeline.ladder import parse_aggtrades_csv
+from pipeline.ladder import parse_aggtrades_csv, price_to_bin_index
 
 
 class LadderTests(unittest.TestCase):
@@ -11,7 +11,8 @@ class LadderTests(unittest.TestCase):
             "1,100.25,2.5,10,11,1000,true\n"
             "2,100.75,1.5,12,12,1001,false\n"
         )
-        ladder = parse_aggtrades_csv(io.StringIO(csv_text))
+        ladder, trades = parse_aggtrades_csv(io.StringIO(csv_text), "1")
+        self.assertEqual(trades, 2)
         self.assertEqual(ladder[100], [1.5, 2.5])
 
     def test_headerless_csv_maps_maker_true_to_taker_sell(self):
@@ -19,18 +20,14 @@ class LadderTests(unittest.TestCase):
             "1,100.25,2.5,10,11,1000,true\n"
             "2,101.10,1.5,12,12,1001,false\n"
         )
-        ladder = parse_aggtrades_csv(io.StringIO(csv_text))
-        self.assertEqual(ladder[100], [0.0, 2.5])
-        self.assertEqual(ladder[101], [1.5, 0.0])
+        ladder, _ = parse_aggtrades_csv(io.StringIO(csv_text), "1")
+        self.assertEqual(ladder[100], [0, 2.5])
+        self.assertEqual(ladder[101], [1.5, 0])
 
-    def test_existing_one_usdt_floor_binning_is_preserved(self):
-        csv_text = (
-            "1,100.99,1,10,10,1000,false\n"
-            "2,101.00,2,11,11,1001,false\n"
-        )
-        ladder = parse_aggtrades_csv(io.StringIO(csv_text))
-        self.assertEqual(ladder[100], [1.0, 0.0])
-        self.assertEqual(ladder[101], [2.0, 0.0])
+    def test_decimal_ladder_separates_low_prices(self):
+        self.assertEqual(price_to_bin_index("0.4210", "0.01"), 42)
+        self.assertEqual(price_to_bin_index("0.5371", "0.01"), 53)
+        self.assertEqual(price_to_bin_index("0.5480", "0.01"), 54)
 
 
 if __name__ == "__main__":

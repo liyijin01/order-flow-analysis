@@ -1,5 +1,4 @@
 {
   "name": "order-flow-analysis",
-  "private": true,
-  "type": "module"
+  "private": true
 }

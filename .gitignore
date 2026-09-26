@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.cache/
+weekly-vp.json
+profiles-*.json
+_generated/
+_site/
+.DS_Store
