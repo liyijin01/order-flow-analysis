@@ -65,6 +65,48 @@ jobs:
             exit 1
           fi
 
+  chart-smoke:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'c1-')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright core
+        run: npm install --no-save playwright-core@1.55.0
+
+      - name: Start local site
+        shell: bash
+        run: |
+          python3 -m http.server 8000 >/tmp/order-flow-http.log 2>&1 &
+          echo $! > /tmp/order-flow-http.pid
+          sleep 2
+
+      - name: Export BTC ETH SOL 1h PNGs
+        run: node scripts/c1_smoke.cjs
+
+      - name: Upload C1 screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c1-chart-screenshots
+          path: c1-smoke-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+
   data:
     if: github.event_name != 'pull_request'
     needs: test
@@ -113,7 +155,7 @@ jobs:
           set -euo pipefail
           cd datarepo
           git config user.name 'github-actions[bot]'
-          git config user.email '41898282+liyijin01@users.noreply.github.com'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add ladders .data-branch 2>/dev/null || git add ladders
           if ! git diff --cached --quiet; then
             git commit -m 'data: refresh daily ladders'
