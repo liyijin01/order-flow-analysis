@@ -18,3 +18,5 @@ jobs:
           openssl dgst -sha384 -binary /tmp/lwc.js | openssl base64 -A
           printf '\nBYTES='
           wc -c < /tmp/lwc.js
+
+# trigger
