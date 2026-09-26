@@ -34,7 +34,7 @@ button:hover{border-color:rgba(255,255,255,.35)}
 <main>
 <header>
   <div>
-    <div class="eyebrow">ORDER FLOW ANALYSIS / CHART C1</div>
+    <div class="eyebrow">ORDER FLOW ANALYSIS / CHART C2</div>
     <h1 id="pageTitle">BTCUSDT.P · 1小时</h1>
     <p>Binance public market data · Lightweight Charts 5.2.1</p>
   </div>
@@ -71,6 +71,16 @@ button:hover{border-color:rgba(255,255,255,.35)}
       <option value="color">Color</option>
     </select>
   </label>
+  <label>Sample
+    <select id="fixture">
+      <option value="none" selected>None</option>
+      <option value="p1">P1 季度价值区</option>
+      <option value="p2">P2 月度 TPO</option>
+      <option value="p3">P3 周度 TPO</option>
+      <option value="p4">P4 区间框</option>
+      <option value="p5">P5 衍生品面板</option>
+    </select>
+  </label>
   <label>PNG
     <select id="exportSize">
       <option value="current">Current window</option>
@@ -101,6 +111,19 @@ button:hover{border-color:rgba(255,255,255,.35)}
 <script src="web/chart/theme.js"></script>
 <script src="web/chart/data.js"></script>
 <script src="web/chart/export.js"></script>
+<script src="web/chart/presets.js"></script>
+<script src="web/chart/schema.js"></script>
+<script src="web/chart/render/primitives/base.js"></script>
+<script src="web/chart/render/primitives/level.js"></script>
+<script src="web/chart/render/primitives/zone.js"></script>
+<script src="web/chart/render/primitives/profile.js"></script>
+<script src="web/chart/render/primitives/band.js"></script>
+<script src="web/chart/render/primitives/marker.js"></script>
+<script src="web/chart/render/primitives/callout.js"></script>
+<script src="web/chart/render/primitives/range.js"></script>
+<script src="web/chart/render/primitives/vline.js"></script>
+<script src="web/chart/render/primitives/text.js"></script>
+<script src="web/chart/render/renderer.js"></script>
 <script src="web/chart/main.js"></script>
 </body>
 </html>
