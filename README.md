@@ -1,6 +1,6 @@
 # Order Flow Analysis
 
-Private research dashboard for Binance USD-M perpetual order flow.
+Research dashboard for Binance USD-M perpetual order flow.
 
 ## Web dashboard
 
@@ -16,12 +16,17 @@ The hot-flow chart only claims the data actually captured or seeded in the brows
 
 Read-only public market data. No trading permissions, wallet connection, order placement, or private Binance API endpoints.
 
+## Tests
+
+```bash
+python -m unittest discover pipeline/tests
+node --test web/tests/*.test.mjs
+```
+
+Both suites use local fixtures only and do not require network access.
+
 ## Deployment
 
-GitHub Actions generates `weekly-vp.json` and deploys the static dashboard to GitHub Pages.
+GitHub Actions runs the Python and JavaScript tests, generates `weekly-vp.json`, and deploys the static dashboard to GitHub Pages from `main`.
 
-If Pages has never been enabled for this repository, open:
-
-**Settings → Pages → Build and deployment → Source: GitHub Actions**
-
-Note: a private GitHub repository does not automatically guarantee that its Pages website is private. Page visibility depends on your GitHub plan and Pages access-control settings.
+Pages source: **GitHub Actions**.
