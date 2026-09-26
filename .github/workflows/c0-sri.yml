@@ -1,0 +1,20 @@
+name: Compute Lightweight Charts SRI
+on:
+  push:
+    branches: [c0-chart-skeleton]
+permissions:
+  contents: read
+jobs:
+  sri:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute SHA-384
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://cdn.jsdelivr.net/npm/lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js'
+          curl -fsSL "$url" -o /tmp/lwc.js
+          printf 'SRI=sha384-'
+          openssl dgst -sha384 -binary /tmp/lwc.js | openssl base64 -A
+          printf '\nBYTES='
+          wc -c < /tmp/lwc.js
