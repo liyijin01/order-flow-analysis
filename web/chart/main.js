@@ -383,7 +383,6 @@
 
   async function onSelectionChange() {
     syncFromControls();
-    state.countdownLine = null;
     await loadData();
   }
 
