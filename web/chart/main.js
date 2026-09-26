@@ -45,10 +45,10 @@
     const chart = LightweightCharts.createChart(container, {
       width: container.clientWidth,
       height: container.clientHeight,
-      attributionLogo: true,
       layout: {
         background: { type: 'solid', color: '#1b2130' },
         textColor: '#aeb7c8',
+        attributionLogo: true,
       },
       grid: {
         vertLines: { color: 'rgba(255,255,255,0.04)' },
