@@ -5,7 +5,19 @@ on:
     branches: [main]
     paths:
       - 'index.html'
+      - 'web/**'
+      - 'pipeline/**'
       - 'scripts/**'
+      - 'package.json'
+      - '.github/workflows/pages.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'web/**'
+      - 'pipeline/**'
+      - 'scripts/**'
+      - 'package.json'
       - '.github/workflows/pages.yml'
   schedule:
     - cron: '40 3 * * *'
@@ -17,12 +29,31 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Python unit tests
+        run: python -m unittest discover pipeline/tests
+
+      - name: JavaScript unit tests
+        run: node --test web/tests/*.test.mjs
+
+  build:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs: test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,12 +75,13 @@ jobs:
             binance-aggtrades-${{ runner.os }}-
 
       - name: Build weekly VP
-        run: python scripts/build_weekly.py
+        run: python -m pipeline.build
 
       - name: Prepare static site
         run: |
-          mkdir -p _site
+          mkdir -p _site/web
           cp index.html _site/index.html
+          cp web/core.js _site/web/core.js
           cp weekly-vp.json _site/weekly-vp.json
           touch _site/.nojekyll
 
@@ -59,6 +91,7 @@ jobs:
           path: _site
 
   deploy:
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
