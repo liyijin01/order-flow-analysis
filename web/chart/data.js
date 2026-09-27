@@ -2,6 +2,7 @@
   'use strict';
 
   const JST = 'Asia/Tokyo';
+  const JST_OFFSET_SEC = 9 * 60 * 60;
   const cache = new Map();
   const exactProfileCache = new Map();
   const intervalMsMap = {
@@ -27,6 +28,8 @@
   }
 
   function localTimeZone() { return JST; }
+  function toDisplayTime(time) { return Number(time) + JST_OFFSET_SEC; }
+  function fromDisplayTime(time) { return Number(time) - JST_OFFSET_SEC; }
 
   function formatLocalDateTime(time, withSeconds) {
     const date = asDate(time);
@@ -52,6 +55,27 @@
     const parts=(opts)=>Object.fromEntries(new Intl.DateTimeFormat(loc,{timeZone:JST,...opts,hour12:false}).formatToParts(date).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
     if (type === 'month') { const p=parts({month:'numeric'}); return p.month+'月'; }
     if (type === 'dayofmonth' || type === 'day') { const p=parts({month:'2-digit',day:'2-digit'}); return p.month+'/'+p.day; }
+    const p=parts({hour:'2-digit',minute:'2-digit',second:type==='timewithseconds'?'2-digit':undefined});
+    return p.hour+':'+p.minute+(type==='timewithseconds'?':'+p.second:'');
+  }
+
+  function formatDisplayDateTime(time, withSeconds) {
+    const date=asDate(time);
+    if(!Number.isFinite(date.getTime()))return '';
+    return new Intl.DateTimeFormat('ja-JP',{
+      timeZone:'UTC',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',
+      second:withSeconds?'2-digit':undefined,hour12:false
+    }).format(date);
+  }
+
+  function formatDisplayTick(time,tickMarkType,locale) {
+    const date=asDate(time);
+    if(!Number.isFinite(date.getTime()))return '';
+    const type=normalizeTickType(tickMarkType),loc=locale||'ja-JP';
+    const parts=(opts)=>Object.fromEntries(new Intl.DateTimeFormat(loc,{timeZone:'UTC',...opts,hour12:false}).formatToParts(date).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
+    if(type==='year'){const p=parts({year:'numeric'});return p.year;}
+    if(type==='month'){const p=parts({month:'numeric'});return p.month+'月';}
+    if(type==='dayofmonth'||type==='day'){const p=parts({month:'2-digit',day:'2-digit'});return p.month+'/'+p.day;}
     const p=parts({hour:'2-digit',minute:'2-digit',second:type==='timewithseconds'?'2-digit':undefined});
     return p.hour+':'+p.minute+(type==='timewithseconds'?':'+p.second:'');
   }
@@ -191,7 +215,8 @@
   function clearCache(){ cache.clear(); exactProfileCache.clear(); }
 
   global.OrderFlowChartData={
-    JST,intervalMs,intervalSec,intervalLabel,localTimeZone,formatLocalDateTime,formatLocalTick,remainingText,
+    JST,JST_OFFSET_SEC,intervalMs,intervalSec,intervalLabel,localTimeZone,toDisplayTime,fromDisplayTime,
+    formatLocalDateTime,formatLocalTick,formatDisplayDateTime,formatDisplayTick,remainingText,
     fetchKlines,fetchKlineHistory,fetchLatest,loadFixtureCandles,fetchExactProfiles,
     displayCode,parseKlines,validateKlineContinuity,cacheEntryFresh,clearCache,_cache:cache
   };
