@@ -13,6 +13,11 @@ sys.path.insert(0,str(ROOT))
 from scripts.c4_1_golden import load_range  # noqa: E402
 
 SYMBOLS=("BTCUSDT","ETHUSDT","SOLUSDT")
+WEEKLY_INCEPTION={
+    "BTCUSDT":datetime(2019,9,1,tzinfo=timezone.utc),
+    "ETHUSDT":datetime(2019,11,1,tzinfo=timezone.utc),
+    "SOLUSDT":datetime(2020,9,1,tzinfo=timezone.utc),
+}
 INTERVAL_MS={"30m":1_800_000,"1h":3_600_000,"4h":14_400_000,"1d":86_400_000,"1w":604_800_000}
 
 
@@ -50,6 +55,8 @@ def pack(bar, interval: str):
 
 
 def load_spec(symbol: str, interval: str, start: datetime, cutoff: datetime):
+    if interval=="1w":
+        start=max(start,WEEKLY_INCEPTION[symbol])
     bars=load_range(symbol,"um",interval,start,cutoff)
     if not bars:
         raise RuntimeError(f"no {symbol} {interval} bars for {start.isoformat()} -> {cutoff.isoformat()}")
