@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Order Flow Analysis · 成品分析图</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans CJK SC",Arial,sans-serif;color:#e7eaf0;background:#1b2130}
+*{box-sizing:border-box}body{margin:0;background:#1b2130;color:#e7eaf0}main{max-width:1660px;margin:0 auto;padding:14px}
+a{color:#dfe6f5}.topbar{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:9px}
+.eyebrow{font-size:10px;letter-spacing:.16em;color:#8290a8}.topbar strong{font-size:13px}.controls{display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap;margin:8px 0 10px}
+.switches{display:flex;gap:6px;align-items:center}.switches span{font-size:10px;color:#8e98aa;margin-right:3px}
+button{font:inherit;font-size:11px;color:#dce3ef;background:#232b3c;border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:7px 11px;cursor:pointer}
+button.active{background:#34425b;border-color:#8aa4cd;color:#fff}button:disabled{opacity:.55}
+#status{font-size:10px;color:#8e98aa;min-height:16px;margin-bottom:8px}.error{color:#ff9f9f!important}
+#analysisCapture{background:#1b2130;border:1px solid rgba(255,255,255,.09);padding:10px}
+.capture-title{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:6px}
+#boardTitle{font-size:20px;font-weight:700;letter-spacing:-.02em}.capture-meta{font-size:10px;color:#7d899d}
+#infoLine{font-size:11px;color:#cbd3e1;font-variant-numeric:tabular-nums;margin-bottom:7px}
+.legend{display:flex;gap:20px;align-items:center;flex-wrap:wrap;font-size:10px;color:#aeb7c8;margin-bottom:8px}
+.legend-item{display:flex;align-items:center;gap:6px}.swatch{width:11px;height:11px}.supply{background:rgba(239,83,80,.55)}.demand{background:rgba(38,166,154,.55)}.value{background:rgba(96,165,250,.45)}
+.line{width:18px;border-top:2px solid #5cb85c}.dash{width:18px;border-top:2px dashed #ff9800}
+#analysisChart{width:100%;height:680px;border:1px solid rgba(255,255,255,.09);background:#1b2130}
+.table-wrap{border-top:1px solid rgba(255,255,255,.09);margin-top:10px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:10px;font-variant-numeric:tabular-nums}th,td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left;white-space:nowrap}
+th{color:#8e98aa;font-weight:600;background:#181e2b}td{color:#cdd5e3}.missing td{color:#d5a2a2}
+.capture-footer{display:flex;justify-content:space-between;gap:12px;margin-top:8px;font-size:9px;color:#717d91}
+.page-footer{display:flex;justify-content:space-between;gap:12px;margin-top:10px;font-size:10px;color:#7d899d}
+body.snapshot main{max-width:1600px;padding:0}body.snapshot .topbar,body.snapshot .controls,body.snapshot #status,body.snapshot .page-footer{display:none}
+body.snapshot #analysisCapture{border:0;padding:12px;width:1600px}body.snapshot #analysisChart{height:760px}
+@media(max-width:900px){main{padding:8px}.controls{align-items:flex-start}.topbar{align-items:flex-start}#analysisChart{height:560px}.capture-title{display:block}.capture-meta{margin-top:4px}}
+</style>
+</head>
+<body><main>
+<div class="topbar"><div><div class="eyebrow">ORDER FLOW ANALYSIS / FINISHED BOARD</div><strong>成品分析图</strong></div><a href="index.html">← Order Flow</a></div>
+<div class="controls">
+  <div class="switches"><span>币种</span><button data-symbol="BTCUSDT">BTC</button><button data-symbol="ETHUSDT">ETH</button><button data-symbol="SOLUSDT">SOL</button></div>
+  <div class="switches"><span>周期</span><button data-tf="4h">4h</button><button data-tf="1h">1h</button><button data-tf="1d">1D</button></div>
+  <button id="downloadBtn">下载 PNG</button>
+</div>
+<div id="status">Loading…</div>
+<section id="analysisCapture">
+  <div class="capture-title"><div id="boardTitle">BTCUSDT.P · 4小时</div><div class="capture-meta">VALUE / SUPPLY / DEMAND</div></div>
+  <div id="infoLine">Loading market data…</div>
+  <div class="legend">
+    <span class="legend-item"><i class="swatch value"></i>价值区</span>
+    <span class="legend-item"><i class="swatch supply"></i>供应区</span>
+    <span class="legend-item"><i class="swatch demand"></i>需求区</span>
+    <span class="legend-item"><i class="line"></i>VWAP</span>
+    <span class="legend-item"><i class="dash"></i>未回补 POC</span>
+  </div>
+  <div id="analysisChart" aria-label="价值区、供应区、需求区成品分析图"></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>类型</th><th>价格区间</th><th>距现价 %</th><th>状态</th><th>计算周期</th><th>数据来源</th></tr></thead>
+    <tbody id="regionRows"><tr><td colspan="6">Loading…</td></tr></tbody>
+  </table></div>
+  <div class="capture-footer"><span>Binance USD-M · read only</span><span id="cutoff"></span></div>
+</section>
+<div class="page-footer"><span>Display time: JST · calculations use UTC boundaries</span><span><a href="chart.html">实验台</a></span></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js" integrity="sha384-KkYqTZlM13Zya6fVUF3IGCBOQ1ehFeJVVgxaVvD/0MebineF9EI8Jkd3NnWNChqN" crossorigin="anonymous"></script>
+<script src="config/symbols.js"></script>
+<script src="web/analysis/data.js"></script>
+<script src="web/analysis/engine.js"></script>
+<script src="web/analysis/primitive.js"></script>
+<script src="web/analysis/export.js"></script>
+<script src="web/analysis/main.js"></script>
+</body></html>
