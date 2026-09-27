@@ -83,7 +83,7 @@ async function verifyAxis(page,label){
       }
       const occupied=Number(first.yMin)-Number(first.yMax);
       if(!(occupied>=.6*Number(first.paneHeight))){
-        throw new Error(tf+' visible price range occupies only '+occupied+' of pane '+first.paneHeight);
+        throw new Error(tf+' visible price range occupies only '+occupied+' of pane '+first.paneHeight+' '+JSON.stringify({viewMin:first.model.viewMin,viewMax:first.model.viewMax,regions:first.model.regions.map(r=>({id:r.id,type:r.type,bottom:r.bottom,top:r.top})),levels:first.model.levels.map(l=>({id:l.id,price:l.price})),vwap:first.model.currentVwap.slice(-3)}));
       }
       await verifyAxis(page,tf+' initial');
 
