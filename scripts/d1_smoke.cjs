@@ -49,6 +49,50 @@ async function verifyAxis(page,label){
   for(const a of axis.filter(x=>x.visible))if(a.diff==null||a.diff>1)throw new Error(label+' axis label off true price '+JSON.stringify(a));
 }
 
+async function dragPriceAxis(page,pane){
+  const box=await page.locator('#analysisChart').boundingBox();
+  if(!box)throw new Error('analysisChart bounding box missing');
+  const x=box.x+box.width-30;
+  const y=pane==='volume'?box.y+box.height-55:box.y+Math.min(280,box.height*.35);
+  await page.mouse.move(x,y);
+  await page.mouse.down();
+  await page.mouse.move(x,y+80,{steps:8});
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+}
+
+async function priceState(page){
+  return page.evaluate(()=> {
+    const d=window.__analysisDebug,s=d.state,h=d.mainPaneHeight();
+    return{
+      candleAuto:s.candles.priceScale().options().autoScale,
+      volumeAuto:s.volume.priceScale().options().autoScale,
+      top:s.candles.coordinateToPrice(0),
+      bottom:s.candles.coordinateToPrice(h),
+      paneHeight:h,
+      viewMin:d.model.viewMin,
+      viewMax:d.model.viewMax,
+      format:s.candles.options().priceFormat,
+      range:s.chart.timeScale().getVisibleLogicalRange(),
+      visibleBars:d.model.visibleBars
+    };
+  });
+}
+
+function assertInView(v,label){
+  if(!(Number(v.top)>=Number(v.viewMax)&&Number(v.bottom)<=Number(v.viewMin))){
+    throw new Error(label+' candles not in view '+JSON.stringify(v));
+  }
+}
+
+function assertBoundaryStable(before,after,label){
+  for(const k of ['top','bottom']){
+    const base=Math.max(1,Math.abs(Number(before[k])));
+    const pct=Math.abs(Number(after[k])-Number(before[k]))/base;
+    if(pct>.005)throw new Error(label+' '+k+' changed '+(pct*100).toFixed(3)+'% '+JSON.stringify({before,after}));
+  }
+}
+
 (async()=>{
   const browser=await chromium.launch({channel:'chrome',headless:true});
   try{
@@ -110,6 +154,70 @@ async function verifyAxis(page,label){
       }
       await page.close();
     }
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}});
+      const requests=[];await routeMarket(page,requests);
+      await page.goto(pageUrl+'?symbol=BTCUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+
+      await dragPriceAxis(page,'main');
+      let btc=await priceState(page);
+      if(btc.candleAuto!==false)throw new Error('D3 main price drag did not disable autoScale');
+
+      requests.length=0;
+      await page.evaluate(()=>window.__analysisDebug.refresh());
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded ')||document.getElementById('status')?.textContent.startsWith('刷新失败'),{timeout:30000});
+      const refreshed=await priceState(page);
+      if(refreshed.candleAuto!==false)throw new Error('D3 same-view refresh re-enabled autoScale');
+      assertBoundaryStable(btc,refreshed,'D3 same-view refresh');
+
+      await page.click('[data-symbol="ETHUSDT"]');
+      await page.waitForFunction(()=>window.__analysisDebug?.model?.symbol==='ETHUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const eth=await priceState(page);
+      if(eth.candleAuto!==true||eth.volumeAuto!==true)throw new Error('D3 ETH switch did not restore autoScale '+JSON.stringify(eth));
+      assertInView(eth,'D3 ETH');
+      if(Number(eth.format.precision)!==2||Math.abs(Number(eth.format.minMove)-.01)>1e-12)throw new Error('D3 ETH priceFormat '+JSON.stringify(eth.format));
+
+      await page.click('[data-symbol="SOLUSDT"]');
+      await page.waitForFunction(()=>window.__analysisDebug?.model?.symbol==='SOLUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      let sol=await priceState(page);
+      if(sol.candleAuto!==true||sol.volumeAuto!==true)throw new Error('D3 SOL switch did not restore autoScale '+JSON.stringify(sol));
+      assertInView(sol,'D3 SOL');
+      if(Number(sol.format.precision)!==3||Math.abs(Number(sol.format.minMove)-.001)>1e-12)throw new Error('D3 SOL priceFormat '+JSON.stringify(sol.format));
+
+      await dragPriceAxis(page,'main');
+      sol=await priceState(page);
+      if(sol.candleAuto!==false)throw new Error('D3 SOL price drag did not disable autoScale');
+      await page.click('[data-tf="1d"]');
+      await page.waitForFunction(()=>window.__analysisDebug?.model?.timeframe==='1d'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const sol1d=await priceState(page);
+      if(sol1d.candleAuto!==true)throw new Error('D3 timeframe switch did not restore main autoScale');
+      assertInView(sol1d,'D3 SOL 1D');
+
+      await dragPriceAxis(page,'volume');
+      const volumeDragged=await priceState(page);
+      if(volumeDragged.volumeAuto!==false)throw new Error('D3 volume price drag did not disable autoScale');
+      await page.click('[data-symbol="BTCUSDT"]');
+      await page.waitForFunction(()=>window.__analysisDebug?.model?.symbol==='BTCUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const volumeReset=await priceState(page);
+      if(volumeReset.volumeAuto!==true)throw new Error('D3 symbol switch did not restore volume autoScale');
+
+      await dragPriceAxis(page,'main');
+      await page.evaluate(()=>window.__analysisDebug.state.chart.timeScale().setVisibleLogicalRange({from:40,to:90}));
+      await page.waitForTimeout(100);
+      const changed=await priceState(page);
+      if(changed.candleAuto!==false)throw new Error('D3 reset precondition autoScale not false');
+      await page.click('#resetViewBtn');
+      await page.waitForTimeout(150);
+      const reset=await priceState(page);
+      if(reset.candleAuto!==true||reset.volumeAuto!==true)throw new Error('D3 reset button did not restore autoScale '+JSON.stringify(reset));
+      const slots=Number(reset.range.to)-Number(reset.range.from);
+      const expected=Number(reset.visibleBars)+30;
+      if(Math.abs(slots-expected)>2)throw new Error('D3 reset time span '+slots+' expected '+expected);
+
+      await page.close();
+    }
+    console.log('D3 browser smoke passed: manual scale preservation, symbol/timeframe reset, price precision, volume autoscale and reset button.');
     console.log('D2 browser smoke passed: 4h/1h/1d time axis, default view, view preservation, incremental refresh, autoscale, limits and exact axis coordinates.');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
