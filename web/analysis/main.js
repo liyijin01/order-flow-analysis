@@ -195,7 +195,8 @@
     const candleData=model.display.map(b=>({time:D.toDisplayTime(b.time),open:b.open,high:b.high,low:b.low,close:b.close}));
     const volumeData=model.display.map(b=>({time:D.toDisplayTime(b.time),value:b.volume,color:b.close>=b.open?'rgba(230,234,242,.42)':'rgba(230,234,242,.68)'}));
     state.candles.setData(candleData);state.volume.setData(volumeData);
-    state.vwap.setData(model.currentVwap.map(p=>({time:D.toDisplayTime(p.time),value:p.value})));
+    const visibleStart=model.display[0]&&model.display[0].time;
+    state.vwap.setData(model.currentVwap.filter(p=>visibleStart==null||p.time>=visibleStart).map(p=>({time:D.toDisplayTime(p.time),value:p.value})));
     state.primitive.setModel({
       regions:model.regions,levels:model.levels,bars:model.display,currentPrice:model.current,
       intervalSec:D.intervalSec(state.timeframe),timeOffsetSec:9*3600,axisMinGap:state.rules.axisLabels.minGapPx,
