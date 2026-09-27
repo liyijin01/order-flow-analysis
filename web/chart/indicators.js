@@ -24,7 +24,7 @@
     let pocIndex=candidates[0],best=Infinity;
     for(const i of candidates){
       const dist=Math.abs((sorted[i][0]+size/2)-midpoint);
-      if(dist<best){best=dist;pocIndex=i;}
+      if(dist<=best){best=dist;pocIndex=i;}
     }
     let lo=pocIndex,hi=pocIndex,acc=sorted[pocIndex][1];
     const target=total*(pct==null?0.70:pct);
