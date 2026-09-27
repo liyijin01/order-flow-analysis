@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'index.html'
+      - 'analysis.html'
       - 'chart.html'
       - 'config/**'
       - 'web/**'
@@ -15,7 +16,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: '40 1,9 * * *'
+    - cron: '40 0 * * *'
   workflow_dispatch:
 
 permissions:
@@ -48,7 +49,7 @@ jobs:
         run: python -m unittest discover pipeline/tests -v
 
       - name: C4.1 golden-standard archive checks
-        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'c4-1-')
+        if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd1-'))
         run: python scripts/c4_1_golden.py
 
       - name: JavaScript unit tests
@@ -60,7 +61,7 @@ jobs:
           node --check web/live.js
           node --check web/render.js
           node --check web/app.js
-          find web/chart -name '*.js' -print0 | xargs -0 -n1 node --check
+          find web/chart web/analysis -name '*.js' -print0 | xargs -0 -n1 node --check
 
       - name: Ban large-array argument spreading
         run: |
@@ -76,37 +77,25 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
       - name: Install Playwright core
         run: npm install --no-save playwright-core@1.55.0
-
       - name: Start local site
-        shell: bash
         run: |
           python3 -m http.server 8000 >/tmp/order-flow-http.log 2>&1 &
-          echo $! > /tmp/order-flow-http.pid
           sleep 2
-
       - name: Render C2.1-C4 regression suite
         if: startsWith(github.head_ref, 'c2-')
         run: node scripts/c2_1_c4_smoke.cjs
-
       - name: Run C4.1 browser regression checks
         if: startsWith(github.head_ref, 'c4-1-')
         run: node scripts/c4_1_smoke.cjs
-
       - name: Upload C2.1-C4 screenshots
         if: always() && startsWith(github.head_ref, 'c2-')
         uses: actions/upload-artifact@v4
@@ -115,6 +104,60 @@ jobs:
           path: c2-1-c4-smoke-artifacts/
           if-no-files-found: error
           retention-days: 7
+
+  analysis-smoke:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'd1-')
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Playwright core
+        run: npm install --no-save playwright-core@1.55.0
+      - name: Attach persistent data branch
+        run: |
+          git fetch origin data
+          git worktree add --detach datarepo origin/data
+      - name: Build exact weekly profiles
+        run: python -m pipeline.build --data-dir datarepo --output-dir _d1-generated
+      - name: Build real archived analysis snapshots
+        run: python scripts/d1_build_snapshot.py --profile-dir _d1-generated --output-dir _site/analysis/data
+      - name: Prepare local D1 site
+        run: |
+          mkdir -p _site/web _site/config
+          cp analysis.html _site/
+          cp -R web/analysis _site/web/
+          cp config/symbols.js config/analysis-rules.json _site/config/
+          cp _d1-generated/profiles-*.json _site/
+      - name: Start local D1 site
+        run: |
+          python3 -m http.server 8000 --directory _site >/tmp/d1-http.log 2>&1 &
+          sleep 2
+      - name: Browser regression
+        run: node scripts/d1_smoke.cjs
+      - name: Generate nine real-market review PNGs
+        env:
+          ANALYSIS_PNG_DIR: _d1-artifacts/png
+          ANALYSIS_LATEST: _d1-artifacts/latest.json
+        run: node scripts/d1_daily_png.cjs
+      - name: Upload D1 real-market screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: d1-analysis-real-market-screenshots
+          path: _d1-artifacts/
+          if-no-files-found: error
+          retention-days: 14
 
   data:
     if: github.event_name != 'pull_request'
@@ -155,7 +198,7 @@ jobs:
             cd ..
           fi
 
-      - name: Build missing daily ladders and profiles
+      - name: Build missing daily ladders and exact weekly profiles
         run: python -m pipeline.build --data-dir datarepo --output-dir _generated
 
       - name: Persist new ladders to data branch
@@ -171,11 +214,16 @@ jobs:
             git push origin HEAD:data
           fi
 
-      - name: Upload generated profiles
+      - name: Build archived analysis snapshots
+        run: python scripts/d1_build_snapshot.py --profile-dir _generated --output-dir _generated/analysis/data
+
+      - name: Upload generated market data
         uses: actions/upload-artifact@v4
         with:
-          name: archive-profiles
-          path: _generated/profiles-*.json
+          name: generated-market-data
+          path: |
+            _generated/profiles-*.json
+            _generated/analysis/data/*.json
           if-no-files-found: error
           retention-days: 1
 
@@ -189,27 +237,37 @@ jobs:
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
-
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Verify Pages is enabled
         uses: actions/configure-pages@v5
-
-      - name: Download generated profiles
+      - name: Download generated market data
         uses: actions/download-artifact@v4
         with:
-          name: archive-profiles
+          name: generated-market-data
           path: _generated
-
       - name: Prepare static site
         run: |
-          mkdir -p _site/web _site/config
-          cp index.html _site/index.html
-          cp chart.html _site/chart.html
+          mkdir -p _site/web _site/config _site/analysis/data
+          cp index.html chart.html analysis.html _site/
           cp web/core.js web/live.js web/render.js web/app.js _site/web/
-          cp -R web/chart _site/web/
-          cp config/symbols.js _site/config/symbols.js
+          cp -R web/chart web/analysis _site/web/
+          cp config/symbols.js config/analysis-rules.json config/annotation-rules.json _site/config/
           cp _generated/profiles-*.json _site/
+          cp _generated/analysis/data/*.json _site/analysis/data/
           touch _site/.nojekyll
-
+      - name: Install Playwright core
+        run: npm install --no-save playwright-core@1.55.0
+      - name: Start snapshot site
+        run: |
+          python3 -m http.server 8000 --directory _site >/tmp/d1-pages-http.log 2>&1 &
+          sleep 2
+      - name: Generate daily analysis PNGs
+        env:
+          ANALYSIS_PNG_DIR: _site/analysis/png
+          ANALYSIS_LATEST: _site/analysis/latest.json
+        run: node scripts/d1_daily_png.cjs
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

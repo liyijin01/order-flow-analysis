@@ -23,6 +23,7 @@ class Bar:
     low: float
     close: float
     volume: float
+    taker_buy_base: float = 0.0
 
     @property
     def typical(self) -> float:
@@ -62,12 +63,13 @@ def parse_kline_zip(payload: bytes) -> list[Bar]:
                     low = float(row[3])
                     close = float(row[4])
                     volume = float(row[5])
+                    taker_buy_base = float(row[9]) if len(row) > 9 else 0.0
                 except (ValueError, IndexError):
                     continue
                 # Binance Vision archives may use microseconds in some newer datasets.
                 if open_time > 10_000_000_000_000:
                     open_time //= 1000
-                out.append(Bar(open_time, open_, high, low, close, volume))
+                out.append(Bar(open_time, open_, high, low, close, volume, taker_buy_base))
     return out
 
 

@@ -91,7 +91,7 @@
       const i=this.item;const time=i.time!=null?i.time:(i.from!=null?i.from:(Array.isArray(i.points)&&i.points[0]?i.points[0][0]:null));
       const price=i.price!=null?i.price:(i.high!=null?i.high:(i.top!=null?i.top:(i.poc!=null?i.poc:(Array.isArray(i.points)&&i.points[0]?i.points[0][1]:null))));
       const x=time==null?null:this.x(time,0),clamped=this._lastClamp,y=price==null?null:this.y(price);
-      return {id:i.id,type:i.type,x,y,labelY:Number.isFinite(i._labelY)?i._labelY:null,axisY:Number.isFinite(i._axisY)?i._axisY:null,clamped};
+      const labelY=i.type==='level'&&this.context.resolveLabelY?this.context.resolveLabelY(i.id,i.price):null;return {id:i.id,type:i.type,x,y,labelY,axisY:y,clamped};
     }
   }
   global.OrderFlowPrimitiveBase={AnnotationPrimitiveBase};

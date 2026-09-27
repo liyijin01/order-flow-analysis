@@ -4,7 +4,7 @@ class LevelPrimitive extends Base{
   constructor(item){
     super(item);
     this._axisView={
-      coordinate:()=>{const y=Number.isFinite(this.item._axisY)?this.item._axisY:this.y(this.item.price);return y==null?-1000:y;},
+      coordinate:()=>{const y=this.y(this.item.price);return y==null?-1000:y;},
       text:()=>this.context.priceFormatter?this.context.priceFormatter(this.item.price):Number(this.item.price).toLocaleString(),
       textColor:()=> '#111111',backColor:()=> '#f4f6fb',visible:()=>this.item.axisLabel!==false,tickVisible:()=>true
     };
@@ -17,7 +17,7 @@ class LevelPrimitive extends Base{
     ctx.save();ctx.strokeStyle=i.color||'#e6e6e6';ctx.lineWidth=i.width||1;this.lineStyle(ctx,i.style||'dashed');
     ctx.beginPath();ctx.moveTo(x1,y);ctx.lineTo(x2,y);ctx.stroke();
     if(i.showLabel!==false&&i.label){
-      const labelY=Number.isFinite(i._labelY)?i._labelY:y-3;
+      const resolved=this.context.resolveLabelY?this.context.resolveLabelY(i.id,i.price):y;const labelY=resolved==null?y-3:Number(resolved)-3;
       this.label(ctx,this.approxLabel(i.label),Math.min(size.width-8,x2-5),labelY,i.color||'#e6e6e6','right');
     }
     ctx.restore();

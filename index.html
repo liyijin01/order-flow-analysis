@@ -10,7 +10,7 @@
 *{box-sizing:border-box}body{margin:0}main{max-width:1480px;margin:auto;padding:28px}
 header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}.eyebrow{font-size:10px;letter-spacing:.18em;color:#777}
 h1{font-size:28px;margin:8px 0 4px;letter-spacing:-.035em}h2{font-size:15px;margin:0 0 10px}p{font-size:12px;line-height:1.6}
-.badge{border:1px solid #999;padding:8px 10px;font-size:10px;white-space:nowrap}.toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:18px 0 12px}
+.badge{border:1px solid #999;padding:8px 10px;font-size:10px;white-space:nowrap}.analysis-entry{display:flex;justify-content:space-between;align-items:center;gap:16px;border:2px solid #111;padding:14px 16px;margin:18px 0 10px;text-decoration:none;color:#111}.analysis-entry strong{font-size:16px}.analysis-entry span{font-size:11px;color:#555}.toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:18px 0 12px}
 button,select,input{font:inherit;color:inherit;background:#fff;border:1px solid #aaa;border-radius:4px;padding:8px 10px;font-size:11px}button{cursor:pointer}input{width:78px}
 .status,.notice{border:1px solid #bbb;padding:11px 13px;font-size:11px;line-height:1.55}.notice.warning{border-style:solid;border-width:2px}.notice.ok{border-style:solid}
 .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.card{border:1px solid #ccc;padding:14px}.card label{font-size:9px;color:#777;display:block}.value{font-size:24px;margin-top:6px;font-variant-numeric:tabular-nums}
@@ -22,6 +22,7 @@ details{margin-top:24px;border-top:1px solid #bbb;padding-top:14px}summary{curso
 </head>
 <body><main>
 <header><div><div class="eyebrow">ORDER FLOW LAB / WEB</div><h1><span id="titleSymbol">BTCUSDT</span> Order Flow</h1><p>Binance USD-M public market data · read only</p></div><div id="liveBadge" class="badge">DISCONNECTED</div></header>
+<a class="analysis-entry" href="analysis.html"><div><strong>成品分析图 / Analysis Board</strong><br><span>价值区、供应区、需求区、VWAP 与区域表合并在一张图上</span></div><b>OPEN →</b></a>
 <div class="toolbar">
 <label>Symbol <select id="symbol"></select></label>
 <button id="connect">Connect live</button><button id="disconnect">Disconnect</button>
@@ -51,7 +52,7 @@ details{margin-top:24px;border-top:1px solid #bbb;padding-top:14px}summary{curso
 <p><b>Local file mode:</b> this page uses classic scripts, so double-clicking <code>index.html</code> no longer fails because of ES-module CORS. Browser security may still block loading local archive JSON; use <code>python3 -m http.server 8000</code> for full local preview.</p>
 <p><b>Weekly VP:</b> GitHub Actions builds per-symbol profiles from checksum-verified Binance Vision daily aggTrades archives. Missing UTC days are never interpolated and are shown as incomplete.</p>
 <p>No order placement, private account API, wallet access, or API keys.</p></details>
-<p style="margin-top:24px"><a href="chart.html">Open chart view →</a></p>
+<p style="margin-top:24px"><a href="chart.html">实验台 / Experimental chart →</a></p>
 <footer>Research prototype. Actual coverage and missing archive days are shown explicitly.</footer>
 <script src="config/symbols.js"></script>
 <script src="web/core.js"></script>

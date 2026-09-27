@@ -1,0 +1,77 @@
+{
+  "display": {
+    "defaultTimeframe": "4h",
+    "bars": {
+      "4h": 540,
+      "1h": 720,
+      "1d": 365
+    },
+    "rightOffset": 30,
+    "refreshSeconds": 60
+  },
+  "valueAreas": {
+    "visiblePadPct": 10,
+    "overlapSuppressPct": 70,
+    "maxCount": 3,
+    "pq": {
+      "interval": "1h",
+      "definition": "anchored-vwap-1sigma"
+    },
+    "pm": {
+      "interval": "1h",
+      "definition": "tpo-70"
+    },
+    "pw": {
+      "definition": "exact-aggtrades-volume-profile-70"
+    }
+  },
+  "zones": {
+    "calcIntervals": {
+      "1h": "4h",
+      "4h": "1d",
+      "1d": "1w"
+    },
+    "calcBars": 400,
+    "impulseMaxBars": 3,
+    "impulseMinMoveAtr": 1.5,
+    "impulseMinBodyPct": 0.5,
+    "requireDeltaAlign": true,
+    "baseMaxBars": 5,
+    "baseMaxRangeAtr": 1,
+    "maxAgeBars": 300,
+    "perSide": 2,
+    "maxDistancePct": 20
+  },
+  "nakedPoc": {
+    "maxCount": 2,
+    "tpoTicksPerRow": 100
+  },
+  "axisLabels": {
+    "minGapPx": 14,
+    "priorities": {
+      "zone": 3,
+      "value": 2,
+      "line": 1
+    }
+  },
+  "textLabels": {
+    "minGapPx": 14,
+    "maxShiftPx": 24
+  },
+  "colors": {
+    "supplyFill": "rgba(239,83,80,.20)",
+    "supplyBorder": "#ef5350",
+    "demandFill": "rgba(38,166,154,.20)",
+    "demandBorder": "#26a69a",
+    "testedAlpha": 0.08,
+    "pqFill": "rgba(96,165,250,.10)",
+    "pqBorder": "rgba(96,165,250,.6)",
+    "pmFill": "rgba(251,191,36,.10)",
+    "pmBorder": "rgba(251,191,36,.6)",
+    "pwFill": "rgba(167,139,250,.12)",
+    "pwBorder": "rgba(167,139,250,.7)",
+    "vwap": "#5cb85c",
+    "pqVwap": "#2e7d32",
+    "nPoc": "#ff9800"
+  }
+}
