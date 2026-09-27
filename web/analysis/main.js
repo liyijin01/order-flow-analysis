@@ -4,13 +4,14 @@
   const L=window.LightweightCharts,D=window.OrderFlowAnalysisData,E=window.OrderFlowAnalysisEngine,P=window.OrderFlowAnalysisPrimitive,X=window.OrderFlowAnalysisExport;
   const SYMBOLS=window.ORDER_FLOW_SYMBOLS||{};
   const $=id=>document.getElementById(id);
-  const state={symbol:'BTCUSDT',timeframe:'4h',snapshot:false,rules:null,bundle:null,chart:null,candles:null,volume:null,vwap:null,primitive:null,loadToken:0,refreshTimer:null,model:null};
+  const state={
+    symbol:'BTCUSDT',timeframe:'4h',snapshot:false,rules:null,bundle:null,chart:null,candles:null,volume:null,vwap:null,primitive:null,
+    loadToken:0,refreshTimer:null,model:null,viewKey:null,lastDisplayCount:0,lastFullLoadAt:0,refreshWarning:null
+  };
 
   function tfLabel(tf){return({'1h':'1小时','4h':'4小时','1d':'1天'})[tf]||tf;}
   function symbolMeta(){return SYMBOLS[state.symbol]||{displayName:state.symbol,tickSize:'0.01',ladderBin:'0.1'};}
-  function pricePrecision(){
-    const s=String(symbolMeta().tickSize||'0.01'),i=s.indexOf('.');return i<0?0:s.length-i-1;
-  }
+  function pricePrecision(){const s=String(symbolMeta().tickSize||'0.01'),i=s.indexOf('.');return i<0?0:s.length-i-1;}
   function fmtPrice(v){
     const p=pricePrecision(),tick=Number(symbolMeta().tickSize)||.01,n=E.roundToTick(Number(v),tick);
     return n.toLocaleString(undefined,{minimumFractionDigits:p,maximumFractionDigits:p});
@@ -29,16 +30,24 @@
     if(!days||!days.length)return null;
     return Date.parse(days[days.length-1]+'T00:00:00Z')/1000+86400;
   }
+  function zoneStateText(r){
+    if(r.zoneState==='inside')return'测试中';
+    if(r.zoneState==='breaking')return'击穿待确认';
+    return r.tested?'已测试':'未测试';
+  }
   function sourceRows(payload){
     const out=[],current=payload.current;
     for(const r of payload.regions){
+      let status=r.type==='supply'||r.type==='demand'?zoneStateText(r):(r.tested?'已测试':'未测试');
+      if(r.offView)status+='（图外）';
       out.push({
         type:r.tableType||r.label,low:r.bottom,high:r.top,distance:distancePct(current,r.bottom,r.top),
-        status:r.tested?'已测试':'未测试',period:r.period||'',source:r.source||'exact',missing:false
+        status,period:r.period||'',source:r.source||'exact',missing:false
       });
     }
     for(const l of payload.levels.filter(x=>x.kind==='npoc')){
-      out.push({type:l.label,low:l.price,high:l.price,distance:Math.abs(l.price-current)/current*100,status:'未回补',period:l.period||'',source:l.source||'exact',missing:false});
+      let status='未回补';if(l.offView)status+='（图外）';
+      out.push({type:l.label,low:l.price,high:l.price,distance:Math.abs(l.price-current)/current*100,status,period:l.period||'',source:l.source||'exact',missing:false});
     }
     for(const m of payload.missing||[])out.push({type:m.type,low:null,high:null,distance:null,status:'缺失',period:m.period||'',source:m.source||'',missing:true});
     out.sort((a,b)=>{
@@ -75,7 +84,11 @@
     const primitive=new P.AnalysisBoardPrimitive({});
     candles.attachPrimitive(primitive);
     const panes=chart.panes();if(panes[1])panes[1].setHeight(Math.max(110,Math.round(container.clientHeight*.18)));
-    new ResizeObserver(()=>{chart.resize(container.clientWidth,container.clientHeight);const ps=chart.panes();if(ps[1])ps[1].setHeight(Math.max(100,Math.round(container.clientHeight*.18)));if(primitive.requestUpdate)primitive.requestUpdate();}).observe(container);
+    new ResizeObserver(()=>{
+      chart.resize(container.clientWidth,container.clientHeight);
+      const ps=chart.panes();if(ps[1])ps[1].setHeight(Math.max(100,Math.round(container.clientHeight*.18)));
+      if(primitive.requestUpdate)primitive.requestUpdate();
+    }).observe(container);
     state.chart=chart;state.candles=candles;state.volume=volume;state.vwap=vwap;state.primitive=primitive;
   }
 
@@ -113,13 +126,20 @@
     return{bottom:p.val,top:p.vah,mid:p.poc,source:'approx',definition:'volume-profile-70'};
   }
 
+  function extrema(bars){
+    let min=Infinity,max=-Infinity;
+    for(const b of bars||[]){if(Number(b.low)<min)min=Number(b.low);if(Number(b.high)>max)max=Number(b.high);}
+    return{min,max,span:Math.max(1e-12,max-min)};
+  }
+
   function buildAnalysis(bundle){
     const rules=state.rules,tick=Number(symbolMeta().tickSize)||.01,counts=rules.display.bars;
     const display=(bundle.series[state.timeframe]||bundle.series.display||[]).slice(-(Number(counts[state.timeframe])||540));
     if(!display.length)throw new Error('display data missing for '+state.timeframe);
+    const visibleN=Math.min(display.length,Number(rules.display.visibleBars&&rules.display.visibleBars[state.timeframe])||display.length);
+    const viewBars=display.slice(-visibleN),view=extrema(viewBars);
     const one=bundle.series['1h']||[],thirty=bundle.series['30m']||[],calcTf=rules.zones.calcIntervals[state.timeframe],calc=bundle.series[calcTf]||[];
-    const last=display[display.length-1],current=Number(last.close);let min=Infinity,max=-Infinity;for(const b of display){if(Number(b.low)<min)min=Number(b.low);if(Number(b.high)>max)max=Number(b.high);}
-    const qStart=E.utcQuarterStart(last.time),pqStart=E.previousQuarterStart(last.time),areas=[],missing=[];
+    const last=display[display.length-1],current=Number(last.close),qStart=E.utcQuarterStart(last.time),pqStart=E.previousQuarterStart(last.time),areas=[],missing=[];
 
     const pqBars=one.filter(b=>b.time>=pqStart&&b.time<qStart),pqStats=E.weightedStats(pqBars);
     if(pqStats&&pqBars.length&&pqBars[0].time<=pqStart+3600){
@@ -135,46 +155,72 @@
         source:pm.source,tested:E.wasZoneTouched(one,mStart,pm.bottom,pm.top),fill:rules.colors.pmFill,border:rules.colors.pmBorder});
     }else missing.push({type:'价值区 PM',period:'M',source:'approx'});
 
-    const pw=E.exactProfile(bundle.profile),weekEnd=periodEndFromProfile(bundle.profile);
-    if(pw&&weekEnd){
+    const profileFresh=E.profileIsFresh(bundle.profile,last.time);
+    const exactPw=profileFresh?E.exactProfile(bundle.profile):null;
+    const exactWeekEnd=profileFresh?periodEndFromProfile(bundle.profile):null;
+    const fallbackPw=!exactPw?previousWeekTpo(thirty,last.time,tick):null;
+    let pw=null,weekEnd=null;
+    if(exactPw&&exactWeekEnd){
+      pw={...exactPw,source:'exact'};weekEnd=exactWeekEnd;
       areas.push({id:'value-pw',type:'value',scope:'PW',bottom:pw.val,top:pw.vah,from:weekEnd,
         label:'上周价值区 PW',tableType:'价值区 PW',period:'W / aggTrades',source:'exact',
         tested:E.wasZoneTouched(thirty.length?thirty:one,weekEnd,pw.val,pw.vah),fill:rules.colors.pwFill,border:rules.colors.pwBorder});
-    }else missing.push({type:'价值区 PW',period:'W / aggTrades',source:'exact'});
+    }else if(fallbackPw){
+      pw={...fallbackPw,source:'approx'};weekEnd=fallbackPw.from;
+      areas.push({id:'value-pw-tpo',type:'value',scope:'PW',bottom:pw.val,top:pw.vah,from:weekEnd,
+        label:'上周价值区 PW ≈',tableType:'价值区 PW',period:'W / 30m TPO',source:'approx',
+        tested:E.wasZoneTouched(thirty,weekEnd,pw.val,pw.vah),fill:rules.colors.pwFill,border:rules.colors.pwBorder});
+    }else missing.push({type:'价值区 PW',period:'W / aggTrades or 30m TPO',source:'approx'});
 
-    const visibleAreas=E.filterValueAreas(areas,min,max,rules.valueAreas.visiblePadPct,rules.valueAreas.overlapSuppressPct);
+    const allAreas=E.suppressValueAreas(areas,rules.valueAreas.overlapSuppressPct,rules.valueAreas.maxCount||3);
+    const drawnAreaIds=new Set(E.filterValueAreas(allAreas,view.min,view.max,rules.valueAreas.visiblePadPct,rules.valueAreas.overlapSuppressPct).map(x=>x.id));
 
-    let zones=[];
-    if(calc.length){
-      zones=E.selectZones(E.detectZones(calc,rules.zones),current,rules.zones).map(z=>{
+    const asOfMs=state.snapshot&&bundle.cutoffUtc?Date.parse(bundle.cutoffUtc)+1000:Date.now();
+    const closedCalc=D.closedBars(calc,asOfMs);
+    let selectedZones=[];
+    if(closedCalc.length){
+      selectedZones=E.selectZones(E.detectZones(closedCalc,rules.zones,calc),current,rules.zones).map(z=>{
         const supply=z.type==='supply',baseFill=supply?rules.colors.supplyFill:rules.colors.demandFill,border=supply?rules.colors.supplyBorder:rules.colors.demandBorder;
+        const stateText=z.zoneState==='inside'?'·测试中':(z.zoneState==='breaking'?'·击穿待确认':(z.tested?'·已测试':''));
         return{...z,type:z.type,fill:fillAlpha(baseFill,z.tested),border,period:calcTf,source:'exact',
-          label:(supply?'供应区':'需求区')+(z.tested?'·已测试':'')+' · '+calcTf.toUpperCase()+' · '+z.strength.toFixed(1)+'ATR',
+          label:(supply?'供应区':'需求区')+stateText+' · '+calcTf.toUpperCase()+' · '+z.strength.toFixed(1)+'ATR',
           tableType:supply?'供应区':'需求区'};
       });
     }else missing.push({type:'供应/需求区',period:calcTf,source:'exact'});
 
-    const levels=[];
+    const drawnZoneIds=new Set(selectedZones.filter(z=>E.zoneIntersectsView(z,view.min,view.max,rules.zones.viewPadPct||50)).map(z=>z.id));
+
+    const allLevels=[];
     const pq=areas.find(a=>a.scope==='PQ');
-    if(pq)levels.push({id:'line-pq-vwap',kind:'pq',price:pq.pqVwap,from:qStart,label:'PQ VWAP',color:rules.colors.pqVwap,style:'solid',period:'Q / 1h',source:'exact'});
+    if(pq)allLevels.push({id:'line-pq-vwap',kind:'pq',price:pq.pqVwap,from:qStart,label:'PQ VWAP',color:rules.colors.pqVwap,style:'solid',period:'Q / 1h',source:'exact'});
 
     const pocCandidates=[];
     if(pw&&weekEnd&&E.isPocNaked(pw.poc,weekEnd,thirty.length?thirty:one)){
-      pocCandidates.push({id:'npoc-week',kind:'npoc',price:pw.poc,from:weekEnd,label:'nPOC W',color:rules.colors.nPoc,style:'dashed',period:'W / aggTrades',source:'exact'});
-    }else if(!pw){
-      const wt=previousWeekTpo(thirty,last.time,tick);
-      if(wt&&E.isPocNaked(wt.poc,wt.from,thirty))pocCandidates.push({id:'npoc-week-tpo',kind:'npoc',price:wt.poc,from:wt.from,label:'nPOC W ≈',color:rules.colors.nPoc,style:'dashed',period:'W / 30m TPO',source:'approx'});
+      pocCandidates.push({id:pw.source==='exact'?'npoc-week':'npoc-week-tpo',kind:'npoc',price:pw.poc,from:weekEnd,
+        label:pw.source==='exact'?'nPOC W':'nPOC W ≈',color:rules.colors.nPoc,style:'dashed',
+        period:pw.source==='exact'?'W / aggTrades':'W / 30m TPO',source:pw.source});
     }
     const mt=previousMonthTpo(thirty,last.time,tick);
     if(mt&&E.isPocNaked(mt.poc,mt.from,thirty))pocCandidates.push({id:'npoc-month',kind:'npoc',price:mt.poc,from:mt.from,label:'nPOC M ≈',color:rules.colors.nPoc,style:'dashed',period:'M / 30m TPO',source:'approx'});
-    levels.push(...E.selectNakedPocs(pocCandidates,current,rules.nakedPoc.maxCount));
+    allLevels.push(...E.selectNakedPocs(pocCandidates,current,rules.nakedPoc.maxCount));
 
-    const currentVwap=E.anchoredVwapSeries(one,qStart);
-    const regions=visibleAreas.concat(zones);
+    const linePad=rules.valueAreas.visiblePadPct;
+    const drawnLevelIds=new Set(allLevels.filter(l=>E.inPriceView(l.price,view.min,view.max,linePad)).map(l=>l.id));
+
+    const allRegions=allAreas.concat(selectedZones).map(r=>({...r,offView:r.type==='value'?!drawnAreaIds.has(r.id):!drawnZoneIds.has(r.id)}));
+    const levelsForTable=allLevels.map(l=>({...l,offView:!drawnLevelIds.has(l.id)}));
+    const regions=allRegions.filter(r=>!r.offView),levels=levelsForTable.filter(l=>!l.offView);
+
+    const rawCurrentVwap=E.anchoredVwapSeries(one,qStart);
+    const currentVwap=E.alignSeriesToBars(rawCurrentVwap,display,D.intervalSec(state.timeframe));
+    const lastClosed=closedCalc[closedCalc.length-1];
+    const calcLastClosedUtc=lastClosed?new Date(Number(lastClosed.closeTime)+1).toISOString():null;
     return{
       symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,missing,
+      allRegions,allLevels:levelsForTable,viewMin:view.min,viewMax:view.max,visibleBars:visibleN,
       cutoffUtc:bundle.cutoffUtc||null,generatedAt:bundle.generatedAt||new Date().toISOString(),
-      calcTf,bundleErrors:bundle.errors||{},tableRows:sourceRows({regions,levels,current,missing})
+      calcTf,calcLastClosedUtc,bundleErrors:bundle.errors||{},
+      tableRows:sourceRows({regions:allRegions,levels:levelsForTable,current,missing})
     };
   }
 
@@ -191,19 +237,37 @@
     }
   }
 
+  function defaultVisibleRange(count){
+    const visible=Math.min(count,Number(state.rules.display.visibleBars&&state.rules.display.visibleBars[state.timeframe])||count);
+    const offset=Number(state.rules.display.rightOffset)||30;
+    return{from:Math.max(0,count-visible),to:Math.max(0,count-1)+offset};
+  }
+
   function applySeries(model){
+    const key=state.symbol+'|'+state.timeframe,sameView=state.viewKey===key;
+    const oldRange=sameView?state.chart.timeScale().getVisibleLogicalRange():null;
+    const oldCount=state.lastDisplayCount||0;
+    const followedRight=!!(oldRange&&Number(oldRange.to)>=oldCount-1);
     const candleData=model.display.map(b=>({time:D.toDisplayTime(b.time),open:b.open,high:b.high,low:b.low,close:b.close}));
     const volumeData=model.display.map(b=>({time:D.toDisplayTime(b.time),value:b.volume,color:b.close>=b.open?'rgba(230,234,242,.42)':'rgba(230,234,242,.68)'}));
     state.candles.setData(candleData);state.volume.setData(volumeData);
-    const visibleStart=model.display[0]&&model.display[0].time;
-    state.vwap.setData(model.currentVwap.filter(p=>visibleStart==null||p.time>=visibleStart).map(p=>({time:D.toDisplayTime(p.time),value:p.value})));
+    state.vwap.setData(model.currentVwap.map(p=>({time:D.toDisplayTime(p.time),value:p.value})));
     state.primitive.setModel({
       regions:model.regions,levels:model.levels,bars:model.display,currentPrice:model.current,
       intervalSec:D.intervalSec(state.timeframe),timeOffsetSec:9*3600,axisMinGap:state.rules.axisLabels.minGapPx,
       textMinGap:state.rules.textLabels.minGapPx,textMaxShift:state.rules.textLabels.maxShiftPx,priceFormatter:fmtPrice
     });
     state.chart.timeScale().applyOptions({rightOffset:Number(state.rules.display.rightOffset)||30});
-    state.chart.timeScale().fitContent();
+    const newCount=model.display.length;
+    if(!sameView||!oldRange){
+      state.chart.timeScale().setVisibleLogicalRange(defaultVisibleRange(newCount));
+    }else if(followedRight){
+      const delta=newCount-oldCount;
+      state.chart.timeScale().setVisibleLogicalRange({from:Number(oldRange.from)+delta,to:Number(oldRange.to)+delta});
+    }else{
+      state.chart.timeScale().setVisibleLogicalRange(oldRange);
+    }
+    state.viewKey=key;state.lastDisplayCount=newCount;
     const panes=state.chart.panes();if(panes[1])panes[1].setHeight(Math.max(105,Math.round($('analysisChart').clientHeight*.18)));
   }
 
@@ -212,38 +276,61 @@
     $('infoLine').textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe)+' · 收 '+fmtPrice(model.current)+' · 更新于 '+D.formatJst(model.last.time)+' JST';
     $('cutoff').textContent=model.cutoffUtc?'数据截止 '+String(model.cutoffUtc).slice(0,10)+' UTC':'实时 Binance USD-M · 每 60 秒刷新';
     const errs=Object.keys(model.bundleErrors||{});
-    $('status').textContent='Loaded '+model.display.length+' display candles · '+model.regions.length+' regions · '+model.levels.length+' key lines'+(errs.length?' · 缺失 '+errs.join(', '):'');
-    $('status').classList.toggle('error',errs.length>0);
+    if(state.refreshWarning){
+      $('status').textContent='刷新失败，显示 '+D.formatJst(model.last.time).slice(-5)+' 的数据 · '+state.refreshWarning;
+      $('status').classList.add('error');
+    }else{
+      $('status').textContent='Loaded '+model.display.length+' display candles · '+model.regions.length+' drawn regions · '+model.levels.length+' drawn key lines'+(errs.length?' · 缺失 '+errs.join(', '):'');
+      $('status').classList.toggle('error',errs.length>0);
+    }
     document.querySelectorAll('[data-symbol]').forEach(b=>b.classList.toggle('active',b.dataset.symbol===state.symbol));
     document.querySelectorAll('[data-tf]').forEach(b=>b.classList.toggle('active',b.dataset.tf===state.timeframe));
   }
 
-  async function getBundle(token){
+  async function getBundle(token,forceFull){
     const progress=$('status');
     if(state.snapshot){
       progress.textContent='Loading archived snapshot…';
-      return D.loadSnapshot(state.symbol);
+      return{bundle:await D.loadSnapshot(state.symbol),full:true,failures:[]};
     }
-    return D.loadLive(state.symbol,state.timeframe,p=>{
-      if(token===state.loadToken)progress.textContent='Loading '+p.done+'/'+p.total+' · '+p.label;
-    });
+    const full=forceFull||!state.bundle||state.bundle.symbol!==state.symbol||(Date.now()-state.lastFullLoadAt)>=30*60*1000;
+    if(full){
+      const bundle=await D.loadLive(state.symbol,state.timeframe,p=>{
+        if(token===state.loadToken)progress.textContent='Loading '+p.done+'/'+p.total+' · '+p.label;
+      });
+      state.lastFullLoadAt=Date.now();
+      return{bundle,full:true,failures:[]};
+    }
+    const inc=await D.refreshLiveBundle(state.bundle,state.symbol,state.timeframe);
+    return{bundle:inc.bundle,full:false,failures:inc.failures||[]};
   }
 
-  async function refresh(){
+  async function refresh(forceFull){
     const token=++state.loadToken;
     try{
       await loadRules();
-      const bundle=await getBundle(token);if(token!==state.loadToken)return;
-      state.bundle=bundle;const model=buildAnalysis(bundle);state.model=model;
+      const result=await getBundle(token,!!forceFull);if(token!==state.loadToken)return;
+      state.bundle=result.bundle;
+      state.refreshWarning=result.failures.length?result.failures.map(x=>x.interval).join(', ')+' 更新失败':null;
+      const model=buildAnalysis(result.bundle);state.model=model;
       applySeries(model);renderTable(model);updateHeader(model);
-    }catch(e){console.error(e);$('status').textContent='加载失败：'+String(e.message||e);$('status').classList.add('error');}
+    }catch(e){
+      console.error(e);
+      if(state.model){
+        state.refreshWarning=String(e.message||e);
+        updateHeader(state.model);
+      }else{
+        $('status').textContent='加载失败：'+String(e.message||e);$('status').classList.add('error');
+      }
+    }
   }
 
   function setSelection(symbol,tf){
     if(symbol&&SYMBOLS[symbol])state.symbol=symbol;
     if(['4h','1h','1d'].includes(tf))state.timeframe=tf;
+    state.bundle=null;state.lastFullLoadAt=0;state.refreshWarning=null;
     const q=new URLSearchParams(location.search);q.set('symbol',state.symbol);q.set('tf',state.timeframe);if(state.snapshot)q.set('snapshot','1');
-    history.replaceState(null,'',location.pathname+'?'+q.toString());refresh();
+    history.replaceState(null,'',location.pathname+'?'+q.toString());refresh(true);
   }
 
   async function downloadPng(){
@@ -257,6 +344,15 @@
     }finally{$('downloadBtn').disabled=false;}
   }
 
+  function debugView(){
+    const range=state.chart&&state.chart.timeScale().getVisibleLogicalRange();
+    return{
+      range,logicalSlots:range?Number(range.to)-Number(range.from):null,
+      visibleBars:state.model&&state.model.visibleBars,
+      viewMin:state.model&&state.model.viewMin,viewMax:state.model&&state.model.viewMax
+    };
+  }
+
   async function init(){
     const q=new URLSearchParams(location.search);
     state.symbol=SYMBOLS[q.get('symbol')]?q.get('symbol'):'BTCUSDT';
@@ -268,13 +364,16 @@
     document.querySelectorAll('[data-tf]').forEach(b=>b.addEventListener('click',()=>setSelection(state.symbol,b.dataset.tf)));
     $('downloadBtn').addEventListener('click',downloadPng);
     window.__analysisDebug={
-      state,get model(){return state.model;},refresh,
+      state,get model(){return state.model;},refresh:(forceFull)=>refresh(!!forceFull),
       axisLabels:()=>state.primitive?state.primitive.debugAxisLabels():[],
       priceCoordinate:p=>state.candles?state.candles.priceToCoordinate(Number(p)):null,
-      volumeFormat:()=>state.volume?state.volume.options().priceFormat:null
+      volumeFormat:()=>state.volume?state.volume.options().priceFormat:null,
+      view:debugView,
+      candleTimes:()=>state.model?state.model.display.map(x=>x.time):[],
+      vwapTimes:()=>state.model?state.model.currentVwap.map(x=>x.time):[]
     };
-    await refresh();
-    if(!state.snapshot)state.refreshTimer=setInterval(refresh,Number(state.rules.display.refreshSeconds||60)*1000);
+    await refresh(true);
+    if(!state.snapshot)state.refreshTimer=setInterval(()=>refresh(false),Number(state.rules.display.refreshSeconds||60)*1000);
   }
   init();
 })();
