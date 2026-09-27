@@ -49,12 +49,11 @@
     const type = normalizeTickType(tickMarkType);
     const loc = locale || 'ja-JP';
     if (type === 'year') return new Intl.DateTimeFormat(loc,{timeZone:JST,year:'numeric'}).format(date);
-    if (type === 'month') return new Intl.DateTimeFormat('ja-JP',{timeZone:JST,month:'numeric'}).format(date) + '月';
-    if (type === 'dayofmonth' || type === 'day') return new Intl.DateTimeFormat('en-CA',{timeZone:JST,month:'2-digit',day:'2-digit'}).format(date);
-    return new Intl.DateTimeFormat(loc,{
-      timeZone:JST,hour:'2-digit',minute:'2-digit',
-      second:type === 'timewithseconds' ? '2-digit' : undefined,hour12:false
-    }).format(date);
+    const parts=(opts)=>Object.fromEntries(new Intl.DateTimeFormat(loc,{timeZone:JST,...opts,hour12:false}).formatToParts(date).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
+    if (type === 'month') { const p=parts({month:'numeric'}); return p.month+'月'; }
+    if (type === 'dayofmonth' || type === 'day') { const p=parts({month:'2-digit',day:'2-digit'}); return p.month+'/'+p.day; }
+    const p=parts({hour:'2-digit',minute:'2-digit',second:type==='timewithseconds'?'2-digit':undefined});
+    return p.hour+':'+p.minute+(type==='timewithseconds'?':'+p.second:'');
   }
 
   function remainingText(closeTimeMs, nowMs) {

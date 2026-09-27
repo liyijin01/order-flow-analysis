@@ -124,6 +124,10 @@
       for(const p of latest){
         items.push({id:'auto:'+preset+':tpo:'+p.key,type:'profile',kind:'tpo',from:p.from,to:p.to,binSize:p.binSize,rows:p.rows,poc:p.poc,vah:p.vah,val:p.val,maxWidthBars:40,showLetters:false,source:'approx'});
         for(const s of p.singlePrints||[])items.push({id:stableId('single',p.key,s.bottom),type:'zone',top:s.top,bottom:s.bottom,from:p.from,to:p.to,label:'single prints',border:'#f4f6fb',fill:'rgba(244,246,251,.06)',source:'approx'});
+        if(Number.isFinite(p.poc)){
+          const touched=cutoffNakedPoc({price:p.poc,from:p.to},bars,(input.context.tickSize||0)*((input.config.touch&&input.config.touch.toleranceTicks)||0));
+          items.push({id:stableId('npoc',p.key,p.poc),type:'level',price:p.poc,label:'nPOC '+(preset==='p2'?'M':'W'),from:p.to,to:touched,style:'dashed',color:'#ff7043',axisLabel:true,source:'approx'});
+        }
       }
       if(preset==='p3'&&input.exactWeekly){
         const levels=profileLevels(input.exactWeekly,'PW',input.exactWeeklyFrom,'exact');

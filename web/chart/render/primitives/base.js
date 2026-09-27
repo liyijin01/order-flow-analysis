@@ -52,7 +52,7 @@
       if(!this.context.autoscale||!this.visibleByTime(from,to,start,end))return null;
       const nums=(values||[]).map(Number).filter(Number.isFinite);
       if(!nums.length)return null;
-      return {priceRange:{minValue:Math.min(...nums),maxValue:Math.max(...nums)}};
+      let min=Infinity,max=-Infinity;for(const n of nums){if(n<min)min=n;if(n>max)max=n;}return {priceRange:{minValue:min,maxValue:max}};
     }
     lineStyle(ctx,style){if(style==='dotted')ctx.setLineDash([2,4]);else if(style==='dashed')ctx.setLineDash([7,5]);else ctx.setLineDash([]);}
     label(ctx,text,x,y,color,align){
