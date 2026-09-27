@@ -8,6 +8,8 @@ fs.mkdirSync(outDir,{recursive:true});
 fs.mkdirSync(path.dirname(latestPath),{recursive:true});
 
 const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],tfs=['4h','1h','1d'];
+const rightOffset=30;
+const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
 
 (async()=>{
   const browser=await chromium.launch({channel:'chrome',headless:true});
@@ -23,23 +25,43 @@ const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],tfs=['4h','1h','1d'];
         const meta=await page.evaluate(()=>({
           status:document.getElementById('status').textContent,
           cutoff:window.__analysisDebug.model?.cutoffUtc,
+          visibleBars:window.__analysisDebug.model?.visibleBars||0,
+          logicalSlots:window.__analysisDebug.view()?.logicalSlots,
+          calcLastClosedUtc:window.__analysisDebug.model?.calcLastClosedUtc,
+          supply:(window.__analysisDebug.model?.regions||[]).filter(x=>x.type==='supply').length,
+          demand:(window.__analysisDebug.model?.regions||[]).filter(x=>x.type==='demand').length,
+          drawn:(window.__analysisDebug.model?.regions||[]).length+(window.__analysisDebug.model?.levels||[]).length,
+          offView:(window.__analysisDebug.model?.allRegions||[]).filter(x=>x.offView).length+(window.__analysisDebug.model?.allLevels||[]).filter(x=>x.offView).length,
           regions:window.__analysisDebug.model?.regions?.length||0,
           levels:window.__analysisDebug.model?.levels?.length||0,
           axis:window.__analysisDebug.axisLabels()
         }));
         if(errors.length)throw new Error(symbol+' '+tf+' browser errors: '+errors.join(' | '));
         for(const a of meta.axis.filter(x=>x.visible))if(a.diff==null||a.diff>1)throw new Error(symbol+' '+tf+' axis label diff '+JSON.stringify(a));
+        if(!(Number.isFinite(meta.logicalSlots)&&meta.logicalSlots<=meta.visibleBars+rightOffset+2)){
+          throw new Error(symbol+' '+tf+' logical slots '+meta.logicalSlots+' exceed '+(meta.visibleBars+rightOffset+2));
+        }
+        if(!meta.cutoff||!meta.calcLastClosedUtc)throw new Error(symbol+' '+tf+' missing cutoff metadata');
+        const cutoffMs=Date.parse(meta.cutoff),calcMsValue=Date.parse(meta.calcLastClosedUtc);
+        const earliest=cutoffMs-(calcMs[tf]+86400_000);
+        if(calcMsValue<earliest)throw new Error(symbol+' '+tf+' calcLastClosedUtc too stale: '+meta.calcLastClosedUtc+' cutoff '+meta.cutoff);
         cutoff=cutoff||meta.cutoff;
+        if(cutoff!==meta.cutoff)throw new Error('snapshot cutoffs disagree: '+cutoff+' vs '+meta.cutoff);
         const file=path.join(outDir,symbol+'-'+tf+'.png');
         await page.locator('#analysisCapture').screenshot({path:file});
         const size=fs.statSync(file).size;if(size<50*1024)throw new Error(file+' is only '+size+' bytes');
-        manifest.push({symbol,timeframe:tf,file:path.basename(file),bytes:size,regions:meta.regions,levels:meta.levels,status:meta.status});
+        manifest.push({
+          symbol,timeframe:tf,file:path.basename(file),bytes:size,status:meta.status,
+          visibleBars:meta.visibleBars,logicalSlots:meta.logicalSlots,calcLastClosedUtc:meta.calcLastClosedUtc,
+          supply:meta.supply,demand:meta.demand,drawn:meta.drawn,offView:meta.offView,
+          regions:meta.regions,levels:meta.levels
+        });
         await page.close();
       }
     }
   } finally {await browser.close();}
   const latest={
-    schema:'analysis-latest-v1',
+    schema:'analysis-latest-v2',
     generatedAt:new Date().toISOString(),
     dataCutoffUtc:cutoff,
     symbols,
