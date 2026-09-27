@@ -140,9 +140,8 @@
     return out;
   }
 
-  // Formation and invalidation use closedBars only. touchBars may include a live bar,
-  // because a touch is monotonic and cannot resurrect an invalid zone.
-  function detectZones(closedBars,cfg,touchBars){
+  // Formation, invalidation and age are computed from closed bars only.
+  function detectZones(closedBars,cfg){
     const list=(closedBars||[]).slice().sort((a,b)=>a.time-b.time),atr=atr14(list),zones=[];
     for(let i=20;i<list.length;i++){
       for(let n=1;n<=Number(cfg.impulseMaxBars||3);n++){
@@ -182,17 +181,22 @@
           if(Number(b.high)>=z.bottom)z.tested=true;
         }
       }
-      if(z.valid&&touchBars){
-        for(const b of touchBars){
-          if(Number(b.time)<=z.created)continue;
-          if(z.type==='demand'&&Number(b.low)<=z.top)z.tested=true;
-          if(z.type==='supply'&&Number(b.high)>=z.bottom)z.tested=true;
-        }
-      }
       const createdIndex=list.findIndex(b=>Number(b.time)===z.created);
       z.ageBars=createdIndex>=0?list.length-1-createdIndex:Infinity;
     }
     return zones.filter(z=>z.valid&&z.ageBars<=Number(cfg.maxAgeBars||300));
+  }
+
+  function markZoneTouches(zones,bars){
+    return(zones||[]).map(zone=>{
+      const z={...zone};
+      for(const b of bars||[]){
+        if(Number(b.time)<=Number(z.created))continue;
+        if(z.type==='demand'&&Number(b.low)<=Number(z.top))z.tested=true;
+        if(z.type==='supply'&&Number(b.high)>=Number(z.bottom))z.tested=true;
+      }
+      return z;
+    });
   }
 
   function zonesOverlap(a,b){return Math.min(a.top,b.top)>=Math.max(a.bottom,b.bottom);}
@@ -325,7 +329,7 @@
   global.OrderFlowAnalysisEngine={
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,utcWeekStart,
     weightedStats,anchoredVwapSeries,alignSeriesToBars,valueArea,approxVolumeProfile,tpoProfile,exactProfile,profileIsFresh,
-    atr14,detectZones,mergeZones,zoneState,selectZones,rangeOverlapRatio,suppressValueAreas,filterValueAreas,inPriceView,zoneIntersectsView,
+    atr14,detectZones,markZoneTouches,mergeZones,zoneState,selectZones,rangeOverlapRatio,suppressValueAreas,filterValueAreas,inPriceView,zoneIntersectsView,
     wasZoneTouched,isPocNaked,selectNakedPocs,axisLabelSelection,regionLabelLayout,roundToTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);
