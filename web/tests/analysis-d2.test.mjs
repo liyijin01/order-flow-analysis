@@ -53,8 +53,9 @@ test('D2-4 changing unfinished OHLC cannot change detected zones or invalidate b
   const liveB={time:28,open:119,high:130,low:80,close:80,volume:10,takerBuyBase:5};
   assert.deepEqual(E.detectZones(closed,cfg),a);
   assert.deepEqual(E.detectZones(closed,cfg),a);
-  const withTouch=E.detectZones(closed,cfg,closed.concat([liveB]));
+  const withTouch=E.markZoneTouches(E.detectZones(closed,cfg),closed.concat([liveB]));
   assert.equal(withTouch.some(z=>z.type==='demand'&&z.valid!==false),true);
+  assert.equal(withTouch.some(z=>z.type==='demand'&&z.tested),true);
   assert.equal(liveA.time,liveB.time);
 });
 
