@@ -118,7 +118,7 @@
     const display=(bundle.series[state.timeframe]||bundle.series.display||[]).slice(-(Number(counts[state.timeframe])||540));
     if(!display.length)throw new Error('display data missing for '+state.timeframe);
     const one=bundle.series['1h']||[],thirty=bundle.series['30m']||[],calcTf=rules.zones.calcIntervals[state.timeframe],calc=bundle.series[calcTf]||[];
-    const last=display[display.length-1],current=Number(last.close),min=Math.min(...display.map(b=>b.low)),max=Math.max(...display.map(b=>b.high));
+    const last=display[display.length-1],current=Number(last.close);let min=Infinity,max=-Infinity;for(const b of display){if(Number(b.low)<min)min=Number(b.low);if(Number(b.high)>max)max=Number(b.high);}
     const qStart=E.utcQuarterStart(last.time),pqStart=E.previousQuarterStart(last.time),areas=[],missing=[];
 
     const pqBars=one.filter(b=>b.time>=pqStart&&b.time<qStart),pqStats=E.weightedStats(pqBars);
