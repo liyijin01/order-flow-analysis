@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+await import(pathToFileURL(path.resolve('web/chart/indicators.js')));
 await import(pathToFileURL(path.resolve('web/chart/annotate.js')));
+const I=globalThis.OrderFlowIndicators;
 const A=globalThis.OrderFlowAnnotate;
 
 const config={
@@ -98,4 +100,15 @@ test('B9 P4 chooses the two nearest previous-year month bands',()=>{
   const zones=doc.items.filter(x=>x.type==='zone');
   assert.equal(zones.length,2);
   assert.deepEqual(zones.map(x=>x.label).sort(),['py feb','py mar']);
+});
+
+test('B10 eight weeks of constructed 30m data produce eight TPO profiles',()=>{
+  const bars=[],start=Date.UTC(2026,6,27)/1000;
+  for(let i=0;i<8*7*48;i++){
+    const time=start+i*1800,week=Math.floor(i/(7*48)),base=100+week*3;
+    bars.push({time,low:base,high:base+2,close:base+1,volume:10,takerBuyBase:5});
+  }
+  const profiles=I.tpoProfiles(bars,{binSize:1,group:'week',minBins:2,intervalSec:1800});
+  assert.equal(profiles.length,8);
+  assert.equal(profiles.slice(0,-1).every(p=>p.complete),true);
 });
