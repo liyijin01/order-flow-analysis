@@ -48,8 +48,34 @@
       const lo=from==null?-Infinity:Number(from),hi=to==null?Infinity:Number(to);
       return hi>=Number(start)&&lo<=Number(end);
     }
+    logicalIndex(time){
+      if(time==null)return null;
+      if(!this.chart)return null;
+      const scale=this.chart.timeScale(),t=this.normalizedTime(time),bars=this.context.bars||[],sec=this.context.intervalSec||3600;
+      const direct=scale.timeToIndex(t,true);
+      if(direct!=null)return Number(direct);
+      if(!bars.length)return null;
+      const first=bars[0],last=bars[bars.length-1];
+      if(t>last.time){
+        const li=scale.timeToIndex(last.time,true);
+        return li==null?null:Number(li)+(t-last.time)/sec;
+      }
+      if(t<first.time){
+        const fi=scale.timeToIndex(first.time,true);
+        return fi==null?null:Number(fi);
+      }
+      return null;
+    }
     autoscaleRange(start,end,values,from,to){
-      if(!this.context.autoscale||!this.visibleByTime(from,to,start,end))return null;
+      if(!this.context.autoscale)return null;
+      const a=Number(start),b=Number(end);
+      if(Number.isFinite(a)&&Number.isFinite(b)){
+        const lo=Math.min(a,b),hi=Math.max(a,b);
+        const fi=from==null?-Infinity:this.logicalIndex(from);
+        const ti=to==null?Infinity:this.logicalIndex(to);
+        const fromIndex=fi==null?-Infinity:fi,toIndex=ti==null?Infinity:ti;
+        if(toIndex<lo||fromIndex>hi)return null;
+      }
       const nums=(values||[]).map(Number).filter(Number.isFinite);
       if(!nums.length)return null;
       let min=Infinity,max=-Infinity;for(const n of nums){if(n<min)min=n;if(n>max)max=n;}return {priceRange:{minValue:min,maxValue:max}};
