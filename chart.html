@@ -1,129 +1,29 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
 <title>Order Flow Analysis · Chart</title>
 <style>
-:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:#e7eaf0;background:#1b2130}
-*{box-sizing:border-box}
-body{margin:0;background:#1b2130;color:#e7eaf0}
-main{max-width:1600px;margin:0 auto;padding:14px}
-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:10px}
-.eyebrow{font-size:10px;letter-spacing:.16em;color:#8e98aa}
-h1{font-size:21px;margin:5px 0 3px}
-p{font-size:12px;color:#9da6b8;margin:0}
-a{color:#dfe6f5}
-.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0}
-label{font-size:11px;color:#9da6b8}
-select,button{font:inherit;font-size:11px;color:#e7eaf0;background:#242b3b;border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:7px 9px}
-button{cursor:pointer}
-button:hover{border-color:rgba(255,255,255,.35)}
-.info{min-height:48px;padding:7px 10px;border:1px solid rgba(255,255,255,.08);background:#181e2b;font-variant-numeric:tabular-nums}
-.info-line{font-size:11px;line-height:1.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.info-line.secondary{color:#9da6b8}
-#chart{width:100%;height:calc(100vh - 236px);min-height:520px;border:1px solid rgba(255,255,255,.10);background:#1b2130}
-.status{font-size:11px;color:#9da6b8;margin-top:8px;min-height:18px}
-.status.error{color:#ffb4b4}
-.page-footer{display:flex;justify-content:space-between;gap:12px;margin-top:7px;font-size:10px;color:#727d90}
-@media(max-width:850px){main{padding:8px}header{display:block}.toolbar{gap:5px}#chart{height:calc(100vh - 280px);min-height:430px}}
-</style>
-</head>
-<body>
-<main>
-<header>
-  <div>
-    <div class="eyebrow">ORDER FLOW ANALYSIS / CHART C2</div>
-    <h1 id="pageTitle">BTCUSDT.P · 1小时</h1>
-    <p>Binance public market data · Lightweight Charts 5.2.1</p>
-  </div>
-  <a href="index.html">← Order Flow</a>
-</header>
-
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:#e7eaf0;background:#1b2130}*{box-sizing:border-box}body{margin:0;background:#1b2130;color:#e7eaf0}main{max-width:1600px;margin:0 auto;padding:14px}header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:10px}.eyebrow{font-size:10px;letter-spacing:.16em;color:#8e98aa}h1{font-size:21px;margin:5px 0 3px}p{font-size:12px;color:#9da6b8;margin:0}a{color:#dfe6f5}.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0}label{font-size:11px;color:#9da6b8}select,button{font:inherit;font-size:11px;color:#e7eaf0;background:#242b3b;border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:7px 9px}input[type=checkbox]{vertical-align:middle}button{cursor:pointer}.info{min-height:48px;padding:7px 10px;border:1px solid rgba(255,255,255,.08);background:#181e2b;font-variant-numeric:tabular-nums}.info-line{font-size:11px;line-height:1.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.info-line.secondary{color:#9da6b8}#chart{width:100%;height:calc(100vh - 252px);min-height:520px;border:1px solid rgba(255,255,255,.10);background:#1b2130}.status{font-size:11px;color:#9da6b8;margin-top:8px;min-height:18px}.status.error{color:#ffb4b4}.page-footer{display:flex;justify-content:space-between;gap:12px;margin-top:7px;font-size:10px;color:#727d90}@media(max-width:850px){main{padding:8px}header{display:block}#chart{height:calc(100vh - 310px);min-height:430px}}
+</style></head>
+<body><main>
+<header><div><div class="eyebrow">ORDER FLOW ANALYSIS / C2.1 + C3 + C4</div><h1 id="pageTitle">BTCUSDT.P · 1小时</h1><p>Real mode uses Binance. Sample mode uses static fixtures and is never presented as live analysis.</p></div><a href="index.html">← Order Flow</a></header>
 <div class="toolbar">
-  <label>Symbol
-    <select id="symbol">
-      <option value="BTCUSDT">BTCUSDT</option>
-      <option value="ETHUSDT">ETHUSDT</option>
-      <option value="SOLUSDT">SOLUSDT</option>
-    </select>
-  </label>
-  <label>Market
-    <select id="market">
-      <option value="um">USD-M Perpetual</option>
-      <option value="spot">Spot</option>
-    </select>
-  </label>
-  <label>Interval
-    <select id="interval">
-      <option value="15m">15m</option>
-      <option value="30m">30m</option>
-      <option value="1h" selected>1h</option>
-      <option value="2h">2h</option>
-      <option value="4h">4h</option>
-      <option value="1d">1D</option>
-    </select>
-  </label>
-  <label>Candles
-    <select id="candleStyle">
-      <option value="mono" selected>Mono hollow/solid</option>
-      <option value="color">Color</option>
-    </select>
-  </label>
-  <label>Sample
-    <select id="fixture">
-      <option value="none" selected>None</option>
-      <option value="p1">P1 季度价值区</option>
-      <option value="p2">P2 月度 TPO</option>
-      <option value="p3">P3 周度 TPO</option>
-      <option value="p4">P4 区间框</option>
-      <option value="p5">P5 衍生品面板</option>
-    </select>
-  </label>
-  <label>PNG
-    <select id="exportSize">
-      <option value="current">Current window</option>
-      <option value="1920x1080">1920×1080</option>
-      <option value="2400x960">2400×960</option>
-    </select>
-  </label>
-  <button id="exportBtn">Export PNG</button>
+<label>Symbol <select id="symbol"><option>BTCUSDT</option><option>ETHUSDT</option><option>SOLUSDT</option></select></label>
+<label>Market <select id="market"><option value="um">USD-M Perpetual</option><option value="spot">Spot</option></select></label>
+<label>Interval <select id="interval"><option value="15m">15m</option><option value="30m">30m</option><option value="1h" selected>1h</option><option value="2h">2h</option><option value="4h">4h</option><option value="1d">1D</option></select></label>
+<label>Candles <select id="candleStyle"><option value="mono" selected>Mono hollow/solid</option><option value="color">Color</option></select></label>
+<label>Sample <select id="fixture"><option value="none" selected>None / real data</option><option value="p1">P1 sample</option><option value="p2">P2 sample</option><option value="p3">P3 sample</option><option value="p4">P4 sample</option><option value="p5">P5 sample</option></select></label>
+<label>Auto preset <select id="autoPreset"><option value="none" selected>None</option><option value="p1">P1 季度价值区</option><option value="p2">P2 月度 TPO</option><option value="p3">P3 周度 TPO</option><option value="p4">P4 区间框</option></select></label>
+<label><input id="annotationAutoscale" type="checkbox" checked> 标注参与缩放</label>
+<label>PNG <select id="exportSize"><option value="current">Current window</option><option value="1920x1080">1920×1080</option><option value="2400x960">2400×960</option></select></label>
+<button id="exportBtn">Export PNG</button>
 </div>
-
-<div id="info" class="info">
-  <div id="infoLine1" class="info-line">Loading…</div>
-  <div id="infoLine2" class="info-line secondary"></div>
-</div>
-<div id="chart" aria-label="market candlestick and volume chart"></div>
-<div id="status" class="status">Loading market data…</div>
-<div class="page-footer">
-  <span id="footerLocal"></span>
-  <span>Data: Binance · order-flow-analysis</span>
-</div>
+<div id="info" class="info"><div id="infoLine1" class="info-line">Loading…</div><div id="infoLine2" class="info-line secondary"></div></div>
+<div id="chart" aria-label="market candlestick and volume chart"></div><div id="status" class="status">Loading market data…</div>
+<div class="page-footer"><span id="footerLocal"></span><span>Data: Binance / static sample · order-flow-analysis</span></div>
 </main>
-
-<script
-  src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js"
-  integrity="sha384-KkYqTZlM13Zya6fVUF3IGCBOQ1ehFeJVVgxaVvD/0MebineF9EI8Jkd3NnWNChqN"
-  crossorigin="anonymous"></script>
-<script src="config/symbols.js"></script>
-<script src="web/chart/theme.js"></script>
-<script src="web/chart/data.js"></script>
-<script src="web/chart/export.js"></script>
-<script src="web/chart/presets.js"></script>
-<script src="web/chart/schema.js"></script>
-<script src="web/chart/render/primitives/base.js"></script>
-<script src="web/chart/render/primitives/level.js"></script>
-<script src="web/chart/render/primitives/zone.js"></script>
-<script src="web/chart/render/primitives/profile.js"></script>
-<script src="web/chart/render/primitives/band.js"></script>
-<script src="web/chart/render/primitives/marker.js"></script>
-<script src="web/chart/render/primitives/callout.js"></script>
-<script src="web/chart/render/primitives/range.js"></script>
-<script src="web/chart/render/primitives/vline.js"></script>
-<script src="web/chart/render/primitives/text.js"></script>
-<script src="web/chart/render/renderer.js"></script>
-<script src="web/chart/main.js"></script>
-</body>
-</html>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js" integrity="sha384-KkYqTZlM13Zya6fVUF3IGCBOQ1ehFeJVVgxaVvD/0MebineF9EI8Jkd3NnWNChqN" crossorigin="anonymous"></script>
+<script src="config/symbols.js"></script><script src="web/chart/theme.js"></script><script src="web/chart/data.js"></script><script src="web/chart/realtime.js"></script><script src="web/chart/indicators.js"></script><script src="web/chart/annotate.js"></script><script src="web/chart/export.js"></script><script src="web/chart/presets.js"></script><script src="web/chart/schema.js"></script>
+<script src="web/chart/render/primitives/base.js"></script><script src="web/chart/render/primitives/level.js"></script><script src="web/chart/render/primitives/zone.js"></script><script src="web/chart/render/primitives/profile.js"></script><script src="web/chart/render/primitives/band.js"></script><script src="web/chart/render/primitives/marker.js"></script><script src="web/chart/render/primitives/callout.js"></script><script src="web/chart/render/primitives/range.js"></script><script src="web/chart/render/primitives/vline.js"></script><script src="web/chart/render/primitives/text.js"></script><script src="web/chart/render/renderer.js"></script><script src="web/chart/main.js"></script>
+</body></html>
