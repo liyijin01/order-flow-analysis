@@ -1,7 +1,11 @@
 {
   "display": {
     "defaultTimeframe": "4h",
-    "bars": {"4h": 540, "1h": 720, "1d": 365},
+    "bars": {
+      "4h": 540,
+      "1h": 720,
+      "1d": 365
+    },
     "rightOffset": 30,
     "refreshSeconds": 60
   },
@@ -9,19 +13,31 @@
     "visiblePadPct": 10,
     "overlapSuppressPct": 70,
     "maxCount": 3,
-    "pq": {"interval": "1h", "definition": "anchored-vwap-1sigma"},
-    "pm": {"interval": "1h", "definition": "volume-profile-70"},
-    "pw": {"definition": "exact-aggtrades-volume-profile-70"}
+    "pq": {
+      "interval": "1h",
+      "definition": "anchored-vwap-1sigma"
+    },
+    "pm": {
+      "interval": "1h",
+      "definition": "tpo-70"
+    },
+    "pw": {
+      "definition": "exact-aggtrades-volume-profile-70"
+    }
   },
   "zones": {
-    "calcIntervals": {"1h": "4h", "4h": "1d", "1d": "1w"},
+    "calcIntervals": {
+      "1h": "4h",
+      "4h": "1d",
+      "1d": "1w"
+    },
     "calcBars": 400,
     "impulseMaxBars": 3,
     "impulseMinMoveAtr": 1.5,
     "impulseMinBodyPct": 0.5,
     "requireDeltaAlign": true,
     "baseMaxBars": 5,
-    "baseMaxRangeAtr": 1.0,
+    "baseMaxRangeAtr": 1,
     "maxAgeBars": 300,
     "perSide": 2,
     "maxDistancePct": 20
@@ -32,7 +48,11 @@
   },
   "axisLabels": {
     "minGapPx": 14,
-    "priorities": {"zone": 3, "value": 2, "line": 1}
+    "priorities": {
+      "zone": 3,
+      "value": 2,
+      "line": 1
+    }
   },
   "textLabels": {
     "minGapPx": 14,
