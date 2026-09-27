@@ -7,7 +7,12 @@
       "1d": 365
     },
     "rightOffset": 30,
-    "refreshSeconds": 60
+    "refreshSeconds": 60,
+    "visibleBars": {
+      "4h": 180,
+      "1h": 240,
+      "1d": 180
+    }
   },
   "valueAreas": {
     "visiblePadPct": 10,
@@ -40,7 +45,8 @@
     "baseMaxRangeAtr": 1,
     "maxAgeBars": 300,
     "perSide": 2,
-    "maxDistancePct": 20
+    "maxDistancePct": 20,
+    "viewPadPct": 50
   },
   "nakedPoc": {
     "maxCount": 2,

@@ -72,8 +72,16 @@
       const vals=[];
       for(const r of this.model.regions||[])vals.push(Number(r.bottom),Number(r.top));
       for(const l of this.model.levels||[])vals.push(Number(l.price));
-      const nums=vals.filter(Number.isFinite);if(!nums.length)return null;
-      let min=Infinity,max=-Infinity;for(const n of nums){if(n<min)min=n;if(n>max)max=n;}
+      const lo=Number(this.model.autoscaleMin),hi=Number(this.model.autoscaleMax);
+      let min=Infinity,max=-Infinity;
+      for(const raw of vals){
+        if(!Number.isFinite(raw))continue;
+        let n=raw;
+        if(Number.isFinite(lo)&&n<lo)n=lo;
+        if(Number.isFinite(hi)&&n>hi)n=hi;
+        if(n<min)min=n;if(n>max)max=n;
+      }
+      if(!Number.isFinite(min)||!Number.isFinite(max))return null;
       return{priceRange:{minValue:min,maxValue:max}};
     }
 

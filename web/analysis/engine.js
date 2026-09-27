@@ -47,6 +47,19 @@
     return out;
   }
 
+  // D2-1: project a higher-frequency line onto display-bar timestamps only.
+  function alignSeriesToBars(points,bars,intervalSec){
+    const src=(points||[]).slice().sort((a,b)=>Number(a.time)-Number(b.time));
+    const dst=(bars||[]).slice().sort((a,b)=>Number(a.time)-Number(b.time));
+    const out=[];let j=0,last=null;const sec=Number(intervalSec)||0;
+    for(const bar of dst){
+      const closeExclusive=Number(bar.time)+sec;
+      while(j<src.length&&Number(src[j].time)<closeExclusive){last=src[j];j++;}
+      if(last)out.push({time:Number(bar.time),value:Number(last.value)});
+    }
+    return out;
+  }
+
   function valueArea(rows,binSize,pct){
     const sorted=(rows||[]).map(r=>[Number(r[0]),Number(r[1])]).filter(r=>finite(r[0])&&finite(r[1])).sort((a,b)=>a[0]-b[0]);
     if(!sorted.length)return null;
@@ -104,7 +117,17 @@
     let end=null;
     const days=p.expectedDays||p.days||[];
     if(days.length)end=Date.parse(days[days.length-1]+'T00:00:00Z')/1000+86400;
-    return{...va,binSize:size,from:end,source:'exact',label:p.label,days:p.days||[]};
+    return{...va,binSize:size,from:end,source:'exact',label:p.label,days:p.days||[],expectedDays:p.expectedDays||[]};
+  }
+
+  function profileIsFresh(profilePayload,lastTime){
+    const p=profilePayload&&profilePayload.profiles&&profilePayload.profiles.previous;
+    if(!p||!p.complete)return false;
+    const expected=p.expectedDays||p.days||[];
+    if(!expected.length)return false;
+    const pwStart=utcWeekStart(lastTime)-7*86400;
+    const expectedStart=new Date(pwStart*1000).toISOString().slice(0,10);
+    return expected[0]===expectedStart;
   }
 
   function atr14(bars){
@@ -117,8 +140,9 @@
     return out;
   }
 
-  function detectZones(bars,cfg){
-    const list=(bars||[]).slice().sort((a,b)=>a.time-b.time),atr=atr14(list),zones=[];
+  // Formation, invalidation and age are computed from closed bars only.
+  function detectZones(closedBars,cfg){
+    const list=(closedBars||[]).slice().sort((a,b)=>a.time-b.time),atr=atr14(list),zones=[];
     for(let i=20;i<list.length;i++){
       for(let n=1;n<=Number(cfg.impulseMaxBars||3);n++){
         if(i+n>list.length)break;
@@ -163,6 +187,18 @@
     return zones.filter(z=>z.valid&&z.ageBars<=Number(cfg.maxAgeBars||300));
   }
 
+  function markZoneTouches(zones,bars){
+    return(zones||[]).map(zone=>{
+      const z={...zone};
+      for(const b of bars||[]){
+        if(Number(b.time)<=Number(z.created))continue;
+        if(z.type==='demand'&&Number(b.low)<=Number(z.top))z.tested=true;
+        if(z.type==='supply'&&Number(b.high)>=Number(z.bottom))z.tested=true;
+      }
+      return z;
+    });
+  }
+
   function zonesOverlap(a,b){return Math.min(a.top,b.top)>=Math.max(a.bottom,b.bottom);}
   function mergeZones(zones){
     const grouped={supply:[],demand:[]};
@@ -185,19 +221,32 @@
     return grouped.supply.concat(grouped.demand);
   }
 
+  function zoneState(z,current){
+    const price=Number(current),bottom=Number(z.bottom),top=Number(z.top);
+    if(bottom<=price&&price<=top)return{state:'inside',distancePct:0};
+    if(z.type==='supply'){
+      if(price<bottom)return{state:'ahead',distancePct:(bottom-price)/price*100};
+      return{state:'breaking',distancePct:(price-top)/price*100};
+    }
+    if(price>top)return{state:'ahead',distancePct:(price-top)/price*100};
+    return{state:'breaking',distancePct:(bottom-price)/price*100};
+  }
+
   function selectZones(zones,current,cfg){
-    const price=Number(current),maxDist=Number(cfg.maxDistancePct||20)/100,per=Math.max(1,Number(cfg.perSide||2));
+    const price=Number(current),maxDist=Number(cfg.maxDistancePct||20),per=Math.max(1,Number(cfg.perSide||2));
     const supply=[],demand=[];
     for(const z of mergeZones(zones)){
-      if(z.type==='supply'&&z.bottom>=price){
-        const d=(z.bottom-price)/price;if(d<=maxDist)supply.push({...z,distancePct:d*100});
-      }
-      if(z.type==='demand'&&z.top<=price){
-        const d=(price-z.top)/price;if(d<=maxDist)demand.push({...z,distancePct:d*100});
-      }
+      const st=zoneState(z,price);
+      if(st.distancePct>maxDist)continue;
+      const item={...z,zoneState:st.state,distancePct:st.distancePct};
+      (z.type==='supply'?supply:demand).push(item);
     }
-    supply.sort((a,b)=>a.distancePct-b.distancePct||b.strength-a.strength);
-    demand.sort((a,b)=>a.distancePct-b.distancePct||b.strength-a.strength);
+    const order=(a,b)=>{
+      const sa=a.zoneState==='inside'?0:(a.zoneState==='ahead'?1:2);
+      const sb=b.zoneState==='inside'?0:(b.zoneState==='ahead'?1:2);
+      return sa-sb||a.distancePct-b.distancePct||Number(b.strength)-Number(a.strength);
+    };
+    supply.sort(order);demand.sort(order);
     return supply.slice(0,per).concat(demand.slice(0,per));
   }
 
@@ -207,16 +256,31 @@
     return small>0?inter/small:0;
   }
 
-  function filterValueAreas(areas,visibleMin,visibleMax,padPct,overlapPct){
-    const span=Math.max(1e-12,Number(visibleMax)-Number(visibleMin)),pad=span*Number(padPct||0)/100;
+  function suppressValueAreas(areas,overlapPct,maxCount){
     const rank={PQ:3,PM:2,PW:1};
-    const kept=(areas||[]).filter(a=>a.top>=visibleMin-pad&&a.bottom<=visibleMax+pad).sort((a,b)=>(rank[b.scope]||0)-(rank[a.scope]||0));
+    const sorted=(areas||[]).slice().sort((a,b)=>(rank[b.scope]||0)-(rank[a.scope]||0));
     const out=[];
-    for(const a of kept){
+    for(const a of sorted){
       if(out.some(b=>rangeOverlapRatio(a,b)>=Number(overlapPct||70)/100))continue;
       out.push(a);
+      if(out.length>=Number(maxCount||3))break;
     }
-    return out.slice(0,3);
+    return out;
+  }
+
+  function filterValueAreas(areas,visibleMin,visibleMax,padPct,overlapPct){
+    const span=Math.max(1e-12,Number(visibleMax)-Number(visibleMin)),pad=span*Number(padPct||0)/100;
+    return suppressValueAreas((areas||[]).filter(a=>a.top>=visibleMin-pad&&a.bottom<=visibleMax+pad),overlapPct,3);
+  }
+
+  function inPriceView(price,viewMin,viewMax,padPct){
+    const span=Math.max(1e-12,Number(viewMax)-Number(viewMin)),pad=span*Number(padPct||0)/100;
+    return Number(price)>=Number(viewMin)-pad&&Number(price)<=Number(viewMax)+pad;
+  }
+
+  function zoneIntersectsView(zone,viewMin,viewMax,padPct){
+    const span=Math.max(1e-12,Number(viewMax)-Number(viewMin)),pad=span*Number(padPct||0)/100;
+    return Number(zone.top)>=Number(viewMin)-pad&&Number(zone.bottom)<=Number(viewMax)+pad;
   }
 
   function wasZoneTouched(bars,from,bottom,top){
@@ -264,8 +328,8 @@
 
   global.OrderFlowAnalysisEngine={
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,utcWeekStart,
-    weightedStats,anchoredVwapSeries,valueArea,approxVolumeProfile,tpoProfile,exactProfile,
-    atr14,detectZones,mergeZones,selectZones,rangeOverlapRatio,filterValueAreas,
+    weightedStats,anchoredVwapSeries,alignSeriesToBars,valueArea,approxVolumeProfile,tpoProfile,exactProfile,profileIsFresh,
+    atr14,detectZones,markZoneTouches,mergeZones,zoneState,selectZones,rangeOverlapRatio,suppressValueAreas,filterValueAreas,inPriceView,zoneIntersectsView,
     wasZoneTouched,isPocNaked,selectNakedPocs,axisLabelSelection,regionLabelLayout,roundToTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);

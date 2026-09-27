@@ -15,7 +15,7 @@
     for(let i=0;i<(retries||4);i++){
       let response;
       try{response=await fetch(url,{cache:'no-store'});}
-      catch(e){error=e;if(i+1<retries)await sleep(500*(2**i));continue;}
+      catch(e){error=e;if(i+1<(retries||4))await sleep(500*(2**i));continue;}
       if(response.ok)return response.json();
       if(response.status===429||response.status===418){
         const ra=Number(response.headers.get('Retry-After'));
@@ -26,16 +26,31 @@
     throw error||new Error('request failed');
   }
 
+  function normalizeMs(v){
+    let n=Number(v);
+    if(n>10_000_000_000_000)n=Math.floor(n/1000);
+    return n;
+  }
+
   function parseRows(rows){
     return(rows||[]).map(r=>{
       if(!Array.isArray(r))return r;
-      let ms=Number(r[0]);if(ms>10_000_000_000_000)ms=Math.floor(ms/1000);
+      const ms=normalizeMs(r[0]),closeMs=normalizeMs(r[6]);
       return{
-        time:Math.floor(ms/1000),openTime:ms,closeTime:Number(r[6]),
+        time:Math.floor(ms/1000),openTime:ms,closeTime:closeMs,
         open:Number(r[1]),high:Number(r[2]),low:Number(r[3]),close:Number(r[4]),
         volume:Number(r[5]),quoteVolume:Number(r[7]||0),trades:Number(r[8]||0),takerBuyBase:Number(r[9]||0)
       };
     }).filter(b=>Number.isFinite(b.time)&&Number.isFinite(b.open)&&Number.isFinite(b.close));
+  }
+
+  function closedBars(bars,asOfMs){
+    const cutoff=Number(asOfMs);
+    return(bars||[]).filter(b=>{
+      const close=Number(b.closeTime);
+      if(Number.isFinite(close))return close<cutoff;
+      return (Number(b.time)*1000)<cutoff;
+    });
   }
 
   async function fetchHistory(symbol,interval,maxBars,endTime){
@@ -52,6 +67,32 @@
     }
     const dedup=new Map();for(const b of all)dedup.set(b.time,b);
     return Array.from(dedup.values()).sort((a,b)=>a.time-b.time).slice(-maxBars);
+  }
+
+  async function fetchLatest(symbol,interval,limit){
+    const n=Math.max(1,Math.min(3,Number(limit)||3));
+    const params=new URLSearchParams({symbol,interval,limit:String(n)});
+    return parseRows(await requestJson(endpoint()+'?'+params.toString(),3));
+  }
+
+  function mergeBars(existing,incoming,maxBars){
+    const map=new Map();
+    for(const b of existing||[])map.set(Number(b.time),b);
+    for(const b of incoming||[])map.set(Number(b.time),b);
+    const out=Array.from(map.values()).sort((a,b)=>Number(a.time)-Number(b.time));
+    return out.slice(-Math.max(1,Number(maxBars)||out.length));
+  }
+
+  function capFor(interval,timeframe){
+    let cap=500;
+    if(interval==='1h')cap=5000;
+    else if(interval==='30m')cap=3500;
+    else if(interval==='1w')cap=400;
+    else if(interval==='1d')cap=Math.max(430,displayCounts[timeframe]||0,400);
+    else if(interval==='4h')cap=Math.max(620,displayCounts[timeframe]||0,400);
+    if(interval===timeframe)cap=Math.max(cap,displayCounts[timeframe]||0);
+    if(interval===calcMap[timeframe])cap=Math.max(cap,400);
+    return cap;
   }
 
   async function fetchProfile(symbol){
@@ -72,26 +113,37 @@
 
   async function loadLive(symbol,timeframe,onProgress){
     const progress=typeof onProgress==='function'?onProgress:()=>{},errors={},series={};
-    let done=0;const total=5;
+    const required=[timeframe,'1h','30m',calcMap[timeframe]];
+    const intervals=[];for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
+    let done=0;const total=intervals.length+1;
     const step=(label)=>{done++;progress({done,total,label});};
-    const tasks=[];
+    await Promise.all(intervals.map(interval=>
+      fetchHistory(symbol,interval,capFor(interval,timeframe))
+        .then(v=>{series[interval]=v;step(interval);})
+        .catch(e=>{errors[interval]=String(e.message||e);step(interval+' failed');})
+    ));
+    const profile=await fetchProfile(symbol);step('exact weekly profile');
+    if(!profile)errors.profile='profiles-'+symbol+'.json unavailable';
+    if(!(series[timeframe]||[]).length)throw new Error(errors[timeframe]||'display candles unavailable');
+    return{schema:'analysis-live-v2',symbol,generatedAt:new Date().toISOString(),cutoffUtc:null,series,profile,errors};
+  }
 
-    tasks.push(fetchHistory(symbol,'1h',5000).then(v=>{series['1h']=v;step('PQ / 1h');}).catch(e=>{errors.pq=String(e.message||e);step('PQ / 1h failed');}));
-    if(timeframe!=='1h')tasks.push(fetchHistory(symbol,timeframe,displayCounts[timeframe]||540).then(v=>{series[timeframe]=v;step('display '+timeframe);}).catch(e=>{errors.display=String(e.message||e);step('display failed');}));
-    else tasks.push(Promise.resolve().then(()=>step('display 1h uses PQ data')));
-
-    const calc=calcMap[timeframe];
-    tasks.push(fetchHistory(symbol,calc,400).then(v=>{series[calc]=v;step('zones / '+calc);}).catch(e=>{errors.zones=String(e.message||e);step('zones failed');}));
-    tasks.push(fetchHistory(symbol,'30m',3500).then(v=>{series['30m']=v;step('PM / nPOC');}).catch(e=>{errors.tpo=String(e.message||e);step('PM / nPOC failed');}));
-    tasks.push(fetchProfile(symbol).then(v=>{if(v){}else errors.profile='profiles-'+symbol+'.json unavailable';return v;}).then(v=>{series._profile=v;step('exact weekly profile');}));
-
-    await Promise.all(tasks);
-    const one=series['1h']||[];
-    if(timeframe==='1h')series.display=one.slice(-(displayCounts['1h']||720));
-    else series.display=(series[timeframe]||[]).slice(-(displayCounts[timeframe]||540));
-    const profile=series._profile||null;delete series._profile;
-    if(!series.display.length)throw new Error(errors.display||'display candles unavailable');
-    return{schema:'analysis-live-v1',symbol,generatedAt:new Date().toISOString(),cutoffUtc:null,series,profile,errors};
+  async function refreshLiveBundle(bundle,symbol,timeframe){
+    const required=[timeframe,'1h','30m',calcMap[timeframe]],intervals=[];
+    for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
+    const failures=[],updates={};
+    await Promise.all(intervals.map(async interval=>{
+      try{updates[interval]=await fetchLatest(symbol,interval,3);}
+      catch(e){failures.push({interval,error:String(e.message||e)});}
+    }));
+    const series={...(bundle&&bundle.series||{})};
+    for(const interval of intervals){
+      if(updates[interval])series[interval]=mergeBars(series[interval]||[],updates[interval],capFor(interval,timeframe));
+    }
+    return{
+      bundle:{...(bundle||{}),schema:'analysis-live-v2',symbol,generatedAt:new Date().toISOString(),series,errors:{...(bundle&&bundle.errors||{})}},
+      failures
+    };
   }
 
   function formatJst(time){
@@ -113,7 +165,7 @@
   }
 
   global.OrderFlowAnalysisData={
-    intervalMs,intervalSec,displayCounts,calcMap,parseRows,fetchHistory,fetchProfile,loadSnapshot,loadLive,
-    formatJst,toDisplayTime,formatDisplayTime,formatDisplayTick
+    intervalMs,intervalSec,displayCounts,calcMap,parseRows,closedBars,fetchHistory,fetchLatest,mergeBars,capFor,
+    fetchProfile,loadSnapshot,loadLive,refreshLiveBundle,formatJst,toDisplayTime,formatDisplayTime,formatDisplayTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);
