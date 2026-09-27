@@ -100,6 +100,7 @@ def main(argv=None):
     out_dir=args.output_dir
     out_dir.mkdir(parents=True,exist_ok=True)
     generated=datetime.now(timezone.utc).isoformat().replace("+00:00","Z")
+    data_cutoff=(cutoff-timedelta(seconds=1)).isoformat().replace("+00:00","Z")
     for symbol in SYMBOLS:
         profile=None
         errors={}
@@ -115,7 +116,7 @@ def main(argv=None):
             "schema":"analysis-snapshot-v1",
             "symbol":symbol,
             "generatedAt":generated,
-            "cutoffUtc":cutoff.isoformat().replace("+00:00","Z"),
+            "cutoffUtc":data_cutoff,
             "source":"Binance Vision USD-M archived klines + exact weekly aggTrades profile",
             "series":series_by_symbol[symbol],
             "profile":profile,
@@ -128,7 +129,7 @@ def main(argv=None):
     meta={
         "schema":"analysis-snapshot-index-v1",
         "generatedAt":generated,
-        "cutoffUtc":cutoff.isoformat().replace("+00:00","Z"),
+        "cutoffUtc":data_cutoff,
         "symbols":list(SYMBOLS),
     }
     (out_dir/"index.json").write_text(json.dumps(meta,separators=(",",":")),encoding="utf-8")
