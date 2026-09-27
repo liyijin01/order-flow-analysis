@@ -116,7 +116,7 @@ test('B10 eight weeks of constructed 30m data produce eight TPO profiles',()=>{
 test('B5 levels beyond maxLabels remain valid lines with hidden labels',()=>{
   const levels=[];
   for(let i=0;i<10;i++)levels.push({scope:'PQ',label:'L'+i,price:100+i*0.05,from:1,source:'exact'});
-  const items=A.buildLevelAnnotations(levels,[],{currentPrice:100,visibleMin:99,visibleMax:102,tickSize:.01,maxLabels:3},{...config,levels:{...config.levels,maxLabels:3},cross:{enabled:false},touch:{lookbackBars:60,toleranceTicks:0}});
+  const items=A.buildLevelAnnotations(levels,[],{currentPrice:100,visibleMin:99,visibleMax:102,tickSize:.01,maxLabels:3},{...config,levels:{...config.levels,maxLabels:3,mergeTolerancePct:.01},cross:{enabled:false},touch:{lookbackBars:60,toleranceTicks:0}});
   const lines=items.filter(x=>x.type==='level');
   assert.equal(lines.length,10);
   assert.equal(lines.filter(x=>x.showLabel!==false).length,3);
