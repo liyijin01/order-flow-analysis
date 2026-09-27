@@ -245,11 +245,26 @@
     return{from:Math.max(0,count-visible),to:Math.max(0,count-1)+offset};
   }
 
+  function resetView(){
+    if(!state.model)return;
+    state.candles.priceScale().applyOptions({autoScale:true});
+    state.volume.priceScale().applyOptions({autoScale:true});
+    state.chart.timeScale().setVisibleLogicalRange(defaultVisibleRange(state.model.display.length));
+  }
+
   function applySeries(model){
     const key=state.symbol+'|'+state.timeframe,sameView=state.viewKey===key;
     const oldRange=sameView?state.chart.timeScale().getVisibleLogicalRange():null;
     const oldCount=state.lastDisplayCount||0;
     const followedRight=!!(oldRange&&Number(oldRange.to)>=oldCount-1);
+    if(!sameView){
+      state.candles.priceScale().applyOptions({autoScale:true});
+      state.volume.priceScale().applyOptions({autoScale:true});
+      const tick=Number(symbolMeta().tickSize)||.01;
+      const fmt={type:'price',precision:pricePrecision(),minMove:tick};
+      state.candles.applyOptions({priceFormat:fmt});
+      state.vwap.applyOptions({priceFormat:fmt});
+    }
     const candleData=model.display.map(b=>({time:D.toDisplayTime(b.time),open:b.open,high:b.high,low:b.low,close:b.close}));
     const volumeData=model.display.map(b=>({time:D.toDisplayTime(b.time),value:b.volume,color:b.close>=b.open?'rgba(230,234,242,.42)':'rgba(230,234,242,.68)'}));
     state.candles.setData(candleData);state.volume.setData(volumeData);
@@ -367,6 +382,7 @@
     await loadRules();createChart();
     document.querySelectorAll('[data-symbol]').forEach(b=>b.addEventListener('click',()=>setSelection(b.dataset.symbol,state.timeframe)));
     document.querySelectorAll('[data-tf]').forEach(b=>b.addEventListener('click',()=>setSelection(state.symbol,b.dataset.tf)));
+    $('resetViewBtn').addEventListener('click',resetView);
     $('downloadBtn').addEventListener('click',downloadPng);
     window.__analysisDebug={
       state,get model(){return state.model;},refresh:(forceFull)=>refresh(!!forceFull),
