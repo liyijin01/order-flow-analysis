@@ -1,0 +1,15 @@
+{
+  "levels": {
+    "scopes": ["PW","PM","PQ","Q1","Q2","Q3","Q4","PY","PY_Q","PY_M"],
+    "kinds": ["VAH","VAL","POC"],
+    "visiblePadPct": 15,
+    "mergeTolerancePct": 0.1,
+    "maxLabels": 8
+  },
+  "nakedPoc": {"scopes":["W","M"],"maxAgeDays":180},
+  "singlePrints": {"minBins":2},
+  "zones": {"scopes":["PY_M"],"nearestN":2},
+  "touch": {"lookbackBars":60,"toleranceTicks":2},
+  "cross": {"enabled":true,"confirmBars":2},
+  "oiDivergence": {"enabled":false,"lookbackBars":48}
+}
