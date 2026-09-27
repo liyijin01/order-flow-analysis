@@ -21,7 +21,7 @@ def pack(bar, interval_ms:int):
     typical_quote=bar.volume*bar.typical
     return [
         t,
-        f"{bar.typical:.10f}",f"{bar.high:.10f}",f"{bar.low:.10f}",f"{bar.close:.10f}",
+        f"{bar.open:.10f}",f"{bar.high:.10f}",f"{bar.low:.10f}",f"{bar.close:.10f}",
         f"{bar.volume:.10f}",t+interval_ms-1,f"{typical_quote:.10f}",0,
         f"{bar.volume/2:.10f}",f"{typical_quote/2:.10f}","0"
     ]
