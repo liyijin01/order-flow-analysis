@@ -3,7 +3,7 @@
 
   class AnnotationPrimitiveBase {
     constructor(item){
-      this.item=item;this.chart=null;this.series=null;this.requestUpdate=null;this.context={bars:[],intervalSec:3600,autoscale:true};
+      this.item=item;this.chart=null;this.series=null;this.requestUpdate=null;this.context={bars:[],intervalSec:3600,autoscale:true,timeOffsetSec:0,priceFormatter:null};
       this._lastClamp=false;
       this._view={zOrder:()=>this.zOrder(),renderer:()=>({draw:(target)=>target.useMediaCoordinateSpace((scope)=>this.draw(scope.context,scope.mediaSize))})};
     }
@@ -14,8 +14,8 @@
     updateAllViews(){}
     zOrder(){return 'top';}
     normalizedTime(time){
-      const sec=this.context.intervalSec||3600;
-      return Math.floor(Number(time)/sec)*sec;
+      const sec=this.context.intervalSec||3600,offset=Number(this.context.timeOffsetSec)||0;
+      return Math.floor(Number(time)/sec)*sec+offset;
     }
     x(time,width){
       this._lastClamp=false;
@@ -28,16 +28,17 @@
         return x==null?null:Number(x);
       }
       if(!bars.length)return null;
-      const first=bars[0],last=bars[bars.length-1],sec=this.context.intervalSec||3600;
-      if(t>last.time){
-        const lastIndex=scale.timeToIndex(last.time,true);
+      const first=bars[0],last=bars[bars.length-1],sec=this.context.intervalSec||3600,offset=Number(this.context.timeOffsetSec)||0;
+      const firstTime=Number(first.time)+offset,lastTime=Number(last.time)+offset;
+      if(t>lastTime){
+        const lastIndex=scale.timeToIndex(lastTime,true);
         if(lastIndex==null)return width;
-        const x=scale.logicalToCoordinate(Number(lastIndex)+(t-last.time)/sec);
+        const x=scale.logicalToCoordinate(Number(lastIndex)+(t-lastTime)/sec);
         return x==null?width:Number(x);
       }
-      if(t<first.time){
+      if(t<firstTime){
         this._lastClamp=true;
-        const firstIndex=scale.timeToIndex(first.time,true);
+        const firstIndex=scale.timeToIndex(firstTime,true);
         const x=firstIndex==null?0:scale.logicalToCoordinate(firstIndex);
         return x==null?0:Math.max(0,Number(x));
       }
@@ -51,17 +52,17 @@
     logicalIndex(time){
       if(time==null)return null;
       if(!this.chart)return null;
-      const scale=this.chart.timeScale(),t=this.normalizedTime(time),bars=this.context.bars||[],sec=this.context.intervalSec||3600;
+      const scale=this.chart.timeScale(),t=this.normalizedTime(time),bars=this.context.bars||[],sec=this.context.intervalSec||3600,offset=Number(this.context.timeOffsetSec)||0;
       const direct=scale.timeToIndex(t,true);
       if(direct!=null)return Number(direct);
       if(!bars.length)return null;
-      const first=bars[0],last=bars[bars.length-1];
-      if(t>last.time){
-        const li=scale.timeToIndex(last.time,true);
-        return li==null?null:Number(li)+(t-last.time)/sec;
+      const first=bars[0],last=bars[bars.length-1],firstTime=Number(first.time)+offset,lastTime=Number(last.time)+offset;
+      if(t>lastTime){
+        const li=scale.timeToIndex(lastTime,true);
+        return li==null?null:Number(li)+(t-lastTime)/sec;
       }
-      if(t<first.time){
-        const fi=scale.timeToIndex(first.time,true);
+      if(t<firstTime){
+        const fi=scale.timeToIndex(firstTime,true);
         return fi==null?null:Number(fi);
       }
       return null;
@@ -90,7 +91,7 @@
       const i=this.item;const time=i.time!=null?i.time:(i.from!=null?i.from:(Array.isArray(i.points)&&i.points[0]?i.points[0][0]:null));
       const price=i.price!=null?i.price:(i.high!=null?i.high:(i.top!=null?i.top:(i.poc!=null?i.poc:(Array.isArray(i.points)&&i.points[0]?i.points[0][1]:null))));
       const x=time==null?null:this.x(time,0),clamped=this._lastClamp,y=price==null?null:this.y(price);
-      return {id:i.id,type:i.type,x,y,clamped};
+      return {id:i.id,type:i.type,x,y,labelY:Number.isFinite(i._labelY)?i._labelY:null,axisY:Number.isFinite(i._axisY)?i._axisY:null,clamped};
     }
   }
   global.OrderFlowPrimitiveBase={AnnotationPrimitiveBase};
