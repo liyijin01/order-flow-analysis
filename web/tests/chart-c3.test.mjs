@@ -32,7 +32,7 @@ test('C3 TPO counts 30m ranges and emits value area',()=>{
     {time:1800,low:101,high:103,close:102,volume:1},
   ];
   const p=I.tpoProfiles(bars,{binSize:1,group:'week',minBins:1})[0];
-  assert.deepEqual(p.rows,[[100,1],[101,2],[102,1]]);
+  assert.deepEqual(p.rows,[[100,1],[101,2],[102,2],[103,1]]);
   assert.ok(p.val<=p.poc&&p.poc<=p.vah);
 });
 
