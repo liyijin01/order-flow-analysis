@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 import argparse, gzip, json, sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -32,14 +33,19 @@ def main():
     args=ap.parse_args()
     interval_ms={"1h":3600000,"30m":1800000,"2h":7200000}
     payload={"schema":"c4-1-real-klines-v1","end":END.isoformat(),"series":{}}
-    for symbol in SYMBOLS:
-        for interval,start in SPECS.items():
-            bars=load_range(symbol,"um",interval,start,END)
-            if not bars:
-                raise RuntimeError(f"no real archive bars for {symbol} {interval}")
-            key=f"{symbol}|{interval}"
+    jobs=[(symbol,interval,start) for symbol in SYMBOLS for interval,start in SPECS.items()]
+    def build_one(spec):
+        symbol,interval,start=spec
+        bars=load_range(symbol,"um",interval,start,END)
+        if not bars:
+            raise RuntimeError(f"no real archive bars for {symbol} {interval}")
+        return f"{symbol}|{interval}", interval, start, bars
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures=[pool.submit(build_one,spec) for spec in jobs]
+        for future in as_completed(futures):
+            key,interval,start,bars=future.result()
             payload["series"][key]=[pack(b,interval_ms[interval]) for b in bars]
-            print(f"{key}: {len(bars)} real Binance Vision bars {start.date()} -> {END.date()}")
+            print(f"{key}: {len(bars)} real Binance Vision bars {start.date()} -> {END.date()}",flush=True)
     args.out.parent.mkdir(parents=True,exist_ok=True)
     with gzip.open(args.out,"wt",encoding="utf-8",compresslevel=6) as f:
         json.dump(payload,f,separators=(",",":"))
