@@ -179,7 +179,8 @@
     const closedCalc=D.closedBars(calc,asOfMs);
     let selectedZones=[];
     if(closedCalc.length){
-      selectedZones=E.selectZones(E.detectZones(closedCalc,rules.zones,calc),current,rules.zones).map(z=>{
+      const detected=E.detectZones(closedCalc,rules.zones);
+      selectedZones=E.selectZones(E.markZoneTouches(detected,calc),current,rules.zones).map(z=>{
         const supply=z.type==='supply',baseFill=supply?rules.colors.supplyFill:rules.colors.demandFill,border=supply?rules.colors.supplyBorder:rules.colors.demandBorder;
         const stateText=z.zoneState==='inside'?'·测试中':(z.zoneState==='breaking'?'·击穿待确认':(z.tested?'·已测试':''));
         return{...z,type:z.type,fill:fillAlpha(baseFill,z.tested),border,period:calcTf,source:'exact',
