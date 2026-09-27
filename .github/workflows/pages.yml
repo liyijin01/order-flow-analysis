@@ -16,7 +16,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: '40 0 * * *'
+    - cron: '25 9 * * *'
   workflow_dispatch:
 
 permissions:
@@ -49,7 +49,7 @@ jobs:
         run: python -m unittest discover pipeline/tests -v
 
       - name: C4.1 golden-standard archive checks
-        if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd1-'))
+        if: github.event_name == 'pull_request'
         run: python scripts/c4_1_golden.py
 
       - name: JavaScript unit tests
@@ -106,7 +106,7 @@ jobs:
           retention-days: 7
 
   analysis-smoke:
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'd1-')
+    if: github.event_name == 'pull_request'
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 30
