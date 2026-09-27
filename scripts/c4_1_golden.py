@@ -18,6 +18,7 @@ BASE = "https://data.binance.vision/data"
 @dataclass(frozen=True)
 class Bar:
     open_time: int
+    open: float
     high: float
     low: float
     close: float
@@ -56,6 +57,7 @@ def parse_kline_zip(payload: bytes) -> list[Bar]:
                     continue
                 try:
                     open_time = int(row[0])
+                    open_ = float(row[1])
                     high = float(row[2])
                     low = float(row[3])
                     close = float(row[4])
@@ -65,7 +67,7 @@ def parse_kline_zip(payload: bytes) -> list[Bar]:
                 # Binance Vision archives may use microseconds in some newer datasets.
                 if open_time > 10_000_000_000_000:
                     open_time //= 1000
-                out.append(Bar(open_time, high, low, close, volume))
+                out.append(Bar(open_time, open_, high, low, close, volume))
     return out
 
 
