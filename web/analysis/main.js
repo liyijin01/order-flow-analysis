@@ -254,8 +254,11 @@
     const volumeData=model.display.map(b=>({time:D.toDisplayTime(b.time),value:b.volume,color:b.close>=b.open?'rgba(230,234,242,.42)':'rgba(230,234,242,.68)'}));
     state.candles.setData(candleData);state.volume.setData(volumeData);
     state.vwap.setData(model.currentVwap.map(p=>({time:D.toDisplayTime(p.time),value:p.value})));
+    const autoscaleSpan=Math.max(1e-12,Number(model.viewMax)-Number(model.viewMin));
+    const autoscalePad=autoscaleSpan*Number(state.rules.valueAreas.visiblePadPct||0)/100;
     state.primitive.setModel({
       regions:model.regions,levels:model.levels,bars:model.display,currentPrice:model.current,
+      autoscaleMin:Number(model.viewMin)-autoscalePad,autoscaleMax:Number(model.viewMax)+autoscalePad,
       intervalSec:D.intervalSec(state.timeframe),timeOffsetSec:9*3600,axisMinGap:state.rules.axisLabels.minGapPx,
       textMinGap:state.rules.textLabels.minGapPx,textMaxShift:state.rules.textLabels.maxShiftPx,priceFormatter:fmtPrice
     });
