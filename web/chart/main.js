@@ -53,7 +53,7 @@
       width:container.clientWidth,height:container.clientHeight,
       layout:{background:{type:'solid',color:T.background},textColor:T.text,attributionLogo:true,panes:{separatorColor:T.border,separatorHoverColor:'rgba(255,255,255,.22)',enableResize:true}},
       grid:{vertLines:{color:T.grid},horzLines:{color:T.grid}},
-      localization:{locale:'ja-JP',timeFormatter:(time)=>D.formatDisplayDateTime(time,false),priceFormatter:(price)=>fmtPrice(price)},
+      localization:{locale:'ja-JP',timeFormatter:(time)=>D.formatDisplayDateTime(time,false)},
       rightPriceScale:{borderColor:T.border},
       timeScale:{borderColor:T.border,timeVisible:true,secondsVisible:false,tickMarkFormatter:(time,type,locale)=>D.formatDisplayTick(time,type,locale)},
       crosshair:{mode:L.CrosshairMode.Normal}
@@ -114,7 +114,7 @@
   function applyUiState(){
     $('pageTitle').textContent=displayCode()+' · '+D.intervalLabel(state.interval);
     updateWatermark();
-    if(state.chart)state.chart.applyOptions({timeScale:{tickMarkFormatter:(time,type,locale)=>D.formatDisplayTick(time,type,locale)},localization:{locale:'ja-JP',timeFormatter:(time)=>D.formatDisplayDateTime(time,false),priceFormatter:(price)=>fmtPrice(price)}});
+    if(state.chart)state.chart.applyOptions({timeScale:{tickMarkFormatter:(time,type,locale)=>D.formatDisplayTick(time,type,locale)},localization:{locale:'ja-JP',timeFormatter:(time)=>D.formatDisplayDateTime(time,false)}});
     if(state.candles)state.candles.applyOptions({...candleOptions(),priceFormat:{type:'price',precision:pricePrecision(),minMove:tickSize()}});
     if(state.annotations)state.annotations.setContext(annotationContext());
   }
