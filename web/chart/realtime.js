@@ -20,11 +20,12 @@
     const plan=planLatestUpdates(args.existing,args.latest,args.intervalSec);
     if(plan.reloadRequired) return {...plan,updated:[],errors:[]};
     const updated=[],errors=[];
+    const timeTransform=typeof args.timeTransform==='function'?args.timeTransform:(t)=>t;
     for(const item of plan.updates){
-      const bar=item.bar;
+      const bar=item.bar,displayTime=timeTransform(bar.time);
       try{
-        args.candleSeries.update({time:bar.time,open:bar.open,high:bar.high,low:bar.low,close:bar.close},item.historical);
-        args.volumeSeries.update({time:bar.time,value:bar.volume,color:bar.close>=bar.open?args.volumeUp:args.volumeDown},item.historical);
+        args.candleSeries.update({time:displayTime,open:bar.open,high:bar.high,low:bar.low,close:bar.close},item.historical);
+        args.volumeSeries.update({time:displayTime,value:bar.volume,color:bar.close>=bar.open?args.volumeUp:args.volumeDown},item.historical);
         updated.push({time:bar.time,historical:item.historical});
       }catch(error){
         errors.push({time:bar.time,error:String(error&&error.message||error)});
