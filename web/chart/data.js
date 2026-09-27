@@ -48,7 +48,7 @@
     if (!Number.isFinite(date.getTime())) return '';
     const type = normalizeTickType(tickMarkType);
     const loc = locale || 'ja-JP';
-    if (type === 'year') return new Intl.DateTimeFormat(loc,{timeZone:JST,year:'numeric'}).format(date);
+    if (type === 'year') { const p=Object.fromEntries(new Intl.DateTimeFormat(loc,{timeZone:JST,year:'numeric'}).formatToParts(date).filter(x=>x.type!=='literal').map(x=>[x.type,x.value])); return p.year; }
     const parts=(opts)=>Object.fromEntries(new Intl.DateTimeFormat(loc,{timeZone:JST,...opts,hour12:false}).formatToParts(date).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
     if (type === 'month') { const p=parts({month:'numeric'}); return p.month+'月'; }
     if (type === 'dayofmonth' || type === 'day') { const p=parts({month:'2-digit',day:'2-digit'}); return p.month+'/'+p.day; }
