@@ -1,0 +1,79 @@
+name: C4.1 Online Review Screenshots
+on:
+  push:
+    branches: [c4-1-annotation-fixes]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: c4-1-online-review
+  cancel-in-progress: true
+
+jobs:
+  build-preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Prepare C4.1 Pages preview artifact
+        run: |
+          mkdir -p _site/web _site/config
+          cp index.html chart.html _site/
+          cp web/core.js web/live.js web/render.js web/app.js _site/web/
+          cp -R web/chart _site/web/
+          cp config/symbols.js config/annotation-rules.json _site/config/
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy-preview:
+    needs: build-preview
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy C4.1 branch to online Pages for review
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  real-screenshots:
+    needs: deploy-preview
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build real Binance Vision review dataset
+        run: python scripts/c4_1_real_data.py --out _real/c4-1-market.json.gz
+      - name: Install Playwright core
+        run: npm install --no-save playwright-core@1.55.0
+      - name: Capture P1-P4 x BTC/ETH/SOL from online Pages
+        env:
+          PAGE_URL: ${{ needs.deploy-preview.outputs.page_url }}chart.html
+          REAL_DATA: _real/c4-1-market.json.gz
+        run: node scripts/c4_1_real_screenshots.cjs
+      - name: Upload real-market review screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: c4-1-real-market-pages-screenshots
+          path: c4-1-real-screenshots/
+          if-no-files-found: error
+          retention-days: 14
