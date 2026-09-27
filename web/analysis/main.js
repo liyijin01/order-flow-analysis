@@ -369,6 +369,7 @@
       priceCoordinate:p=>state.candles?state.candles.priceToCoordinate(Number(p)):null,
       volumeFormat:()=>state.volume?state.volume.options().priceFormat:null,
       view:debugView,
+      mainPaneHeight:()=>{const p=state.chart&&state.chart.panes&&state.chart.panes()[0];return p&&typeof p.getHeight==='function'?p.getHeight():Math.round($('analysisChart').clientHeight*.82);},
       candleTimes:()=>state.model?state.model.display.map(x=>x.time):[],
       vwapTimes:()=>state.model?state.model.currentVwap.map(x=>x.time):[]
     };
