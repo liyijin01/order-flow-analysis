@@ -2,20 +2,58 @@
   'use strict';
 
   function finite(v){return Number.isFinite(Number(v));}
+  function roundToTick(value,tickSize){
+    const tick=Number(tickSize);
+    if(!Number.isFinite(tick)||tick<=0)return Number(value);
+    return Math.round(Number(value)/tick)*tick;
+  }
+  function tickPrecision(tickSize){
+    const s=String(tickSize);
+    if(/[eE]-/.test(s))return Number(s.split(/[eE]-/)[1])||0;
+    const i=s.indexOf('.');
+    return i<0?0:s.length-i-1;
+  }
+
   function periodKey(time,group){
     const d=new Date(Number(time)*1000);
+    if(group==='quarter') return d.getUTCFullYear()+'-Q'+(Math.floor(d.getUTCMonth()/3)+1);
     if(group==='month') return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0');
     if(group==='week'){
       const day=(d.getUTCDay()+6)%7;
       const monday=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()-day));
       return monday.toISOString().slice(0,10);
     }
+    if(group==='year') return String(d.getUTCFullYear());
     return d.toISOString().slice(0,10);
+  }
+
+  function periodBounds(time,group){
+    const d=new Date(Number(time)*1000);
+    if(group==='quarter'){
+      const month=Math.floor(d.getUTCMonth()/3)*3;
+      const start=Date.UTC(d.getUTCFullYear(),month,1)/1000;
+      return {start,end:Date.UTC(d.getUTCFullYear(),month+3,1)/1000,key:periodKey(time,'quarter')};
+    }
+    if(group==='month'){
+      const start=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1)/1000;
+      return {start,end:Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,1)/1000,key:periodKey(time,'month')};
+    }
+    if(group==='week'){
+      const day=(d.getUTCDay()+6)%7;
+      const start=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()-day)/1000;
+      return {start,end:start+7*86400,key:periodKey(time,'week')};
+    }
+    if(group==='year'){
+      const start=Date.UTC(d.getUTCFullYear(),0,1)/1000;
+      return {start,end:Date.UTC(d.getUTCFullYear()+1,0,1)/1000,key:String(d.getUTCFullYear())};
+    }
+    const start=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())/1000;
+    return {start,end:start+86400,key:periodKey(time,'day')};
   }
 
   function valueArea(rows,binSize,pct){
     const sorted=(rows||[]).map(r=>[Number(r[0]),Number(r[1])]).filter(r=>finite(r[0])&&finite(r[1])).sort((a,b)=>a[0]-b[0]);
-    if(!sorted.length) return null;
+    if(!sorted.length)return null;
     const total=sorted.reduce((a,r)=>a+r[1],0);
     const size=Number(binSize)||1;
     const midpoint=(sorted[0][0]+sorted[sorted.length-1][0]+size)/2;
@@ -28,10 +66,10 @@
     }
     let lo=pocIndex,hi=pocIndex,acc=sorted[pocIndex][1];
     const target=total*(pct==null?0.70:pct);
-    while(acc<target && (lo>0||hi<sorted.length-1)){
+    while(acc<target&&(lo>0||hi<sorted.length-1)){
       const up=(hi+1<sorted.length?sorted[hi+1][1]:0)+(hi+2<sorted.length?sorted[hi+2][1]:0);
       const dn=(lo-1>=0?sorted[lo-1][1]:0)+(lo-2>=0?sorted[lo-2][1]:0);
-      if(hi<sorted.length-1 && (lo===0||up>=dn)){
+      if(hi<sorted.length-1&&(lo===0||up>=dn)){
         if(hi+1<sorted.length)acc+=sorted[hi+1][1];
         if(hi+2<sorted.length)acc+=sorted[hi+2][1];
         hi=Math.min(sorted.length-1,hi+2);
@@ -41,10 +79,7 @@
         lo=Math.max(0,lo-2);
       }
     }
-    return {
-      rows:sorted,pocLower:sorted[pocIndex][0],poc:sorted[pocIndex][0]+size/2,
-      vah:sorted[hi][0]+size,val:sorted[lo][0],included:acc,total
-    };
+    return {rows:sorted,pocLower:sorted[pocIndex][0],poc:sorted[pocIndex][0]+size/2,vah:sorted[hi][0]+size,val:sorted[lo][0],included:acc,total};
   }
 
   function anchoredVwap(bars,anchorTime,k){
@@ -59,16 +94,45 @@
       const vwap=sumPV/sumV;
       const variance=Math.max(0,sumP2V/sumV-vwap*vwap);
       const sigma=Math.sqrt(variance);
-      points.push({time:b.time,vwap,upper:vwap+mult*sigma,lower:vwap-mult*sigma,sigma});
+      points.push({time:Number(b.time),vwap,upper:vwap+mult*sigma,lower:vwap-mult*sigma,sigma});
     }
     return points;
   }
 
+  function anchoredPeriodStats(bars,group,intervalSec){
+    const all=(bars||[]).slice().sort((a,b)=>a.time-b.time);
+    if(!all.length)return[];
+    const groups=new Map();
+    for(const b of all){
+      const bounds=periodBounds(b.time,group);
+      let g=groups.get(bounds.key);
+      if(!g){g={...bounds,bars:[]};groups.set(bounds.key,g);}
+      g.bars.push(b);
+    }
+    const lastTime=all[all.length-1].time;
+    const step=Number(intervalSec)||((all[1]&&all[0])?all[1].time-all[0].time:3600);
+    const out=[];
+    for(const g of Array.from(groups.values()).sort((a,b)=>a.start-b.start)){
+      const points=anchoredVwap(g.bars,g.start,1);
+      if(!points.length)continue;
+      const final=points[points.length-1];
+      const first=g.bars[0],last=g.bars[g.bars.length-1];
+      const full=Number(first.time)===Number(g.start);
+      const complete=g.end<=lastTime+step;
+      out.push({
+        key:g.key,start:g.start,end:g.end,full,complete,bars:g.bars,points,
+        vwap:final.vwap,upper:final.upper,lower:final.lower,sigma:final.sigma,
+        firstTime:first.time,lastTime:last.time
+      });
+    }
+    return out;
+  }
+
   function singlePrintRanges(rows,binSize,minBins){
-    const size=Number(binSize)||1, sorted=rows.slice().sort((a,b)=>a[0]-b[0]);
+    const size=Number(binSize)||1,sorted=rows.slice().sort((a,b)=>a[0]-b[0]);
     let start=0,end=sorted.length-1;
-    while(start<=end && sorted[start][1]===1)start+=1;
-    while(end>=start && sorted[end][1]===1)end-=1;
+    while(start<=end&&sorted[start][1]===1)start+=1;
+    while(end>=start&&sorted[end][1]===1)end-=1;
     const out=[];let run=null;
     for(let i=start;i<=end;i+=1){
       if(sorted[i][1]===1){
@@ -83,59 +147,52 @@
   }
 
   function tpoProfiles(bars,options){
-    const size=Number(options.binSize),group=options.group||'week',minBins=options.minBins||2;
+    const size=Number(options.binSize),group=options.group||'week',minBins=options.minBins||2,barSec=Number(options.intervalSec)||1800;
     const groups=new Map();
     for(const b of bars||[]){
-      const key=periodKey(b.time,group);
-      if(!groups.has(key))groups.set(key,{key,from:b.time,to:b.time,counts:new Map()});
-      const g=groups.get(key);g.from=Math.min(g.from,b.time);g.to=Math.max(g.to,b.time);
+      const bounds=periodBounds(b.time,group);
+      if(!groups.has(bounds.key))groups.set(bounds.key,{key:bounds.key,from:bounds.start,periodEnd:bounds.end,lastBar:b.time,counts:new Map()});
+      const g=groups.get(bounds.key);g.lastBar=Math.max(g.lastBar,b.time);
       const lo=Math.floor(Number(b.low)/size),hi=Math.floor((Number(b.high)-Number.EPSILON)/size);
       for(let i=lo;i<=hi;i+=1)g.counts.set(i,(g.counts.get(i)||0)+1);
     }
+    const lastTime=bars&&bars.length?bars[bars.length-1].time:0;
     const result=[];
     for(const g of Array.from(groups.values()).sort((a,b)=>a.from-b.from)){
       const rows=Array.from(g.counts.entries()).sort((a,b)=>a[0]-b[0]).map(([i,n])=>[i*size,n]);
       const va=valueArea(rows,size,0.70);
+      const complete=g.periodEnd<=lastTime+barSec;
       result.push({
-        key:g.key,from:g.from,to:g.to+1800,binSize:size,rows,
-        poc:va&&va.poc,vah:va&&va.vah,val:va&&va.val,
-        singlePrints:singlePrintRanges(rows,size,minBins)
+        key:g.key,from:g.from,to:Math.min(g.periodEnd,g.lastBar+barSec),periodEnd:g.periodEnd,complete,binSize:size,rows,
+        poc:va&&va.poc,vah:va&&va.vah,val:va&&va.val,singlePrints:singlePrintRanges(rows,size,minBins)
       });
     }
     return result;
   }
 
   function approxVolumeProfile(bars,binSize){
-    const size=Number(binSize),bins=new Map();
-    let sourceVolume=0;
+    const size=Number(binSize),bins=new Map();let sourceVolume=0;
     for(const b of bars||[]){
       const volume=Math.max(0,Number(b.volume)||0);sourceVolume+=volume;
       const lo=Math.floor(Number(b.low)/size),hi=Math.floor((Number(b.high)-Number.EPSILON)/size);
       const count=Math.max(1,hi-lo+1),per=volume/count;
       const buyRatio=volume>0?Math.min(1,Math.max(0,(Number(b.takerBuyBase)||0)/volume)):0.5;
       for(let i=lo;i<=hi;i+=1){
-        const row=bins.get(i)||{buy:0,sell:0,total:0};
-        row.total+=per;row.buy+=per*buyRatio;row.sell+=per*(1-buyRatio);bins.set(i,row);
+        const row=bins.get(i)||{buy:0,sell:0,total:0};row.total+=per;row.buy+=per*buyRatio;row.sell+=per*(1-buyRatio);bins.set(i,row);
       }
     }
     const rows=Array.from(bins.entries()).sort((a,b)=>a[0]-b[0]).map(([i,v])=>[i*size,v.buy,v.sell,v.total]);
     const distributed=rows.reduce((a,r)=>a+r[3],0);
-    if(rows.length && Math.abs(distributed-sourceVolume)>1e-9)rows[rows.length-1][3]+=sourceVolume-distributed;
+    if(rows.length&&Math.abs(distributed-sourceVolume)>1e-9)rows[rows.length-1][3]+=sourceVolume-distributed;
     const va=valueArea(rows.map(r=>[r[0],r[3]]),size,0.70);
     return {binSize:size,rows,sourceVolume,distributedVolume:rows.reduce((a,r)=>a+r[3],0),poc:va&&va.poc,vah:va&&va.vah,val:va&&va.val};
   }
 
-  function utcQuarterStart(time){
-    const d=new Date(Number(time)*1000),m=Math.floor(d.getUTCMonth()/3)*3;
-    return Date.UTC(d.getUTCFullYear(),m,1)/1000;
-  }
+  function utcQuarterStart(time){return periodBounds(time,'quarter').start;}
   function previousQuarterStart(time){
-    const q=utcQuarterStart(time),d=new Date(q*1000);
-    return Date.UTC(d.getUTCFullYear(),d.getUTCMonth()-3,1)/1000;
+    const q=utcQuarterStart(time),d=new Date(q*1000);return Date.UTC(d.getUTCFullYear(),d.getUTCMonth()-3,1)/1000;
   }
-  function utcMonthStart(time){
-    const d=new Date(Number(time)*1000);return Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1)/1000;
-  }
+  function utcMonthStart(time){return periodBounds(time,'month').start;}
   function previousMonthStart(time){
     const d=new Date(Number(time)*1000);return Date.UTC(d.getUTCFullYear(),d.getUTCMonth()-1,1)/1000;
   }
@@ -149,7 +206,8 @@
   }
 
   global.OrderFlowIndicators={
-    valueArea,anchoredVwap,tpoProfiles,singlePrintRanges,approxVolumeProfile,
-    utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,periodKey,exactProfileToVp
+    valueArea,anchoredVwap,anchoredPeriodStats,tpoProfiles,singlePrintRanges,approxVolumeProfile,
+    utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,periodKey,periodBounds,
+    exactProfileToVp,roundToTick,tickPrecision
   };
 })(typeof globalThis!=='undefined'?globalThis:window);
