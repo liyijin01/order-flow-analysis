@@ -45,8 +45,8 @@
         status,period:r.period||'',source:r.source||'exact',missing:false
       });
     }
-    for(const l of payload.levels.filter(x=>x.kind==='npoc')){
-      let status='未回补';if(l.offView)status+='（图外）';
+    for(const l of payload.levels){
+      let status=l.kind==='npoc'?'未回补':'有效';if(l.offView)status+='（图外）';
       out.push({type:l.label,low:l.price,high:l.price,distance:Math.abs(l.price-current)/current*100,status,period:l.period||'',source:l.source||'exact',missing:false});
     }
     for(const m of payload.missing||[])out.push({type:m.type,low:null,high:null,distance:null,status:'缺失',period:m.period||'',source:m.source||'',missing:true});
