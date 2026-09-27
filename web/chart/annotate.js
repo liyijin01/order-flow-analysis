@@ -93,7 +93,7 @@
     const showLabel=level.showLabel!==false;
     return{
       id:level.id||stableId('level',level.scope||'X',price),type:'level',price,
-      label:showLabel?String(level.label||''):'',
+      label:String(level.label||'level'),
       from:Number(level.from),to:level.to==null?null:Number(level.to),style:level.style||'dashed',
       color:level.color||'#e6e6e6',axisLabel:showLabel,showLabel,group:level.group||'auto',source:level.source||'exact'
     };
