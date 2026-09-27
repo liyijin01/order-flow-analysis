@@ -40,16 +40,21 @@ test('C4 touch returns most recent touch and cross confirms bars',()=>{
   const c=A.findCross(level,bars,2);assert.equal(c.direction,'above');assert.equal(c.bar.time,2);
 });
 
-test('C4 approx marker is carried into label and output is stable',()=>{
-  const input={
-    preset:'p1',symbol:'BTCUSDT',market:'um',interval:'1h',
-    bars:[{time:1,open:99,high:101,low:98,close:100},{time:2,open:100,high:102,low:99,close:101},{time:3,open:101,high:103,low:100,close:102},{time:4,open:102,high:104,low:101,close:103}],
-    context:{currentPrice:103,visibleMin:90,visibleMax:110,tickSize:1},config:cfg,
-    vwap:[{time:2,vwap:100,upper:102,lower:98}],previousQuarterVp:{vah:105,poc:100,val:95},previousQuarterFrom:1
-  };
+test('C4 P1 uses completed-period final VWAP levels and stable output',()=>{
+  const bars=[
+    {time:100,open:99,high:101,low:98,close:100,volume:10},
+    {time:200,open:100,high:103,low:99,close:102,volume:12},
+    {time:300,open:102,high:104,low:101,close:103,volume:11}
+  ];
+  const complete={key:'2026-Q2',start:10,end:90,complete:true,full:true,vwap:100,upper:105,lower:95,points:[{time:10,vwap:99,upper:104,lower:94}]};
+  const current={key:'2026-Q3',start:90,end:999,complete:false,full:true,vwap:102,upper:107,lower:97,points:[{time:100,vwap:101,upper:106,lower:96},{time:300,vwap:102,upper:107,lower:97}]};
+  const input={preset:'p1',symbol:'BTCUSDT',market:'um',interval:'1h',bars,intervalSec:3600,
+    context:{currentPrice:103,visibleMin:90,visibleMax:110,tickSize:1,visibleStartTime:100,visibleEndTime:300},config:cfg,
+    quarterStats:[complete,current],monthStats:[]};
   const a=A.buildPreset(input),b=A.buildPreset(input);
   assert.deepEqual(a,b);
-  assert.ok(a.items.some(x=>x.source==='approx'));
-  assert.ok(a.items.filter(x=>x.type==='level').some(x=>x.label.includes('≈')));
+  assert.ok(a.items.some(x=>x.type==='band'));
+  assert.ok(a.items.some(x=>x.type==='level'&&x.label.includes('PQ VWAP')&&x.from===90));
+  assert.ok(!a.items.some(x=>String(x.label).includes('Q VWAP start')));
   const ids=a.items.map(x=>x.id);assert.deepEqual(ids,ids.slice().sort());
 });
