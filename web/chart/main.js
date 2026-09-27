@@ -13,10 +13,14 @@
   };
 
   function setStatus(message,isError){status.textContent=message;status.className=isError?'status error':'status';}
-  function symbolMeta(){return SYMBOLS[state.symbol]||{base:state.symbol.replace('USDT',''),name:state.symbol,ladderBin:'1'};}
+  function symbolMeta(){return SYMBOLS[state.symbol]||{base:state.symbol.replace('USDT',''),name:state.symbol,ladderBin:'1',tickSize:'0.01',tpoTicksPerRow:100};}
   function displayCode(){return D.displayCode(state.symbol,state.market);}
-  function priceDecimals(value){if(value>=1000)return 2;if(value>=10)return 3;return 4;}
-  function fmtPrice(value){return Number(value).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:priceDecimals(Number(value))});}
+  function tickSize(){return Number(symbolMeta().tickSize)||0.01;}
+  function pricePrecision(){return I.tickPrecision(tickSize());}
+  function fmtPrice(value){
+    const precision=pricePrecision(),rounded=I.roundToTick(Number(value),tickSize());
+    return Number(rounded).toLocaleString(undefined,{minimumFractionDigits:precision,maximumFractionDigits:precision});
+  }
   function fmtVolume(value){return Number(value).toLocaleString(undefined,{maximumFractionDigits:3});}
 
   function formatInfo(candle){
@@ -49,18 +53,34 @@
       width:container.clientWidth,height:container.clientHeight,
       layout:{background:{type:'solid',color:T.background},textColor:T.text,attributionLogo:true,panes:{separatorColor:T.border,separatorHoverColor:'rgba(255,255,255,.22)',enableResize:true}},
       grid:{vertLines:{color:T.grid},horzLines:{color:T.grid}},
-      localization:{locale:'ja-JP',timeFormatter:(time)=>D.formatLocalDateTime(time,false)},
+      localization:{locale:'ja-JP',timeFormatter:(time)=>D.formatDisplayDateTime(time,false),priceFormatter:(price)=>fmtPrice(price)},
       rightPriceScale:{borderColor:T.border},
-      timeScale:{borderColor:T.border,timeVisible:true,secondsVisible:false,tickMarkFormatter:(time,type,locale)=>D.formatLocalTick(time,type,locale)},
+      timeScale:{borderColor:T.border,timeVisible:true,secondsVisible:false,tickMarkFormatter:(time,type,locale)=>D.formatDisplayTick(time,type,locale)},
       crosshair:{mode:L.CrosshairMode.Normal}
     });
-    const candles=chart.addSeries(L.CandlestickSeries,candleOptions(),0);
+    const candles=chart.addSeries(L.CandlestickSeries,{...candleOptions(),priceFormat:{type:'price',precision:pricePrecision(),minMove:tickSize()}},0);
     const volume=chart.addSeries(L.HistogramSeries,{priceFormat:{type:'volume'},priceLineVisible:false,lastValueVisible:false},1);
     const panes=chart.panes();if(panes[1])panes[1].setHeight(Math.max(100,Math.round(container.clientHeight*.19)));
     const watermark=L.createTextWatermark(chart.panes()[0],{horzAlign:'center',vertAlign:'center',lines:[{text:displayCode()+', '+D.intervalLabel(state.interval),color:T.watermark,fontSize:42,fontStyle:'bold'}]});
     new ResizeObserver(()=>{chart.resize(container.clientWidth,container.clientHeight);const ps=chart.panes();if(ps[1])ps[1].setHeight(Math.max(90,Math.round(container.clientHeight*.19)));state.annotations&&state.annotations.relayoutLabels();}).observe(container);
-    chart.subscribeCrosshairMove((param)=>{if(!param||!param.time){updateInfo(state.data[state.data.length-1]);return;}const candle=state.byTime.get(Number(param.time));updateInfo(candle||state.data[state.data.length-1]);});
-    chart.timeScale().subscribeVisibleLogicalRangeChange(()=>{if(state.annotations)state.annotations.relayoutLabels();});
+    chart.subscribeCrosshairMove((param)=>{
+      if(!param||!param.time){updateInfo(state.data[state.data.length-1]);return;}
+      const candle=state.byTime.get(Number(param.time));updateInfo(candle||state.data[state.data.length-1]);
+      const hoveredId=param.hoveredObjectId||(param.hoveredTarget&&param.hoveredTarget.objectId)||(param.hoveredItem&&param.hoveredItem.externalId);
+      const hoverText=state.annotations&&state.annotations.hoverText(hoveredId);
+      if(hoverText)infoLine2.textContent=hoverText+' · '+infoLine2.textContent;
+    });
+    let visibleTimer=null;
+    chart.timeScale().subscribeVisibleLogicalRangeChange(()=>{
+      if(state.annotations)state.annotations.relayoutLabels();
+      clearTimeout(visibleTimer);
+      visibleTimer=setTimeout(async()=>{
+        if(state.autoPreset!=='none'&&state.fixture==='none'){
+          try{await renderSelectedAnnotations();updateInfo(state.data[state.data.length-1]);}
+          catch(error){console.warn('visible-range annotation refresh failed',error);}
+        }
+      },150);
+    });
     state.chart=chart;state.candles=candles;state.volume=volume;state.watermark=watermark;state.annotations=new AR.AnnotationRenderer(chart,candles);
   }
 
@@ -74,13 +94,13 @@
 
   function seriesData(rows){
     return{
-      candles:rows.map(c=>({time:c.time,open:c.open,high:c.high,low:c.low,close:c.close})),
-      volumes:rows.map(c=>({time:c.time,value:c.volume,color:c.close>=c.open?T.volumeUp:T.volumeDown}))
+      candles:rows.map(c=>({time:D.toDisplayTime(c.time),open:c.open,high:c.high,low:c.low,close:c.close})),
+      volumes:rows.map(c=>({time:D.toDisplayTime(c.time),value:c.volume,color:c.close>=c.open?T.volumeUp:T.volumeDown}))
     };
   }
 
   function annotationContext(){
-    return{bars:state.data,intervalSec:D.intervalSec(state.interval),autoscale:state.annotationAutoscale};
+    return{bars:state.data,intervalSec:D.intervalSec(state.interval),autoscale:state.annotationAutoscale,timeOffsetSec:D.JST_OFFSET_SEC,priceFormatter:fmtPrice};
   }
 
   function updateCountdown(){
@@ -94,8 +114,8 @@
   function applyUiState(){
     $('pageTitle').textContent=displayCode()+' · '+D.intervalLabel(state.interval);
     updateWatermark();
-    if(state.chart)state.chart.applyOptions({timeScale:{tickMarkFormatter:(time,type,locale)=>D.formatLocalTick(time,type,locale)},localization:{locale:'ja-JP',timeFormatter:(time)=>D.formatLocalDateTime(time,false)}});
-    if(state.candles)state.candles.applyOptions(candleOptions());
+    if(state.chart)state.chart.applyOptions({timeScale:{tickMarkFormatter:(time,type,locale)=>D.formatDisplayTick(time,type,locale)},localization:{locale:'ja-JP',timeFormatter:(time)=>D.formatDisplayDateTime(time,false),priceFormatter:(price)=>fmtPrice(price)}});
+    if(state.candles)state.candles.applyOptions({...candleOptions(),priceFormat:{type:'price',precision:pricePrecision(),minMove:tickSize()}});
     if(state.annotations)state.annotations.setContext(annotationContext());
   }
 
@@ -106,10 +126,10 @@
   }
 
   function desiredBars(){
-    if(state.autoPreset==='p1')return 5000;
-    if(state.autoPreset==='p2')return 4600;
-    if(state.autoPreset==='p3')return 3200;
-    if(state.autoPreset==='p4')return 1600;
+    if(state.autoPreset==='p1')return 16000;
+    if(state.autoPreset==='p2')return 5200;
+    if(state.autoPreset==='p3')return 3600;
+    if(state.autoPreset==='p4')return 9000;
     return state.market==='spot'?1000:1500;
   }
 
@@ -118,28 +138,33 @@
     return D.fetchKlines({market:state.market,symbol:state.symbol,interval:state.interval,force:!!force});
   }
 
+  function visibleBars(rows){
+    const range=state.chart&&state.chart.timeScale().getVisibleLogicalRange();
+    if(!range||!rows.length)return rows;
+    const from=Math.max(0,Math.floor(Number(range.from))),to=Math.min(rows.length-1,Math.ceil(Number(range.to)));
+    return rows.slice(from,to+1);
+  }
   function visibleContext(rows){
-    let min=Infinity,max=-Infinity;for(const b of rows){if(b.low<min)min=b.low;if(b.high>max)max=b.high;}
-    return{currentPrice:rows[rows.length-1].close,visibleMin:min,visibleMax:max,tickSize:Number(symbolMeta().ladderBin)||.01};
+    const visible=visibleBars(rows),source=visible.length?visible:rows;
+    let min=Infinity,max=-Infinity;for(const b of source){if(b.low<min)min=b.low;if(b.high>max)max=b.high;}
+    return{currentPrice:rows[rows.length-1].close,visibleMin:min,visibleMax:max,tickSize:tickSize(),
+      visibleStartTime:source[0]&&source[0].time,visibleEndTime:source[source.length-1]&&source[source.length-1].time};
   }
 
   async function buildAutoDocument(){
     const rules=await loadRules(),bars=state.data,last=bars[bars.length-1];if(!last)return null;
     const context=visibleContext(bars),input={preset:state.autoPreset,symbol:state.symbol,market:state.market,interval:state.interval,bars,context,config:rules};
+    input.intervalSec=D.intervalSec(state.interval);
     if(state.autoPreset==='p1'){
-      const qStart=I.utcQuarterStart(last.time),pqStart=I.previousQuarterStart(last.time);
-      const current=bars.filter(b=>b.time>=qStart),previous=bars.filter(b=>b.time>=pqStart&&b.time<qStart);
-      input.vwap=I.anchoredVwap(current,qStart,1);input.previousQuarterVp=I.approxVolumeProfile(previous,Number(symbolMeta().ladderBin));input.previousQuarterFrom=pqStart;
+      input.quarterStats=I.anchoredPeriodStats(bars,'quarter',D.intervalSec(state.interval));
+      input.monthStats=I.anchoredPeriodStats(bars,'month',D.intervalSec(state.interval));
     }else if(state.autoPreset==='p2'||state.autoPreset==='p3'){
-      let tpoBars=state.interval==='30m'?bars:await D.fetchKlineHistory({market:state.market,symbol:state.symbol,interval:'30m',maxBars:state.autoPreset==='p2'?4600:3200});
-      input.tpoProfiles=I.tpoProfiles(tpoBars,{binSize:Number(symbolMeta().defaultRow)||Number(symbolMeta().ladderBin),group:state.autoPreset==='p2'?'month':'week',minBins:rules.singlePrints.minBins});
-      if(state.autoPreset==='p3'){
-        const exact=I.exactProfileToVp(await D.fetchExactProfiles(state.symbol),'previous');
-        input.exactWeekly=exact;input.exactWeeklyFrom=exact&&exact.days&&exact.days.length?Date.parse(exact.days[0]+'T00:00:00Z')/1000:(input.tpoProfiles.at(-2)?.from||bars[0].time);
-      }
+      const tpoBars=state.interval==='30m'?bars:await D.fetchKlineHistory({market:state.market,symbol:state.symbol,interval:'30m',maxBars:state.autoPreset==='p2'?5200:3600});
+      input.tpoBars=tpoBars;
+      const row=tickSize()*(Number(symbolMeta().tpoTicksPerRow)||100);
+      input.tpoProfiles=I.tpoProfiles(tpoBars,{binSize:row,group:state.autoPreset==='p2'?'month':'week',minBins:rules.singlePrints.minBins,intervalSec:1800});
     }else if(state.autoPreset==='p4'){
-      const mStart=I.utcMonthStart(last.time),pmStart=I.previousMonthStart(last.time),previous=bars.filter(b=>b.time>=pmStart&&b.time<mStart);
-      input.previousMonthVp=I.approxVolumeProfile(previous,Number(symbolMeta().ladderBin));input.previousMonthFrom=pmStart;
+      input.monthStats=I.anchoredPeriodStats(bars,'month',D.intervalSec(state.interval));
     }
     return A.buildPreset(input);
   }
@@ -156,7 +181,7 @@
   }
 
   async function setLoadedRows(rows){
-    state.data=rows.slice().sort((a,b)=>a.time-b.time);state.byTime=new Map(state.data.map(c=>[c.time,c]));
+    state.data=rows.slice().sort((a,b)=>a.time-b.time);state.byTime=new Map(state.data.map(c=>[D.toDisplayTime(c.time),c]));
     const out=seriesData(state.data);state.candles.setData(out.candles);state.volume.setData(out.volumes);
     state.annotations.setContext(annotationContext());state.chart.timeScale().fitContent();updateCountdown();
     const stats=await renderSelectedAnnotations();updateWatermark();updateInfo(state.data[state.data.length-1]);return stats;
@@ -186,11 +211,11 @@
       const latest=await D.fetchLatest({market:state.market,symbol:state.symbol,interval:state.interval});
       const plan=R.planLatestUpdates(state.data,latest,D.intervalSec(state.interval));
       if(plan.reloadRequired){await loadData(true);return;}
-      const result=R.applyLatestUpdates({existing:state.data,latest,intervalSec:D.intervalSec(state.interval),candleSeries:state.candles,volumeSeries:state.volume,volumeUp:T.volumeUp,volumeDown:T.volumeDown});
+      const result=R.applyLatestUpdates({existing:state.data,latest,intervalSec:D.intervalSec(state.interval),candleSeries:state.candles,volumeSeries:state.volume,volumeUp:T.volumeUp,volumeDown:T.volumeDown,timeTransform:D.toDisplayTime});
       for(const candle of latest){
         const index=state.data.findIndex(x=>x.time===candle.time);
         if(index>=0)state.data[index]=candle;else if(candle.time>state.data[state.data.length-1].time)state.data.push(candle);
-        state.byTime.set(candle.time,candle);
+        state.byTime.set(D.toDisplayTime(candle.time),candle);
       }
       state.data.sort((a,b)=>a.time-b.time);state.annotations.setContext(annotationContext());updateInfo(state.data[state.data.length-1]);updateCountdown();
       if(result.errors.length)console.warn('latest update errors',result.errors);
