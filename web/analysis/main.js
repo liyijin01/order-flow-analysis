@@ -155,10 +155,11 @@
         source:pm.source,tested:E.wasZoneTouched(one,mStart,pm.bottom,pm.top),fill:rules.colors.pmFill,border:rules.colors.pmBorder});
     }else missing.push({type:'价值区 PM',period:'M',source:'approx'});
 
-    const profileFresh=E.profileIsFresh(bundle.profile,last.time);
+    const weekAsOf=state.snapshot&&bundle.cutoffUtc?(Date.parse(bundle.cutoffUtc)+1000)/1000:Date.now()/1000;
+    const profileFresh=E.profileIsFresh(bundle.profile,weekAsOf);
     const exactPw=profileFresh?E.exactProfile(bundle.profile):null;
     const exactWeekEnd=profileFresh?periodEndFromProfile(bundle.profile):null;
-    const fallbackPw=!exactPw?previousWeekTpo(thirty,last.time,tick):null;
+    const fallbackPw=!exactPw?previousWeekTpo(thirty,weekAsOf,tick):null;
     let pw=null,weekEnd=null;
     if(exactPw&&exactWeekEnd){
       pw={...exactPw,source:'exact'};weekEnd=exactWeekEnd;
