@@ -35,6 +35,7 @@ body.snapshot #analysisCapture{border:0;padding:12px;width:1600px}body.snapshot 
 <div class="controls">
   <div class="switches"><span>币种</span><button data-symbol="BTCUSDT">BTC</button><button data-symbol="ETHUSDT">ETH</button><button data-symbol="SOLUSDT">SOL</button></div>
   <div class="switches"><span>周期</span><button data-tf="4h">4h</button><button data-tf="1h">1h</button><button data-tf="1d">1D</button></div>
+  <button id="resetViewBtn" title="也可以双击价格轴恢复自动缩放">重置视图</button>
   <button id="downloadBtn">下载 PNG</button>
 </div>
 <div id="status">Loading…</div>
@@ -55,7 +56,7 @@ body.snapshot #analysisCapture{border:0;padding:12px;width:1600px}body.snapshot 
   </table></div>
   <div class="capture-footer"><span>Binance USD-M · read only</span><span id="cutoff"></span></div>
 </section>
-<div class="page-footer"><span>Display time: JST · calculations use UTC boundaries</span><span><a href="chart.html">实验台</a></span></div>
+<div class="page-footer"><span>Display time: JST · calculations use UTC boundaries · 双击价格轴或点“重置视图”恢复自动缩放</span><span><a href="chart.html">实验台</a></span></div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js" integrity="sha384-KkYqTZlM13Zya6fVUF3IGCBOQ1ehFeJVVgxaVvD/0MebineF9EI8Jkd3NnWNChqN" crossorigin="anonymous"></script>
 <script src="config/symbols.js"></script>
