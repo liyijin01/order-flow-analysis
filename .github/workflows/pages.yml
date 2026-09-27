@@ -47,6 +47,10 @@ jobs:
       - name: Python unit tests
         run: python -m unittest discover pipeline/tests -v
 
+      - name: C4.1 golden-standard archive checks
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'c4-1-')
+        run: python scripts/c4_1_golden.py
+
       - name: JavaScript unit tests
         run: node --test web/tests/*.test.mjs
 
@@ -66,7 +70,7 @@ jobs:
           fi
 
   chart-smoke:
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'c2-')
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'c4-1-'))
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -95,11 +99,16 @@ jobs:
           echo $! > /tmp/order-flow-http.pid
           sleep 2
 
-      - name: Render P1-P5 and export PNGs
+      - name: Render C2.1-C4 regression suite
+        if: startsWith(github.head_ref, 'c2-')
         run: node scripts/c2_1_c4_smoke.cjs
 
+      - name: Run C4.1 browser regression checks
+        if: startsWith(github.head_ref, 'c4-1-')
+        run: node scripts/c4_1_smoke.cjs
+
       - name: Upload C2.1-C4 screenshots
-        if: always()
+        if: always() && startsWith(github.head_ref, 'c2-')
         uses: actions/upload-artifact@v4
         with:
           name: c2-1-c4-chart-screenshots
