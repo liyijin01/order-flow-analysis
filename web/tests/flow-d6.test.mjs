@@ -31,6 +31,17 @@ test('D6 CVD uses quote delta, starts at zero and leaves gaps blank',()=>{
   assert.equal(cvd.matched,3);
 });
 
+test('D6 CVD can re-anchor at the first visible bar',()=>{
+  const display=[bar(0,{q:100,bq:70}),bar(900,{q:100,bq:40}),bar(1800,{q:100,bq:60}),bar(2700,{q:200,bq:140})];
+  const cvd=F.cvdSeries(display,display,1800);
+  assert.equal('value' in cvd.points[0],false);
+  assert.equal('value' in cvd.points[1],false);
+  assert.equal(cvd.points[2].value,0);
+  assert.equal(cvd.points[3].value,80);
+  assert.equal(cvd.anchorTime,1800);
+  assert.equal(cvd.matched,2);
+});
+
 test('D6 spot and perp CVD align only to display timestamps',()=>{
   const display=[0,900,1800,2700].map(t=>bar(t));
   const perp=F.cvdSeries(display,[bar(0),bar(900),bar(1800),bar(2700)]);
