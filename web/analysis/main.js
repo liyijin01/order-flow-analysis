@@ -107,7 +107,11 @@
       const wasDefault=rangesClose(before,state.defaultViewRange,.5);
       chart.resize(container.clientWidth,container.clientHeight);
       const ps=chart.panes();if(ps[1])ps[1].setHeight(Math.max(100,Math.round(container.clientHeight*.18)));
-      if(wasDefault&&state.model)applyDefaultView(state.model.display.length);
+      if(wasDefault&&state.model&&state.bundle){
+        const rebuilt=buildAnalysis(state.bundle);state.model=rebuilt;
+        applySeries(rebuilt);renderTable(rebuilt);updateHeader(rebuilt);
+        applyDefaultView(rebuilt.display.length);
+      }
       if(primitive.requestUpdate)primitive.requestUpdate();
     }).observe(container);
   }
