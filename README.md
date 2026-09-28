@@ -16,6 +16,19 @@ Read-only research dashboard for Binance USD-M perpetual order flow.
 
 The dashboard uses only public market-data endpoints. It has no API keys, wallet connection, order placement, or private account access.
 
+## Flow Board
+
+`flow.html` is the finished 15m / 30m order-flow board for BTCUSDT, ETHUSDT and SOLUSDT. It combines:
+
+- Binance USD-M perpetual candlesticks with deterministic anchored VWAP, running ±1σ fill and ±2σ lines;
+- separate USDT-notional CVD panes for Binance Perpetual and Binance Spot using `2 × takerBuyQuote - quoteVolume`;
+- three archived USD-M book-depth buckets derived from checksum-verified Binance Vision `bookDepth` files;
+- the actual probed depth buckets `0–1%`, `1–2%`, `2–5%` because the archive exposes ±0.2/1/2/3/4/5% levels and no ±2.5% level;
+- six daily snapshot PNGs and `flow/latest.json`.
+
+Processed daily depth snapshots are persisted under `depth/{SYMBOL}/{YYYY-MM-DD}.json.gz` on the orphan `data` branch. Invalid depth snapshots are rejected rather than interpolated. The depth pane intentionally stops at the latest completed archived UTC day; it is not spliced with REST depth.
+
+
 ## Local preview
 
 The browser code uses classic scripts, so double-clicking `index.html` no longer fails because of ES-module CORS. In `file://` mode the live WebSocket can still run, but browsers generally block fetching sibling JSON archive files.
@@ -51,7 +64,7 @@ Tests are fixture-based and do not require network access.
 
 `config/symbols.json` defines the exact ladder size and UI defaults for every symbol. Python uses `decimal.Decimal` to calculate `binIndex`; it does not use float division for archive price bins.
 
-GitHub Actions runs twice daily at 01:40 and 09:40 UTC. The data job:
+GitHub Actions runs daily at 09:25 UTC. The data job:
 
 1. checks out or initializes the orphan `data` branch;
 2. downloads only missing completed UTC daily aggTrades archives;
