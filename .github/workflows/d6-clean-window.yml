@@ -1,0 +1,65 @@
+name: D6 clean-window diagnostic
+
+on:
+  push:
+    branches: [d6-flow-board]
+    paths:
+      - '.github/workflows/d6-clean-window.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: npm install --no-save playwright-core@1.55.0
+      - name: Attach data branch
+        run: |
+          git fetch origin data
+          git worktree add --detach datarepo origin/data
+      - name: Build analysis parity data
+        run: |
+          python -m pipeline.build --data-dir datarepo --output-dir _d6-generated
+          python scripts/d1_build_snapshot.py --profile-dir _d6-generated --output-dir _flow-site/analysis/data
+      - name: Build 16-day clean-window flow snapshot
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('config/flow-rules.json').read_text())
+          p['depthDays']=16
+          Path('/tmp/flow-rules-clean.json').write_text(json.dumps(p))
+          PY
+          python scripts/d6_build_flow_snapshot.py --data-dir datarepo --output-dir _flow-site/flow/data --rules /tmp/flow-rules-clean.json
+      - name: Prepare site
+        run: |
+          mkdir -p _flow-site/web _flow-site/config
+          cp flow.html _flow-site/
+          cp -R web/analysis web/chart web/flow _flow-site/web/
+          cp config/symbols.js config/flow-rules.json _flow-site/config/
+          python3 -m http.server 8000 --directory _flow-site >/tmp/d6-clean-http.log 2>&1 &
+          sleep 2
+      - name: Browser regression
+        run: node scripts/d6_smoke.cjs
+      - name: Six real-market PNGs
+        env:
+          FLOW_PNG_DIR: _d6-clean-artifacts/png
+          FLOW_LATEST: _d6-clean-artifacts/latest.json
+        run: node scripts/d6_flow_png.cjs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: d6-clean-window-diagnostic
+          path: _d6-clean-artifacts/
+          if-no-files-found: error
+          retention-days: 7
