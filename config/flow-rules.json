@@ -1,6 +1,9 @@
 {
   "display": {
-    "visibleBars": {"15m": 480, "30m": 336},
+    "visibleBars": {
+      "15m": 480,
+      "30m": 336
+    },
     "rightOffset": 24,
     "minBarSpacingPx": 5,
     "refreshSeconds": 60
@@ -16,11 +19,31 @@
   "avwap": {
     "defaultMode": "swing",
     "lookbackDays": 14,
-    "bands": [1, 2],
+    "bands": [
+      1,
+      2
+    ],
     "fillBand": 1
   },
-  "depthLevels": [0.2, 1, 2, 3, 4, 5],
-  "depthBuckets": [[0, 1], [1, 2], [2, 5]],
+  "depthLevels": [
+    1,
+    2,
+    5
+  ],
+  "depthBuckets": [
+    [
+      0,
+      1
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      5
+    ]
+  ],
   "depthDays": 21,
   "depthValidation": {
     "averagePriceExtraPct": 0.5,
