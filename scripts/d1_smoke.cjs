@@ -246,6 +246,7 @@ function assertBoundaryStable(before,after,label){
       requests.length=0;
       await page.click('[data-symbol="ETHUSDT"]');
       await page.waitForFunction(()=>window.__analysisDebug?.model?.symbol==='ETHUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:20000});
+      await page.waitForFunction(()=>window.__analysisDebug.state.inFlight===null,{timeout:2000});
       const ethFull=requests.filter(x=>x.symbol==='ETHUSDT'&&x.interval==='1h'&&x.limit===1500);
       if(ethFull.length!==3)throw new Error('D4 slow switch duplicated ETH 1h history pages '+JSON.stringify(ethFull));
       const loadState=await page.evaluate(()=>({token:window.__analysisDebug.state.loadToken,inFlight:!!window.__analysisDebug.state.inFlight,info:document.getElementById('infoLine').textContent}));
