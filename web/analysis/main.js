@@ -6,7 +6,8 @@
   const $=id=>document.getElementById(id);
   const state={
     symbol:'BTCUSDT',timeframe:'4h',snapshot:false,rules:null,bundle:null,chart:null,candles:null,volume:null,vwap:null,primitive:null,
-    loadToken:0,refreshTimer:null,model:null,viewKey:null,lastDisplayCount:0,lastFullLoadAt:0,refreshWarning:null
+    loadToken:0,refreshTimer:null,model:null,viewKey:null,lastDisplayCount:0,lastFullLoadAt:0,refreshWarning:null,
+    inFlight:null,abortController:null,lastSuccessAt:0,defaultViewRange:null
   };
 
   function tfLabel(tf){return({'1h':'1小时','4h':'4小时','1d':'1天'})[tf]||tf;}
@@ -15,6 +16,22 @@
   function fmtPrice(v){
     const p=pricePrecision(),tick=Number(symbolMeta().tickSize)||.01,n=E.roundToTick(Number(v),tick);
     return n.toLocaleString(undefined,{minimumFractionDigits:p,maximumFractionDigits:p});
+  }
+  function jstParts(ms){
+    const parts=new Intl.DateTimeFormat('en-GB',{
+      timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',
+      hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+    }).formatToParts(new Date(Number(ms)));
+    const out={};for(const p of parts)if(p.type!=='literal')out[p.type]=p.value;return out;
+  }
+  function formatJstClock(ms){const p=jstParts(ms);return p.hour+':'+p.minute+':'+p.second;}
+  function formatCutoffJst(iso){
+    const ms=Date.parse(String(iso||''));if(!Number.isFinite(ms))return'—';
+    const p=jstParts(ms);return p.year+'/'+p.month+'/'+p.day+' '+p.hour+':'+p.minute;
+  }
+  function rangesClose(a,b,tolerance){
+    if(!a||!b)return false;const t=Number(tolerance)||0;
+    return Math.abs(Number(a.from)-Number(b.from))<=t&&Math.abs(Number(a.to)-Number(b.to))<=t;
   }
   function fillAlpha(base,tested){
     if(!tested)return base;
@@ -84,12 +101,15 @@
     const primitive=new P.AnalysisBoardPrimitive({});
     candles.attachPrimitive(primitive);
     const panes=chart.panes();if(panes[1])panes[1].setHeight(Math.max(110,Math.round(container.clientHeight*.18)));
+    state.chart=chart;state.candles=candles;state.volume=volume;state.vwap=vwap;state.primitive=primitive;
     new ResizeObserver(()=>{
+      const before=chart.timeScale().getVisibleLogicalRange();
+      const wasDefault=rangesClose(before,state.defaultViewRange,.5);
       chart.resize(container.clientWidth,container.clientHeight);
       const ps=chart.panes();if(ps[1])ps[1].setHeight(Math.max(100,Math.round(container.clientHeight*.18)));
+      if(wasDefault&&state.model)applyDefaultView(state.model.display.length);
       if(primitive.requestUpdate)primitive.requestUpdate();
     }).observe(container);
-    state.chart=chart;state.candles=candles;state.volume=volume;state.vwap=vwap;state.primitive=primitive;
   }
 
   function previousMonthTpo(thirty,lastTime,tickSize){
@@ -136,7 +156,7 @@
     const rules=state.rules,tick=Number(symbolMeta().tickSize)||.01,counts=rules.display.bars;
     const display=(bundle.series[state.timeframe]||bundle.series.display||[]).slice(-(Number(counts[state.timeframe])||540));
     if(!display.length)throw new Error('display data missing for '+state.timeframe);
-    const visibleN=Math.min(display.length,Number(rules.display.visibleBars&&rules.display.visibleBars[state.timeframe])||display.length);
+    const visibleN=defaultWindow(display.length).visible;
     const viewBars=display.slice(-visibleN),view=extrema(viewBars);
     const one=bundle.series['1h']||[],thirty=bundle.series['30m']||[],calcTf=rules.zones.calcIntervals[state.timeframe],calc=bundle.series[calcTf]||[];
     const last=display[display.length-1],current=Number(last.close),qStart=E.utcQuarterStart(last.time),pqStart=E.previousQuarterStart(last.time),areas=[],missing=[];
@@ -239,22 +259,42 @@
     }
   }
 
-  function defaultVisibleRange(count){
-    const visible=Math.min(count,Number(state.rules.display.visibleBars&&state.rules.display.visibleBars[state.timeframe])||count);
-    const offset=Number(state.rules.display.rightOffset)||30;
-    return{from:Math.max(0,count-visible),to:Math.max(0,count-1)+offset};
+  function defaultWindow(count){
+    const baseVisible=Math.max(1,Number(state.rules.display.visibleBars&&state.rules.display.visibleBars[state.timeframe])||count);
+    const baseOffset=Math.max(0,Number(state.rules.display.rightOffset)||30);
+    const ratio=baseOffset/baseVisible;
+    const minSpacing=Math.max(1,Number(state.rules.display.minBarSpacingPx)||5);
+    const paneWidth=state.chart&&state.chart.timeScale?Number(state.chart.timeScale().width()):0;
+    const fit=paneWidth>0?Math.floor(paneWidth/(minSpacing*(1+ratio))):baseVisible;
+    const visible=Math.min(count,Math.max(30,Math.min(baseVisible,Math.max(1,fit))));
+    const rightOffsetBars=Math.max(3,Math.round(visible*ratio));
+    return{
+      visible,rightOffsetBars,
+      range:{from:Math.max(0,count-visible),to:Math.max(0,count-1)+rightOffsetBars}
+    };
+  }
+
+  function defaultVisibleRange(count){return defaultWindow(count).range;}
+
+  function applyDefaultView(count){
+    const spec=defaultWindow(count);
+    state.chart.timeScale().applyOptions({rightOffset:spec.rightOffsetBars});
+    state.chart.timeScale().setVisibleLogicalRange(spec.range);
+    state.defaultViewRange={from:spec.range.from,to:spec.range.to};
+    return spec;
   }
 
   function resetView(){
     if(!state.model)return;
     state.candles.priceScale().applyOptions({autoScale:true});
     state.volume.priceScale().applyOptions({autoScale:true});
-    state.chart.timeScale().setVisibleLogicalRange(defaultVisibleRange(state.model.display.length));
+    applyDefaultView(state.model.display.length);
   }
 
   function applySeries(model){
     const key=state.symbol+'|'+state.timeframe,sameView=state.viewKey===key;
     const oldRange=sameView?state.chart.timeScale().getVisibleLogicalRange():null;
+    const oldWasDefault=sameView&&rangesClose(oldRange,state.defaultViewRange,.5);
     const oldCount=state.lastDisplayCount||0;
     const followedRight=!!(oldRange&&Number(oldRange.to)>=oldCount-1);
     if(!sameView){
@@ -277,24 +317,35 @@
       intervalSec:D.intervalSec(state.timeframe),timeOffsetSec:9*3600,axisMinGap:state.rules.axisLabels.minGapPx,
       textMinGap:state.rules.textLabels.minGapPx,textMaxShift:state.rules.textLabels.maxShiftPx,priceFormatter:fmtPrice
     });
-    state.chart.timeScale().applyOptions({rightOffset:Number(state.rules.display.rightOffset)||30});
     const newCount=model.display.length;
     if(!sameView||!oldRange){
-      state.chart.timeScale().setVisibleLogicalRange(defaultVisibleRange(newCount));
+      applyDefaultView(newCount);
     }else if(followedRight){
-      const delta=newCount-oldCount;
-      state.chart.timeScale().setVisibleLogicalRange({from:Number(oldRange.from)+delta,to:Number(oldRange.to)+delta});
+      const delta=newCount-oldCount,next={from:Number(oldRange.from)+delta,to:Number(oldRange.to)+delta};
+      state.chart.timeScale().setVisibleLogicalRange(next);
+      if(oldWasDefault)state.defaultViewRange={from:next.from,to:next.to};
     }else{
       state.chart.timeScale().setVisibleLogicalRange(oldRange);
+      if(oldWasDefault)state.defaultViewRange={from:Number(oldRange.from),to:Number(oldRange.to)};
     }
     state.viewKey=key;state.lastDisplayCount=newCount;
     const panes=state.chart.panes();if(panes[1])panes[1].setHeight(Math.max(105,Math.round($('analysisChart').clientHeight*.18)));
   }
 
-  function updateHeader(model){
+  function updateSelectionState(){
     $('boardTitle').textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe);
-    $('infoLine').textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe)+' · 收 '+fmtPrice(model.current)+' · 更新于 '+D.formatJst(model.last.time)+' JST';
-    $('cutoff').textContent=model.cutoffUtc?'数据截止 '+String(model.cutoffUtc).slice(0,10)+' UTC':'实时 Binance USD-M · 每 60 秒刷新';
+    document.querySelectorAll('[data-symbol]').forEach(b=>b.classList.toggle('active',b.dataset.symbol===state.symbol));
+    document.querySelectorAll('[data-tf]').forEach(b=>b.classList.toggle('active',b.dataset.tf===state.timeframe));
+  }
+
+  function updateHeader(model){
+    updateSelectionState();
+    if(state.snapshot){
+      $('infoLine').textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe)+' · 收 '+fmtPrice(model.current)+' · 数据截至 '+formatCutoffJst(model.cutoffUtc);
+    }else{
+      $('infoLine').textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe)+' · 收 '+fmtPrice(model.current)+' · 最后刷新 '+formatJstClock(state.lastSuccessAt)+' JST';
+    }
+    $('cutoff').textContent=model.cutoffUtc?'数据截止 '+String(model.cutoffUtc).slice(0,10)+' UTC':'实时 Binance USD-M · 每 '+String(Number(state.rules.display.refreshSeconds)||60)+' 秒刷新';
     const errs=Object.keys(model.bundleErrors||{});
     if(state.refreshWarning){
       $('status').textContent='刷新失败，显示 '+D.formatJst(model.last.time).slice(-5)+' 的数据 · '+state.refreshWarning;
@@ -303,11 +354,9 @@
       $('status').textContent='Loaded '+model.display.length+' display candles · '+model.regions.length+' drawn regions · '+model.levels.length+' drawn key lines'+(errs.length?' · 缺失 '+errs.join(', '):'');
       $('status').classList.toggle('error',errs.length>0);
     }
-    document.querySelectorAll('[data-symbol]').forEach(b=>b.classList.toggle('active',b.dataset.symbol===state.symbol));
-    document.querySelectorAll('[data-tf]').forEach(b=>b.classList.toggle('active',b.dataset.tf===state.timeframe));
   }
 
-  async function getBundle(token,forceFull){
+  async function getBundle(token,forceFull,signal){
     const progress=$('status');
     if(state.snapshot){
       progress.textContent='Loading archived snapshot…';
@@ -317,31 +366,53 @@
     if(full){
       const bundle=await D.loadLive(state.symbol,state.timeframe,p=>{
         if(token===state.loadToken)progress.textContent='Loading '+p.done+'/'+p.total+' · '+p.label;
-      });
+      },signal);
       state.lastFullLoadAt=Date.now();
       return{bundle,full:true,failures:[]};
     }
-    const inc=await D.refreshLiveBundle(state.bundle,state.symbol,state.timeframe);
+    const inc=await D.refreshLiveBundle(state.bundle,state.symbol,state.timeframe,signal);
     return{bundle:inc.bundle,full:false,failures:inc.failures||[]};
   }
 
-  async function refresh(forceFull){
-    const token=++state.loadToken;
-    try{
-      await loadRules();
-      const result=await getBundle(token,!!forceFull);if(token!==state.loadToken)return;
-      state.bundle=result.bundle;
-      state.refreshWarning=result.failures.length?result.failures.map(x=>x.interval).join(', ')+' 更新失败':null;
-      const model=buildAnalysis(result.bundle);state.model=model;
-      applySeries(model);renderTable(model);updateHeader(model);
-    }catch(e){
-      console.error(e);
-      if(state.model){
-        state.refreshWarning=String(e.message||e);
-        updateHeader(state.model);
-      }else{
-        $('status').textContent='加载失败：'+String(e.message||e);$('status').classList.add('error');
+  async function refresh(forceFull,options){
+    const opts=options||{};
+    if(opts.scheduled&&document.hidden)return null;
+    if(state.inFlight){
+      if(opts.cancelPrevious&&state.abortController)state.abortController.abort();
+      else return state.inFlight;
+    }
+    const controller=new AbortController(),token=++state.loadToken;
+    state.abortController=controller;
+    const task=(async()=>{
+      try{
+        await loadRules();
+        if(controller.signal.aborted)return null;
+        const result=await getBundle(token,!!forceFull,controller.signal);
+        if(token!==state.loadToken||controller.signal.aborted)return null;
+        state.bundle=result.bundle;
+        state.refreshWarning=result.failures.length?result.failures.map(x=>x.interval).join(', ')+' 更新失败':null;
+        const model=buildAnalysis(result.bundle);state.model=model;
+        applySeries(model);renderTable(model);
+        state.lastSuccessAt=Date.now();
+        updateHeader(model);
+        return model;
+      }catch(e){
+        if(controller.signal.aborted||(e&&e.name==='AbortError'))return null;
+        console.error(e);
+        if(state.model){
+          state.refreshWarning=String(e.message||e);
+          updateHeader(state.model);
+        }else{
+          $('status').textContent='加载失败：'+String(e.message||e);$('status').classList.add('error');
+        }
+        return null;
       }
+    })();
+    state.inFlight=task;
+    try{return await task;}
+    finally{
+      if(state.inFlight===task)state.inFlight=null;
+      if(state.abortController===controller)state.abortController=null;
     }
   }
 
@@ -349,8 +420,11 @@
     if(symbol&&SYMBOLS[symbol])state.symbol=symbol;
     if(['4h','1h','1d'].includes(tf))state.timeframe=tf;
     state.bundle=null;state.lastFullLoadAt=0;state.refreshWarning=null;
+    updateSelectionState();
+    $('infoLine').textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe)+' · 加载中…';
+    $('status').textContent='Loading…';$('status').classList.remove('error');
     const q=new URLSearchParams(location.search);q.set('symbol',state.symbol);q.set('tf',state.timeframe);if(state.snapshot)q.set('snapshot','1');
-    history.replaceState(null,'',location.pathname+'?'+q.toString());refresh(true);
+    history.replaceState(null,'',location.pathname+'?'+q.toString());refresh(true,{cancelPrevious:true});
   }
 
   async function downloadPng(){
@@ -395,7 +469,14 @@
       vwapTimes:()=>state.model?state.model.currentVwap.map(x=>x.time):[]
     };
     await refresh(true);
-    if(!state.snapshot)state.refreshTimer=setInterval(()=>refresh(false),Number(state.rules.display.refreshSeconds||60)*1000);
+    if(!state.snapshot){
+      const refreshMs=Number(state.rules.display.refreshSeconds||60)*1000;
+      state.refreshTimer=setInterval(()=>refresh(false,{scheduled:true}),refreshMs);
+      document.addEventListener('visibilitychange',()=>{
+        if(document.hidden||state.inFlight)return;
+        if(Date.now()-state.lastSuccessAt>=refreshMs)refresh(false,{scheduled:true});
+      });
+    }
   }
   init();
 })();
