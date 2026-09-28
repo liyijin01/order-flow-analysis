@@ -279,30 +279,11 @@
     }
   }
 
-  function defaultWindow(count){
-    const baseVisible=Math.max(1,Number(state.rules.display.visibleBars&&state.rules.display.visibleBars[state.timeframe])||count);
-    const baseOffset=Math.max(0,Number(state.rules.display.rightOffset)||30);
-    const ratio=baseOffset/baseVisible;
-    const minSpacing=Math.max(1,Number(state.rules.display.minBarSpacingPx)||5);
-    const paneWidth=state.chart&&state.chart.timeScale?Number(state.chart.timeScale().width()):0;
-    const fit=paneWidth>0?Math.floor(paneWidth/(minSpacing*(1+ratio))):baseVisible;
-    const visible=Math.min(count,Math.max(30,Math.min(baseVisible,Math.max(1,fit))));
-    const rightOffsetBars=Math.max(3,Math.round(visible*ratio));
-    return{
-      visible,rightOffsetBars,
-      range:{from:Math.max(0,count-visible),to:Math.max(0,count-1)+rightOffsetBars}
-    };
-  }
+  function defaultWindow(count){return R.defaultWindow(state.chart,state.rules,state.timeframe,count);}
 
   function defaultVisibleRange(count){return defaultWindow(count).range;}
 
-  function applyDefaultView(count){
-    const spec=defaultWindow(count);
-    state.chart.timeScale().applyOptions({rightOffset:spec.rightOffsetBars});
-    state.chart.timeScale().setVisibleLogicalRange(spec.range);
-    state.defaultViewRange={from:spec.range.from,to:spec.range.to};
-    return spec;
-  }
+  function applyDefaultView(count){return R.applyDefaultView(state.chart,state.rules,state.timeframe,count,state);}
 
   const nextFrame=R.nextFrame;
 
