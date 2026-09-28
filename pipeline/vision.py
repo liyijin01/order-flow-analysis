@@ -95,3 +95,9 @@ def download_verified_url(url: str, temp_dir: Path, filename: str, sleep=time.sl
             continue
         return DownloadResult("failed", error=f"checksum mismatch: expected {expected}, got {actual}")
     return DownloadResult("failed", error="unexpected checksum state")
+
+
+def download_verified_day(symbol: str, day, temp_dir: Path, sleep=time.sleep) -> DownloadResult:
+    ds = day.isoformat()
+    url = BASE.format(s=symbol, d=ds)
+    return download_verified_url(url, temp_dir, f"{symbol}-aggTrades-{ds}.zip", sleep=sleep)
