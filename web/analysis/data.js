@@ -17,7 +17,8 @@
   }
   function intervalMs(interval){return intervalMsMap[interval]||3600000;}
   function intervalSec(interval){return Math.floor(intervalMs(interval)/1000);}
-  function endpoint(){return'https://fapi.binance.com/fapi/v1/klines';}
+  function endpoint(market){return market==='spot'?'https://api.binance.com/api/v3/klines':'https://fapi.binance.com/fapi/v1/klines';}
+  function maxLimit(market){return market==='spot'?1000:1500;}
 
   async function requestJson(url,retries,signal){
     let error=null;
@@ -51,7 +52,7 @@
       return{
         time:Math.floor(ms/1000),openTime:ms,closeTime:closeMs,
         open:Number(r[1]),high:Number(r[2]),low:Number(r[3]),close:Number(r[4]),
-        volume:Number(r[5]),quoteVolume:Number(r[7]||0),trades:Number(r[8]||0),takerBuyBase:Number(r[9]||0)
+        volume:Number(r[5]),quoteVolume:Number(r[7]||0),trades:Number(r[8]||0),takerBuyBase:Number(r[9]||0),takerBuyQuote:Number(r[10]||0)
       };
     }).filter(b=>Number.isFinite(b.time)&&Number.isFinite(b.open)&&Number.isFinite(b.close));
   }
@@ -65,12 +66,12 @@
     });
   }
 
-  async function fetchHistory(symbol,interval,maxBars,endTime,signal){
-    const pageMax=1500,all=[];let end=Number.isFinite(endTime)?Number(endTime):Date.now();
+  async function fetchHistory(symbol,interval,maxBars,endTime,signal,market){
+    const m=market||'um',pageMax=maxLimit(m),all=[];let end=Number.isFinite(endTime)?Number(endTime):Date.now();
     while(all.length<maxBars){
       const limit=Math.min(pageMax,maxBars-all.length);
       const params=new URLSearchParams({symbol,interval,limit:String(limit),endTime:String(Math.floor(end))});
-      const raw=await requestJson(endpoint()+'?'+params.toString(),4,signal);
+      const raw=await requestJson(endpoint(m)+'?'+params.toString(),4,signal);
       if(!Array.isArray(raw)||!raw.length)break;
       const page=parseRows(raw);all.unshift(...page);
       const earliest=page[0]&&page[0].openTime;
@@ -81,10 +82,10 @@
     return Array.from(dedup.values()).sort((a,b)=>a.time-b.time).slice(-maxBars);
   }
 
-  async function fetchLatest(symbol,interval,limit,signal){
-    const n=Math.max(1,Math.min(3,Number(limit)||3));
+  async function fetchLatest(symbol,interval,limit,signal,market){
+    const m=market||'um',n=Math.max(1,Math.min(3,Number(limit)||3));
     const params=new URLSearchParams({symbol,interval,limit:String(n)});
-    return parseRows(await requestJson(endpoint()+'?'+params.toString(),3,signal));
+    return parseRows(await requestJson(endpoint(m)+'?'+params.toString(),3,signal));
   }
 
   function mergeBars(existing,incoming,maxBars){
