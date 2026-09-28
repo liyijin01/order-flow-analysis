@@ -96,16 +96,49 @@ def percentile(values, p):
     return vals[lo] * (hi - k) + vals[hi] * (k - lo)
 
 
-def list_dates(url, pattern):
-    text = request_text(url)
-    found = sorted(set(re.findall(pattern, text)))
+def exists_url(url):
+    try:
+        request_bytes(url + ".CHECKSUM", 45)
+        return True
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return False
+        raise
+
+
+def latest_available_dates(url_for_day, count=3, lookback=21):
+    today = datetime.now(timezone.utc).date()
+    found = []
+    for delta in range(1, lookback + 1):
+        ds = (today - timedelta(days=delta)).isoformat()
+        if exists_url(url_for_day(ds)):
+            found.append(ds)
+            if len(found) >= count:
+                break
+    if len(found) < count:
+        raise RuntimeError(f"fewer than {count} recent archived files")
+    found.sort()
     return found
 
 
-def latest_available_dates(base_url, pattern, count=3):
-    dates = list_dates(base_url, pattern)
-    completed = [d for d in dates if date.fromisoformat(d) < datetime.now(timezone.utc).date()]
-    return dates[0] if dates else None, completed[-count:]
+def earliest_available_date(url_for_day, latest_day):
+    hi = date.fromisoformat(latest_day)
+    step = 1
+    lo = hi - timedelta(days=step)
+    while exists_url(url_for_day(lo.isoformat())):
+        hi = lo
+        step *= 2
+        lo = hi - timedelta(days=step)
+        if lo.year < 2017:
+            break
+    left, right = lo, hi
+    while (right - left).days > 1:
+        mid = left + timedelta(days=(right - left).days // 2)
+        if exists_url(url_for_day(mid.isoformat())):
+            right = mid
+        else:
+            left = mid
+    return right.isoformat()
 
 
 def fetch_1m_close(symbol, day):
@@ -136,11 +169,9 @@ def nearest_close(closes, ts_ms):
 
 def probe_bookdepth_symbol(symbol):
     directory = f"{ROOT}/futures/um/daily/bookDepth/{symbol}/"
-    earliest, days = latest_available_dates(
-        directory, rf"{symbol}-bookDepth-(\d{{4}}-\d{{2}}-\d{{2}})\.zip", 3
-    )
-    if len(days) < 3:
-        raise RuntimeError(f"{symbol}: fewer than 3 completed bookDepth files")
+    url_for_day = lambda ds: f"{directory}{symbol}-bookDepth-{ds}.zip"
+    days = latest_available_dates(url_for_day, 3)
+    earliest = earliest_available_date(url_for_day, days[-1])
     result = {
         "symbol": symbol,
         "earliestAvailableDate": earliest,
@@ -273,8 +304,7 @@ def probe_kline_file(market, symbol, day):
 def kline_probe_days(market, symbol):
     root = "spot" if market == "spot" else "futures/um"
     directory = f"{ROOT}/{root}/daily/klines/{symbol}/15m/"
-    _, days = latest_available_dates(directory, rf"{symbol}-15m-(\d{{4}}-\d{{2}}-\d{{2}})\.zip", 3)
-    return days
+    return latest_available_dates(lambda ds: f"{directory}{symbol}-15m-{ds}.zip", 3)
 
 
 def main():
