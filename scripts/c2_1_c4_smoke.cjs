@@ -77,6 +77,7 @@ async function installRoutes(page, counters){
       const counters={binance:0};await installRoutes(page,counters);
       await page.goto('http://127.0.0.1:8000/chart.html?fixture='+preset,{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.includes('SAMPLE 样例数据'),undefined,{timeout:30000});
+      await page.waitForTimeout(200);
       if(counters.binance!==0) throw new Error(preset+' sample requested Binance '+counters.binance+' times');
       const visible=await page.evaluate(()=>{
         const box=document.getElementById('chart').getBoundingClientRect();
