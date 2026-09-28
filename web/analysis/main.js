@@ -395,8 +395,14 @@
         if(token!==state.loadToken||controller.signal.aborted)return null;
         state.bundle=result.bundle;
         state.refreshWarning=result.failures.length?result.failures.map(x=>x.interval).join(', ')+' 更新失败':null;
-        const model=buildAnalysis(result.bundle);state.model=model;
-        applySeries(model);renderTable(model);
+        let model=buildAnalysis(result.bundle);state.model=model;
+        applySeries(model);
+        const settledVisible=defaultWindow(model.display.length).visible;
+        if(settledVisible!==model.visibleBars){
+          model=buildAnalysis(result.bundle);state.model=model;
+          applySeries(model);applyDefaultView(model.display.length);
+        }
+        renderTable(model);
         state.lastSuccessAt=Date.now();
         updateHeader(model);
         return model;
