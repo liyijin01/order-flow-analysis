@@ -63,7 +63,12 @@ class DepthTests(unittest.TestCase):
             if r[1] == -3: r[2], r[3] = 1.4, 140
         cases["non-monotonic"] = rows
         rows = snapshot_rows(); rows[0][2] = -1; cases["negative-or-zero"] = rows
-        rows = snapshot_rows(); rows[0][3] = 1000; cases["average-price"] = rows
+        rows = snapshot_rows()
+        for row in rows:
+            if row[1] == -1:
+                row[3] = 1000
+                break
+        cases["average-price"] = rows
 
         for expected, rows in cases.items():
             with self.subTest(expected=expected):
