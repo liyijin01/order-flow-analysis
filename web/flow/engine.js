@@ -55,16 +55,20 @@
   }
 
   function cvdDelta(bar){return 2*Number(bar&&bar.takerBuyQuote||0)-Number(bar&&bar.quoteVolume||0);}
-  function cvdSeries(displayBars,marketBars){
-    const map=new Map((marketBars||[]).map(b=>[Number(b.time),b])),out=[];let value=0,started=false,missing=0,matched=0;
-    for(const b of displayBars||[]){
-      const row=map.get(Number(b.time));
-      if(!row){out.push({time:Number(b.time)});missing++;continue;}
+  function cvdSeries(displayBars,marketBars,anchorTime){
+    const display=displayBars||[],map=new Map((marketBars||[]).map(b=>[Number(b.time),b])),out=[];
+    const requested=Number(anchorTime),anchor=Number.isFinite(requested)?requested:(display[0]?Number(display[0].time):null);
+    let value=0,started=false,missing=0,matched=0;
+    for(const b of display){
+      const time=Number(b.time);
+      if(anchor!=null&&time<anchor){out.push({time});continue;}
+      const row=map.get(time);
+      if(!row){out.push({time});missing++;continue;}
       if(!started){started=true;value=0;}
       else value+=cvdDelta(row);
-      out.push({time:Number(b.time),value,live:!!row.live});matched++;
+      out.push({time,value,live:!!row.live});matched++;
     }
-    return{points:out,value,missing,matched};
+    return{points:out,value,missing,matched,anchorTime:anchor};
   }
 
   function cumulativeAt(side,boundary){
