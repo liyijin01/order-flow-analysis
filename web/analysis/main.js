@@ -130,7 +130,7 @@
       const wasDefault=rangesClose(before,state.defaultViewRange,.5);
       chart.resize(container.clientWidth,container.clientHeight);
       const ps=chart.panes();if(ps[1])ps[1].setHeight(Math.max(100,Math.round(container.clientHeight*.18)));
-      scheduleResizeSettle(wasDefault);
+      scheduleResizeSettle(wasDefault,before);
       if(primitive.requestUpdate)primitive.requestUpdate();
     }).observe(container);
   }
@@ -330,11 +330,15 @@
     return model;
   }
 
-  function scheduleResizeSettle(wasDefault){
+  function scheduleResizeSettle(wasDefault,beforeRange){
     const token=++state.resizeToken;
     (async()=>{
       await nextFrame();await nextFrame();
-      if(token!==state.resizeToken||!wasDefault||!state.model||!state.bundle)return;
+      if(token!==state.resizeToken||!state.model||!state.bundle)return;
+      if(!wasDefault){
+        if(beforeRange)state.chart.timeScale().setVisibleLogicalRange({from:Number(beforeRange.from),to:Number(beforeRange.to)});
+        return;
+      }
       if(state.resizeSettle){
         await state.resizeSettle;
         if(token!==state.resizeToken)return;
