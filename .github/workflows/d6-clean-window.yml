@@ -1,4 +1,5 @@
 name: D6 clean-window diagnostic
+# rerun after flow autoscale fix
 
 on:
   push:
