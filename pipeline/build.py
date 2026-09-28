@@ -15,6 +15,13 @@ SOURCE = "data.binance.vision futures/um daily aggTrades"
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def warn(msg: str):
+    print("::" + "warning::" + msg)
+
+
+_DEFAULT_WARN = warn
+
+
 def load_config(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -52,7 +59,8 @@ def ensure_day(symbol: str, cfg: dict, day: date, data_dir: Path, temp_dir: Path
             result.zip_path.unlink(missing_ok=True)
 
 
-def build_all(config: dict, data_dir: Path, output_dir: Path, today: date):
+def build_all(config: dict, data_dir: Path, output_dir: Path, today: date, warn=None):
+    emit_warning = warn or _DEFAULT_WARN
     output_dir.mkdir(parents=True, exist_ok=True)
     monday, previous_start, previous, current = period_days(today)
     any_usable = False
@@ -71,7 +79,7 @@ def build_all(config: dict, data_dir: Path, output_dir: Path, today: date):
                     any_usable = True
                 elif status == "failed":
                     failed.append(day.isoformat())
-                    print(f"::warning::{symbol} {day.isoformat()} failed: {error}")
+                    emit_warning(f"{symbol} {day.isoformat()} failed: {error}")
             previous_profile = build_period(
                 f"{previous_start.isoformat()} to {(monday - timedelta(days=1)).isoformat()}",
                 previous,
@@ -85,7 +93,7 @@ def build_all(config: dict, data_dir: Path, output_dir: Path, today: date):
                 failed,
             )
             if not previous_profile["complete"]:
-                print(f"::warning::{symbol} previous completed week is incomplete; missing: {', '.join(previous_profile['missingDays'])}")
+                emit_warning(f"{symbol} previous completed week is incomplete; missing: {', '.join(previous_profile['missingDays'])}")
             payload = {
                 "schema": "profiles-v2",
                 "symbol": symbol,

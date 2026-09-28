@@ -299,12 +299,15 @@
     return (items||[]).filter(Boolean).sort((a,b)=>Math.abs(a.price-current)-Math.abs(b.price-current)).slice(0,Number(maxCount)||2);
   }
 
-  function axisLabelSelection(candidates,coordinateFn,minGap){
+  function axisLabelSelection(candidates,coordinateFn,minGap,reserved){
+    const gap=Number(minGap||14);
+    const blocked=(reserved||[]).map(Number).filter(finite);
     const rows=(candidates||[]).map(c=>({...c,y:Number(coordinateFn(c.price))})).filter(c=>finite(c.y));
     rows.sort((a,b)=>(Number(b.priority)||0)-(Number(a.priority)||0)||Math.abs(Number(a.price)-Number(a.currentPrice||a.price))-Math.abs(Number(b.price)-Number(b.currentPrice||b.price))||a.y-b.y);
     const accepted=[];
     for(const row of rows){
-      if(accepted.every(a=>Math.abs(a.y-row.y)>=Number(minGap||14)))accepted.push(row);
+      if(blocked.some(y=>Math.abs(y-row.y)<gap))continue;
+      if(accepted.every(a=>Math.abs(a.y-row.y)>=gap))accepted.push(row);
     }
     const ids=new Set(accepted.map(x=>x.id));
     return rows.map(r=>({...r,visible:ids.has(r.id)}));

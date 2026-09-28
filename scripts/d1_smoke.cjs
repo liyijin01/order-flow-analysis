@@ -340,30 +340,102 @@ function assertBoundaryStable(before,after,label){
       await page.close();
     }
 
+    for(const symbol of ['BTCUSDT','ETHUSDT','SOLUSDT']){
+      for(const tf of ['4h','1h','1d']){
+        const page=await browser.newPage({viewport:{width:1600,height:1000}});
+        const requests=[];await routeMarket(page,requests);
+        await page.goto(pageUrl+'?symbol='+symbol+'&tf='+tf,{waitUntil:'domcontentloaded',timeout:60000});
+        await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+        const labels=await page.evaluate(()=> {
+          const d=window.__analysisDebug,gap=Number(d.state.rules.axisLabels.minGapPx),currentY=d.priceCoordinate(d.model.current);
+          return{gap,currentY,axis:d.axisLabels().filter(x=>x.visible)};
+        });
+        for(const row of labels.axis){
+          if(Math.abs(Number(row.coordinate)-Number(labels.currentY))<labels.gap){
+            throw new Error('D5 latest-price collision '+symbol+' '+tf+' '+JSON.stringify({row,labels}));
+          }
+        }
+        const sorted=labels.axis.slice().sort((a,b)=>Number(a.coordinate)-Number(b.coordinate));
+        for(let i=1;i<sorted.length;i++){
+          if(Math.abs(Number(sorted[i].coordinate)-Number(sorted[i-1].coordinate))<labels.gap){
+            throw new Error('D5 custom-axis collision '+symbol+' '+tf+' '+JSON.stringify(sorted));
+          }
+        }
+        if(symbol==='BTCUSDT'&&tf==='4h'){
+          const legend=await page.evaluate(()=>({
+            dom:Array.from(document.querySelectorAll('#analysisLegend .legend-item')).map(x=>x.textContent.trim()),
+            config:window.__analysisDebug.legend(),
+            colors:window.__analysisDebug.state.rules.colors
+          }));
+          const expected=['PQ 上季价值区','PM 上月价值区','PW 上周价值区','供应区','需求区','本季 VWAP','PQ VWAP','未回补 POC'];
+          if(JSON.stringify(legend.dom)!==JSON.stringify(expected))throw new Error('D5 page legend labels '+JSON.stringify(legend));
+          const map={pq:'pqBorder',pm:'pmBorder',pw:'pwBorder',supply:'supplyBorder',demand:'demandBorder','current-vwap':'vwap','pq-vwap':'pqVwap',npoc:'nPoc'};
+          for(const e of legend.config)if(e.color!==legend.colors[map[e.key]])throw new Error('D5 legend color '+JSON.stringify({e,legend}));
+          await page.evaluate(()=>{
+            window.__d5ExportLegend=null;
+            window.OrderFlowAnalysisExport.exportBoard=async opts=>{window.__d5ExportLegend=opts.legend;return{width:1,height:1};};
+          });
+          await page.click('#downloadBtn');
+          const exported=await page.evaluate(()=>window.__d5ExportLegend);
+          if(JSON.stringify(exported)!==JSON.stringify(legend.config))throw new Error('D5 export legend differs '+JSON.stringify({exported,legend:legend.config}));
+        }
+        await page.close();
+      }
+    }
+
     {
       const page=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:3,isMobile:true});
       const requests=[];await routeMarket(page,requests);
       await page.goto(pageUrl+'?symbol=ETHUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
-      const mobile=await page.evaluate(()=> {
+      const portrait=await page.evaluate(()=> {
         const d=window.__analysisDebug,s=d.state,width=s.chart.timeScale().width(),rules=s.rules;
         const base=Number(rules.display.visibleBars['4h']),ratio=Number(rules.display.rightOffset)/base;
         const fit=Math.floor(width/(Number(rules.display.minBarSpacingPx)*(1+ratio)));
         return{
-          spacing:Number(s.chart.timeScale().options().barSpacing),
-          width,visible:d.model.visibleBars,expected:Math.max(30,Math.min(base,fit)),
+          spacing:Number(s.chart.timeScale().options().barSpacing),width,visible:d.model.visibleBars,
+          expected:Math.max(30,Math.min(base,fit)),
           scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth,
+          sourceDisplay:getComputedStyle(document.querySelector('th:nth-child(6)')).display,
+          calcRight:document.querySelector('th:nth-child(5)').getBoundingClientRect().right,
           info:document.getElementById('infoLine').textContent,lastSuccessAt:s.lastSuccessAt
         };
       });
-      if(mobile.spacing<5)throw new Error('D4 mobile bar spacing '+JSON.stringify(mobile));
-      if(mobile.scrollWidth!==mobile.clientWidth)throw new Error('D4 mobile horizontal scroll '+JSON.stringify(mobile));
-      if(mobile.visible!==mobile.expected)throw new Error('D4 mobile visibleBars '+JSON.stringify(mobile));
-      if(!mobile.info.includes('最后刷新')||Math.abs(Date.now()-Number(mobile.lastSuccessAt))>70000)throw new Error('D4 live refresh time '+JSON.stringify(mobile));
+      if(portrait.spacing<5)throw new Error('D5 portrait bar spacing '+JSON.stringify(portrait));
+      if(portrait.scrollWidth!==portrait.clientWidth)throw new Error('D5 portrait horizontal scroll '+JSON.stringify(portrait));
+      if(portrait.visible!==portrait.expected||portrait.visible>50)throw new Error('D5 portrait visibleBars '+JSON.stringify(portrait));
+      if(portrait.sourceDisplay!=='none'||portrait.calcRight>portrait.clientWidth+.5)throw new Error('D5 mobile table '+JSON.stringify(portrait));
+      if(!portrait.info.includes('最后刷新')||Math.abs(Date.now()-Number(portrait.lastSuccessAt))>70000)throw new Error('D4 live refresh time '+JSON.stringify(portrait));
+
       await page.setViewportSize({width:844,height:390});
-      await page.waitForTimeout(250);
-      const landscape=await page.evaluate(()=>({range:window.__analysisDebug.state.chart.timeScale().getVisibleLogicalRange(),visible:window.__analysisDebug.model.visibleBars,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth}));
-      if(landscape.scrollWidth!==landscape.clientWidth)throw new Error('D4 landscape horizontal scroll '+JSON.stringify(landscape));
+      await page.waitForTimeout(1500);
+      const landscape=await page.evaluate(()=> {
+        const d=window.__analysisDebug,s=d.state,width=s.chart.timeScale().width(),rules=s.rules;
+        const base=Number(rules.display.visibleBars['4h']),ratio=Number(rules.display.rightOffset)/base;
+        const fit=Math.floor(width/(Number(rules.display.minBarSpacingPx)*(1+ratio)));
+        return{spacing:Number(s.chart.timeScale().options().barSpacing),width,visible:d.model.visibleBars,expected:Math.min(base,fit),scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth};
+      });
+      if(landscape.spacing<5||landscape.spacing>9)throw new Error('D5 landscape bar spacing '+JSON.stringify(landscape));
+      if(landscape.visible!==landscape.expected)throw new Error('D5 landscape visibleBars '+JSON.stringify(landscape));
+      if(landscape.scrollWidth!==landscape.clientWidth)throw new Error('D5 landscape horizontal scroll '+JSON.stringify(landscape));
+
+      await page.setViewportSize({width:390,height:844});
+      await page.waitForTimeout(1500);
+      const portraitAgain=await page.evaluate(()=>({spacing:Number(window.__analysisDebug.state.chart.timeScale().options().barSpacing),visible:window.__analysisDebug.model.visibleBars}));
+      if(portraitAgain.spacing<5||portraitAgain.visible>50)throw new Error('D5 portrait return '+JSON.stringify(portraitAgain));
+
+      await page.evaluate(()=>{
+        const ts=window.__analysisDebug.state.chart.timeScale(),r=ts.getVisibleLogicalRange();
+        ts.setVisibleLogicalRange({from:Number(r.from)-8,to:Number(r.to)-8});
+      });
+      await page.waitForTimeout(150);
+      const manualBefore=await page.evaluate(()=>window.__analysisDebug.state.chart.timeScale().getVisibleLogicalRange());
+      await page.setViewportSize({width:844,height:390});
+      await page.waitForTimeout(1500);
+      const manualAfter=await page.evaluate(()=>window.__analysisDebug.state.chart.timeScale().getVisibleLogicalRange());
+      if(Math.abs(Number(manualAfter.from)-Number(manualBefore.from))>.5||Math.abs(Number(manualAfter.to)-Number(manualBefore.to))>.5){
+        throw new Error('D5 manual view reset on rotate '+JSON.stringify({manualBefore,manualAfter}));
+      }
       await page.close();
     }
 
@@ -371,11 +443,14 @@ function assertBoundaryStable(before,after,label){
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
       await page.goto(pageUrl+'?symbol=BTCUSDT&tf=4h&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
-      const info=await page.locator('#infoLine').textContent();
-      if(!info.includes('数据截至'))throw new Error('D4 snapshot title missing cutoff '+info);
+      const meta=await page.evaluate(()=>({info:document.getElementById('infoLine').textContent,footer:document.getElementById('cutoff').textContent}));
+      if(!meta.info.includes('数据截至'))throw new Error('D4 snapshot title missing cutoff '+meta.info);
+      const time=meta.info.match(/数据截至 (\d{4}\/\d{2}\/\d{2} \d{2}:\d{2})/);
+      if(!time||meta.footer!=='数据截至 '+time[1]+' JST')throw new Error('D5 snapshot cutoff mismatch '+JSON.stringify(meta));
       await page.close();
     }
 
+    console.log('D5 browser smoke passed: rotation settling, latest-price reservation, legend consistency, mobile table and snapshot cutoff.');
     console.log('D4 browser smoke passed: serialized refresh, recovery, mobile window, visibility and refresh-time labels.');
     console.log('D3 browser smoke passed: manual scale preservation, symbol/timeframe reset, price precision, volume autoscale and reset button.');
     console.log('D2 browser smoke passed: 4h/1h/1d time axis, default view, view preservation, incremental refresh, autoscale, limits and exact axis coordinates.');

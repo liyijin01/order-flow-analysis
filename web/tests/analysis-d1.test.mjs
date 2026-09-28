@@ -89,6 +89,18 @@ test('D1 price-axis collision hides lower priority instead of moving price',()=>
   assert.equal(out.find(x=>x.id==='zone').y,100);
 });
 
+test('D5 price-axis labels reserve space for the latest-price label',()=>{
+  const out=E.axisLabelSelection([
+    {id:'near-above',price:90,priority:3},
+    {id:'near-below',price:115,priority:2},
+    {id:'clear',price:120,priority:1}
+  ],p=>p,18,[100]);
+  assert.equal(out.find(x=>x.id==='near-above').visible,false);
+  assert.equal(out.find(x=>x.id==='near-below').visible,false);
+  assert.equal(out.find(x=>x.id==='clear').visible,true);
+  assert.equal(out.find(x=>x.id==='clear').y,120);
+});
+
 test('D1 nPOC is removed once later candle touches the price',()=>{
   assert.equal(E.isPocNaked(100,10,[{time:9,low:99,high:101},{time:11,low:101,high:102}]),true);
   assert.equal(E.isPocNaked(100,10,[{time:11,low:99,high:101}]),false);

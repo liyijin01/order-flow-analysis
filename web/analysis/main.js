@@ -7,7 +7,7 @@
   const state={
     symbol:'BTCUSDT',timeframe:'4h',snapshot:false,rules:null,bundle:null,chart:null,candles:null,volume:null,vwap:null,primitive:null,
     loadToken:0,refreshTimer:null,model:null,viewKey:null,lastDisplayCount:0,lastFullLoadAt:0,refreshWarning:null,
-    inFlight:null,abortController:null,lastSuccessAt:0,defaultViewRange:null
+    inFlight:null,abortController:null,lastSuccessAt:0,defaultViewRange:null,resizeToken:0,resizeSettle:null
   };
 
   function tfLabel(tf){return({'1h':'1小时','4h':'4小时','1d':'1天'})[tf]||tf;}
@@ -28,6 +28,29 @@
   function formatCutoffJst(iso){
     const ms=Date.parse(String(iso||''));if(!Number.isFinite(ms))return'—';
     const p=jstParts(ms);return p.year+'/'+p.month+'/'+p.day+' '+p.hour+':'+p.minute;
+  }
+  function legendEntries(){
+    const c=state.rules&&state.rules.colors||{};
+    return[
+      {key:'pq',label:'PQ 上季价值区',kind:'box',color:c.pqBorder},
+      {key:'pm',label:'PM 上月价值区',kind:'box',color:c.pmBorder},
+      {key:'pw',label:'PW 上周价值区',kind:'box',color:c.pwBorder},
+      {key:'supply',label:'供应区',kind:'box',color:c.supplyBorder},
+      {key:'demand',label:'需求区',kind:'box',color:c.demandBorder},
+      {key:'current-vwap',label:'本季 VWAP',kind:'line',color:c.vwap},
+      {key:'pq-vwap',label:'PQ VWAP',kind:'line',color:c.pqVwap},
+      {key:'npoc',label:'未回补 POC',kind:'dash',color:c.nPoc}
+    ];
+  }
+  function renderLegend(){
+    const root=$('analysisLegend');if(!root)return;
+    root.textContent='';
+    for(const e of legendEntries()){
+      const item=document.createElement('span');item.className='legend-item';item.dataset.legend=e.key;
+      const mark=document.createElement('i');mark.className='legend-mark '+(e.kind==='box'?'legend-box':(e.kind==='dash'?'legend-dash':'legend-line'));
+      if(e.kind==='box')mark.style.backgroundColor=e.color;else mark.style.color=e.color;
+      item.appendChild(mark);item.appendChild(document.createTextNode(e.label));root.appendChild(item);
+    }
   }
   function rangesClose(a,b,tolerance){
     if(!a||!b)return false;const t=Number(tolerance)||0;
@@ -107,11 +130,7 @@
       const wasDefault=rangesClose(before,state.defaultViewRange,.5);
       chart.resize(container.clientWidth,container.clientHeight);
       const ps=chart.panes();if(ps[1])ps[1].setHeight(Math.max(100,Math.round(container.clientHeight*.18)));
-      if(wasDefault&&state.model&&state.bundle){
-        const rebuilt=buildAnalysis(state.bundle);state.model=rebuilt;
-        applySeries(rebuilt);renderTable(rebuilt);updateHeader(rebuilt);
-        applyDefaultView(rebuilt.display.length);
-      }
+      scheduleResizeSettle(wasDefault,before);
       if(primitive.requestUpdate)primitive.requestUpdate();
     }).observe(container);
   }
@@ -290,11 +309,12 @@
 
   function nextFrame(){return new Promise(resolve=>requestAnimationFrame(()=>resolve()));}
 
-  async function settleDefaultWindow(bundle){
+  async function settleDefaultWindow(bundle,shouldContinue){
     if(!state.model||!bundle)return state.model;
     let model=state.model,stable=0,lastWidth=-1;
     for(let i=0;i<10&&stable<3;i++){
       await nextFrame();
+      if(shouldContinue&&!shouldContinue())return model;
       const width=Number(state.chart.timeScale().width());
       const spec=defaultWindow(model.display.length);
       if(spec.visible!==model.visibleBars){
@@ -308,6 +328,26 @@
       lastWidth=width;
     }
     return model;
+  }
+
+  function scheduleResizeSettle(wasDefault,beforeRange){
+    const token=++state.resizeToken;
+    (async()=>{
+      await nextFrame();await nextFrame();
+      if(token!==state.resizeToken||!state.model||!state.bundle)return;
+      if(!wasDefault){
+        if(beforeRange)state.chart.timeScale().setVisibleLogicalRange({from:Number(beforeRange.from),to:Number(beforeRange.to)});
+        return;
+      }
+      if(state.resizeSettle){
+        await state.resizeSettle;
+        if(token!==state.resizeToken)return;
+      }
+      const task=settleDefaultWindow(state.bundle,()=>token===state.resizeToken);
+      state.resizeSettle=task;
+      try{await task;}
+      finally{if(state.resizeSettle===task)state.resizeSettle=null;}
+    })();
   }
 
   function resetView(){
@@ -368,10 +408,11 @@
     updateSelectionState();
     if(state.snapshot){
       $('infoLine').textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe)+' · 收 '+fmtPrice(model.current)+' · 数据截至 '+formatCutoffJst(model.cutoffUtc);
+      $('cutoff').textContent='数据截至 '+formatCutoffJst(model.cutoffUtc)+' JST';
     }else{
       $('infoLine').textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe)+' · 收 '+fmtPrice(model.current)+' · 最后刷新 '+formatJstClock(state.lastSuccessAt)+' JST';
+      $('cutoff').textContent='实时 Binance USD-M · 每 '+String(Number(state.rules.display.refreshSeconds)||60)+' 秒刷新';
     }
-    $('cutoff').textContent=model.cutoffUtc?'数据截止 '+String(model.cutoffUtc).slice(0,10)+' UTC':'实时 Binance USD-M · 每 '+String(Number(state.rules.display.refreshSeconds)||60)+' 秒刷新';
     const errs=Object.keys(model.bundleErrors||{});
     if(state.refreshWarning){
       $('status').textContent='刷新失败，显示 '+D.formatJst(model.last.time).slice(-5)+' 的数据 · '+state.refreshWarning;
@@ -460,7 +501,8 @@
     try{
       await X.exportBoard({
         chart:state.chart,model:state.model,info:$('infoLine').textContent,rows:state.model.tableRows,
-        filename:state.symbol+'-'+state.timeframe+'.png',priceFormatter:fmtPrice
+        filename:state.symbol+'-'+state.timeframe+'.png',priceFormatter:fmtPrice,
+        legend:legendEntries(),footer:$('cutoff').textContent
       });
     }finally{$('downloadBtn').disabled=false;}
   }
@@ -480,7 +522,7 @@
     state.timeframe=['4h','1h','1d'].includes(q.get('tf'))?q.get('tf'):'4h';
     state.snapshot=q.get('snapshot')==='1';
     if(state.snapshot)document.body.classList.add('snapshot');
-    await loadRules();createChart();
+    await loadRules();renderLegend();createChart();
     document.querySelectorAll('[data-symbol]').forEach(b=>b.addEventListener('click',()=>setSelection(b.dataset.symbol,state.timeframe)));
     document.querySelectorAll('[data-tf]').forEach(b=>b.addEventListener('click',()=>setSelection(state.symbol,b.dataset.tf)));
     $('resetViewBtn').addEventListener('click',resetView);
@@ -493,7 +535,8 @@
       view:debugView,
       mainPaneHeight:()=>{const p=state.chart&&state.chart.panes&&state.chart.panes()[0];return p&&typeof p.getHeight==='function'?p.getHeight():Math.round($('analysisChart').clientHeight*.82);},
       candleTimes:()=>state.model?state.model.display.map(x=>x.time):[],
-      vwapTimes:()=>state.model?state.model.currentVwap.map(x=>x.time):[]
+      vwapTimes:()=>state.model?state.model.currentVwap.map(x=>x.time):[],
+      legend:()=>legendEntries()
     };
     await refresh(true);
     if(!state.snapshot){

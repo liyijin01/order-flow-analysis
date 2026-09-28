@@ -63,7 +63,9 @@
     }
     axisLayout(){
       if(!this.series)return[];
-      return E.axisLabelSelection(this.axisCandidates(),p=>this.series.priceToCoordinate(Number(p)),Number(this.model.axisMinGap)||14);
+      const currentY=this.series.priceToCoordinate(Number(this.model.currentPrice));
+      const reserved=currentY==null?[]:[Number(currentY)];
+      return E.axisLabelSelection(this.axisCandidates(),p=>this.series.priceToCoordinate(Number(p)),Number(this.model.axisMinGap)||14,reserved);
     }
     axisVisible(id){const row=this.axisLayout().find(x=>x.id===id);return!!(row&&row.visible);}
     priceAxisViews(){return this.axisCandidates().map(c=>new AxisLabelView(this,c));}
