@@ -54,7 +54,7 @@
     "tpoTicksPerRow": 100
   },
   "axisLabels": {
-    "minGapPx": 14,
+    "minGapPx": 18,
     "priorities": {
       "zone": 3,
       "value": 2,
