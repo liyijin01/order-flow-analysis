@@ -14,14 +14,14 @@
       const key=Math.floor(Number(b.time)/step)*step;
       let g=groups.get(key);
       if(!g){
-        g={time:key,openTime:key*1000,closeTime:0,open:Number(b.open),high:Number(b.high),low:Number(b.low),close:Number(b.close),volume:0,quoteVolume:0,takerBuyBase:0,takerBuyQuote:0,trades:0,count:0};
+        g={time:key,openTime:key*1000,closeTime:0,open:Number(b.open),high:Number(b.high),low:Number(b.low),close:Number(b.close),volume:0,quoteVolume:0,takerBuyBase:0,takerBuyQuote:0,trades:0,count:0,live:false};
         groups.set(key,g);
       }
       g.high=Math.max(g.high,Number(b.high));g.low=Math.min(g.low,Number(b.low));g.close=Number(b.close);
       g.closeTime=Math.max(Number(g.closeTime)||0,Number(b.closeTime)||0);
       g.volume+=Number(b.volume)||0;g.quoteVolume+=Number(b.quoteVolume)||0;
       g.takerBuyBase+=Number(b.takerBuyBase)||0;g.takerBuyQuote+=Number(b.takerBuyQuote)||0;
-      g.trades+=Number(b.trades)||0;g.count++;
+      g.trades+=Number(b.trades)||0;g.live=g.live||!!b.live;g.count++;
     }
     const expected=timeframe==='30m'?2:1;
     return Array.from(groups.values()).filter(g=>g.count===expected).sort((a,b)=>a.time-b.time);
