@@ -49,7 +49,7 @@ function assertSubset(meta,label){
       for(const tf of ['15m','30m']){
         const page=await browser.newPage({viewport:{width:1600,height:1200}});
         await page.goto(pageUrl+'?snapshot=1&anchor=swing&symbol='+symbol+'&tf='+tf,{waitUntil:'domcontentloaded',timeout:60000});
-        await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+        await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
         const meta=await page.evaluate(()=>{
           const d=window.__flowDebug,s=d.state,m=d.model,n=m.visibleBars,bars=m.display.slice(-n),pane=s.chart.panes()[0],h=pane.getHeight();
           let lo=Infinity,hi=-Infinity;for(const b of bars){lo=Math.min(lo,Number(b.low));hi=Math.max(hi,Number(b.high));}
@@ -82,18 +82,18 @@ function assertSubset(meta,label){
     {
       const page=await browser.newPage({viewport:{width:1600,height:1100}});
       await page.goto(pageUrl+'?snapshot=1&symbol=BTCUSDT&tf=15m&anchor=swing',{waitUntil:'domcontentloaded',timeout:60000});
-      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
-      await page.selectOption('#anchorMode','week');
-      await page.waitForFunction(()=>window.__flowDebug?.model?.anchor?.mode==='week'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
-      await page.selectOption('#anchorMode','quarter');
-      await page.waitForFunction(()=>window.__flowDebug?.model?.anchor?.mode==='quarter'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
-      await page.click('[data-tf="30m"]');
-      await page.waitForFunction(()=>window.__flowDebug?.model?.timeframe==='30m'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
-      await page.click('[data-symbol="ETHUSDT"]');
-      await page.waitForFunction(()=>window.__flowDebug?.model?.symbol==='ETHUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
+      await page.evaluate(()=>{const e=document.getElementById('anchorMode');e.value='week';e.dispatchEvent(new Event('change',{bubbles:true}));});
+      await page.waitForFunction(()=>window.__flowDebug?.model?.anchor?.mode==='week'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
+      await page.evaluate(()=>{const e=document.getElementById('anchorMode');e.value='quarter';e.dispatchEvent(new Event('change',{bubbles:true}));});
+      await page.waitForFunction(()=>window.__flowDebug?.model?.anchor?.mode==='quarter'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
+      await page.evaluate(()=>document.querySelector('[data-tf="30m"]').click());
+      await page.waitForFunction(()=>window.__flowDebug?.model?.timeframe==='30m'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
+      await page.evaluate(()=>document.querySelector('[data-symbol="ETHUSDT"]').click());
+      await page.waitForFunction(()=>window.__flowDebug?.model?.symbol==='ETHUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
       const anchor=await page.evaluate(()=>new Date(window.__flowDebug.model.display[Math.max(0,window.__flowDebug.model.display.length-20)].time*1000).toISOString());
       await page.goto(pageUrl+'?snapshot=1&symbol=ETHUSDT&tf=15m&anchor=manual&avwapAnchor='+encodeURIComponent(anchor),{waitUntil:'domcontentloaded',timeout:60000});
-      await page.waitForFunction(()=>window.__flowDebug?.model?.anchor?.mode==='manual'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      await page.waitForFunction(()=>window.__flowDebug?.model?.anchor?.mode==='manual'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
       await page.close();
     }
 
@@ -101,9 +101,9 @@ function assertSubset(meta,label){
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
       const requests=[];await routeMarket(page,requests,{delaySymbol:'ETHUSDT',delayMs:1200});
       await page.goto(pageUrl+'?symbol=BTCUSDT&tf=15m&anchor=swing',{waitUntil:'domcontentloaded',timeout:60000});
-      await page.waitForFunction(()=>window.__flowDebug?.model?.symbol==='BTCUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      await page.waitForFunction(()=>window.__flowDebug?.model?.symbol==='BTCUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
       await page.click('[data-symbol="ETHUSDT"]');await page.waitForTimeout(100);await page.click('[data-symbol="SOLUSDT"]');
-      await page.waitForFunction(()=>window.__flowDebug?.model?.symbol==='SOLUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      await page.waitForFunction(()=>window.__flowDebug?.model?.symbol==='SOLUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
       if(await page.evaluate(()=>window.__flowDebug.state.inFlight!==null))throw new Error('slow switch left request in flight');
       await page.close();
     }
@@ -112,7 +112,7 @@ function assertSubset(meta,label){
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
       const requests=[];await routeRefreshSeconds(page,3);await routeMarket(page,requests,{failFirstSpot:true});
       await page.goto(pageUrl+'?symbol=BTCUSDT&tf=15m&anchor=swing',{waitUntil:'domcontentloaded',timeout:60000});
-      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
       const failed=await page.evaluate(()=>({error:window.__flowDebug.state.bundle.errors.spot15m,matched:window.__flowDebug.model.spot.matched}));
       if(!failed.error||failed.matched!==0)throw new Error('spot failure precondition '+JSON.stringify(failed));
       await page.evaluate(()=>window.__flowDebug.refresh());
@@ -132,7 +132,7 @@ function assertSubset(meta,label){
     {
       const page=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:3,isMobile:true});
       await page.goto(pageUrl+'?snapshot=1&symbol=BTCUSDT&tf=15m&anchor=swing',{waitUntil:'domcontentloaded',timeout:60000});
-      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
       const portrait=await page.evaluate(()=>({spacing:Number(window.__flowDebug.state.chart.timeScale().options().barSpacing),visible:window.__flowDebug.model.visibleBars,cvdAnchor:window.__flowDebug.model.cvdAnchorTime,expected:window.__flowDebug.model.display[Math.max(0,window.__flowDebug.model.display.length-window.__flowDebug.model.visibleBars)].time,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth}));
       if(portrait.spacing<5||portrait.scrollWidth!==portrait.clientWidth||portrait.visible>55||portrait.cvdAnchor!==portrait.expected)throw new Error('flow portrait '+JSON.stringify(portrait));
       await page.setViewportSize({width:844,height:390});await page.waitForTimeout(1500);
