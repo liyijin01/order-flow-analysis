@@ -12,7 +12,8 @@
       "4h": 180,
       "1h": 240,
       "1d": 180
-    }
+    },
+    "minBarSpacingPx": 5
   },
   "valueAreas": {
     "visiblePadPct": 10,

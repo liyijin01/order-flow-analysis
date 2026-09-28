@@ -5,21 +5,33 @@
   const calcMap={'1h':'4h','4h':'1d','1d':'1w'};
   const displayCounts={'1h':720,'4h':540,'1d':365};
 
-  function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+  function isAbort(error,signal){return !!(signal&&signal.aborted)||!!(error&&error.name==='AbortError');}
+  function sleep(ms,signal){
+    if(!signal)return new Promise(r=>setTimeout(r,ms));
+    if(signal.aborted){const e=new Error('Aborted');e.name='AbortError';return Promise.reject(e);}
+    return new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>{signal.removeEventListener('abort',onAbort);resolve();},ms);
+      const onAbort=()=>{clearTimeout(timer);signal.removeEventListener('abort',onAbort);const e=new Error('Aborted');e.name='AbortError';reject(e);};
+      signal.addEventListener('abort',onAbort,{once:true});
+    });
+  }
   function intervalMs(interval){return intervalMsMap[interval]||3600000;}
   function intervalSec(interval){return Math.floor(intervalMs(interval)/1000);}
   function endpoint(){return'https://fapi.binance.com/fapi/v1/klines';}
 
-  async function requestJson(url,retries){
+  async function requestJson(url,retries,signal){
     let error=null;
     for(let i=0;i<(retries||4);i++){
       let response;
-      try{response=await fetch(url,{cache:'no-store'});}
-      catch(e){error=e;if(i+1<(retries||4))await sleep(500*(2**i));continue;}
+      try{response=await fetch(url,{cache:'no-store',signal});}
+      catch(e){
+        if(isAbort(e,signal))throw e;
+        error=e;if(i+1<(retries||4))await sleep(500*(2**i),signal);continue;
+      }
       if(response.ok)return response.json();
       if(response.status===429||response.status===418){
         const ra=Number(response.headers.get('Retry-After'));
-        await sleep(Number.isFinite(ra)&&ra>0?ra*1000:1000*(2**i));error=new Error('HTTP '+response.status);continue;
+        await sleep(Number.isFinite(ra)&&ra>0?ra*1000:1000*(2**i),signal);error=new Error('HTTP '+response.status);continue;
       }
       throw new Error('HTTP '+response.status);
     }
@@ -53,12 +65,12 @@
     });
   }
 
-  async function fetchHistory(symbol,interval,maxBars,endTime){
+  async function fetchHistory(symbol,interval,maxBars,endTime,signal){
     const pageMax=1500,all=[];let end=Number.isFinite(endTime)?Number(endTime):Date.now();
     while(all.length<maxBars){
       const limit=Math.min(pageMax,maxBars-all.length);
       const params=new URLSearchParams({symbol,interval,limit:String(limit),endTime:String(Math.floor(end))});
-      const raw=await requestJson(endpoint()+'?'+params.toString(),4);
+      const raw=await requestJson(endpoint()+'?'+params.toString(),4,signal);
       if(!Array.isArray(raw)||!raw.length)break;
       const page=parseRows(raw);all.unshift(...page);
       const earliest=page[0]&&page[0].openTime;
@@ -69,10 +81,10 @@
     return Array.from(dedup.values()).sort((a,b)=>a.time-b.time).slice(-maxBars);
   }
 
-  async function fetchLatest(symbol,interval,limit){
+  async function fetchLatest(symbol,interval,limit,signal){
     const n=Math.max(1,Math.min(3,Number(limit)||3));
     const params=new URLSearchParams({symbol,interval,limit:String(n)});
-    return parseRows(await requestJson(endpoint()+'?'+params.toString(),3));
+    return parseRows(await requestJson(endpoint()+'?'+params.toString(),3,signal));
   }
 
   function mergeBars(existing,incoming,maxBars){
@@ -95,12 +107,15 @@
     return cap;
   }
 
-  async function fetchProfile(symbol){
+  async function fetchProfile(symbol,signal){
     try{
-      const r=await fetch('profiles-'+symbol+'.json',{cache:'no-store'});
+      const r=await fetch('profiles-'+symbol+'.json',{cache:'no-store',signal});
       if(!r.ok)throw new Error('HTTP '+r.status);
       return await r.json();
-    }catch(e){return null;}
+    }catch(e){
+      if(isAbort(e,signal))throw e;
+      return null;
+    }
   }
 
   async function loadSnapshot(symbol){
@@ -111,37 +126,58 @@
     return{schema:payload.schema||'analysis-snapshot-v1',symbol,generatedAt:payload.generatedAt,cutoffUtc:payload.cutoffUtc,series,profile:payload.profile||null,errors:payload.errors||{}};
   }
 
-  async function loadLive(symbol,timeframe,onProgress){
+  async function loadLive(symbol,timeframe,onProgress,signal){
     const progress=typeof onProgress==='function'?onProgress:()=>{},errors={},series={};
     const required=[timeframe,'1h','30m',calcMap[timeframe]];
     const intervals=[];for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
     let done=0;const total=intervals.length+1;
     const step=(label)=>{done++;progress({done,total,label});};
     await Promise.all(intervals.map(interval=>
-      fetchHistory(symbol,interval,capFor(interval,timeframe))
+      fetchHistory(symbol,interval,capFor(interval,timeframe),undefined,signal)
         .then(v=>{series[interval]=v;step(interval);})
-        .catch(e=>{errors[interval]=String(e.message||e);step(interval+' failed');})
+        .catch(e=>{if(isAbort(e,signal))throw e;errors[interval]=String(e.message||e);step(interval+' failed');})
     ));
-    const profile=await fetchProfile(symbol);step('exact weekly profile');
+    const profile=await fetchProfile(symbol,signal);step('exact weekly profile');
     if(!profile)errors.profile='profiles-'+symbol+'.json unavailable';
     if(!(series[timeframe]||[]).length)throw new Error(errors[timeframe]||'display candles unavailable');
     return{schema:'analysis-live-v2',symbol,generatedAt:new Date().toISOString(),cutoffUtc:null,series,profile,errors};
   }
 
-  async function refreshLiveBundle(bundle,symbol,timeframe){
+  async function refreshLiveBundle(bundle,symbol,timeframe,signal){
     const required=[timeframe,'1h','30m',calcMap[timeframe]],intervals=[];
     for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
-    const failures=[],updates={};
+    const failures=[],updates={},fullIntervals=new Set(),errors={...(bundle&&bundle.errors||{})};
     await Promise.all(intervals.map(async interval=>{
-      try{updates[interval]=await fetchLatest(symbol,interval,3);}
-      catch(e){failures.push({interval,error:String(e.message||e)});}
+      const cap=capFor(interval,timeframe),existing=(bundle&&bundle.series&&bundle.series[interval])||[];
+      const needsFull=!!errors[interval]||existing.length<cap*.5;
+      try{
+        updates[interval]=needsFull
+          ?await fetchHistory(symbol,interval,cap,undefined,signal)
+          :await fetchLatest(symbol,interval,3,signal);
+        if(needsFull){fullIntervals.add(interval);delete errors[interval];}
+      }catch(e){
+        if(isAbort(e,signal))throw e;
+        failures.push({interval,error:String(e.message||e)});
+      }
     }));
     const series={...(bundle&&bundle.series||{})};
     for(const interval of intervals){
-      if(updates[interval])series[interval]=mergeBars(series[interval]||[],updates[interval],capFor(interval,timeframe));
+      if(!updates[interval])continue;
+      series[interval]=fullIntervals.has(interval)
+        ?updates[interval]
+        :mergeBars(series[interval]||[],updates[interval],capFor(interval,timeframe));
+    }
+    let profile=bundle&&bundle.profile||null;
+    if(!profile||errors.profile){
+      const recovered=await fetchProfile(symbol,signal);
+      if(recovered){profile=recovered;delete errors.profile;}
+      else{
+        errors.profile='profiles-'+symbol+'.json unavailable';
+        failures.push({interval:'profile',error:errors.profile});
+      }
     }
     return{
-      bundle:{...(bundle||{}),schema:'analysis-live-v2',symbol,generatedAt:new Date().toISOString(),series,errors:{...(bundle&&bundle.errors||{})}},
+      bundle:{...(bundle||{}),schema:'analysis-live-v2',symbol,generatedAt:new Date().toISOString(),series,profile,errors},
       failures
     };
   }

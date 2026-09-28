@@ -25,14 +25,55 @@ function rows(symbol,interval){
   cache.set(key,out);return out;
 }
 
-async function routeMarket(page,requests){
+async function routeMarket(page,requests,options){
+  const opts=options||{};let failed30m=false;
   await page.route(/https:\/\/fapi\.binance\.com\/fapi\/v1\/klines.*/,async route=>{
     const u=new URL(route.request().url()),symbol=u.searchParams.get('symbol'),interval=u.searchParams.get('interval');
     const endRaw=u.searchParams.get('endTime'),end=endRaw==null?Infinity:Number(endRaw);
     const limit=Math.min(1500,Number(u.searchParams.get('limit'))||500);
-    requests.push({interval,limit,endTime:endRaw});
+    requests.push({symbol,interval,limit,endTime:endRaw});
+    if(opts.delayMs)await new Promise(resolve=>setTimeout(resolve,opts.delayMs));
+    if(opts.failFirst30m&&interval==='30m'&&!failed30m){
+      failed30m=true;await route.fulfill({status:500,contentType:'text/plain',body:'synthetic 30m failure'});return;
+    }
     const body=rows(symbol,interval).filter(r=>Number(r[0])<=end).slice(-limit);
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+  });
+}
+
+async function routeRefreshSeconds(page,seconds){
+  await page.route('**/config/analysis-rules.json',async route=>{
+    const response=await route.fetch(),body=await response.json();
+    body.display.refreshSeconds=seconds;
+    await route.fulfill({response,contentType:'application/json',body:JSON.stringify(body)});
+  });
+}
+
+function exactProfileFixture(symbol){
+  const now=new Date(),today=Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate());
+  const day=(new Date(today).getUTCDay()+6)%7,monday=today-day*86400000,previous=monday-7*86400000;
+  const expectedDays=Array.from({length:7},(_,i)=>new Date(previous+i*86400000).toISOString().slice(0,10));
+  const binSize=symbol==='BTCUSDT'?1:(symbol==='ETHUSDT'?.1:.01);
+  const center=Math.round((baseMap[symbol]||100)*.85/binSize);
+  return{
+    schema:'profiles-v2',symbol,binSize,
+    generatedAt:new Date().toISOString(),source:'synthetic smoke fixture',
+    profiles:{
+      previous:{
+        label:expectedDays[0]+' to '+expectedDays[6],expectedDays,days:expectedDays,missingDays:[],failedDays:[],complete:true,
+        rows:[[center-2,100,90],[center-1,180,160],[center,300,280],[center+1,170,150],[center+2,90,80]]
+      },
+      current:{label:'current',expectedDays:[],days:[],missingDays:[],failedDays:[],complete:true,rows:[]}
+    }
+  };
+}
+
+async function failProfileOnce(page){
+  let failed=false;
+  await page.route(/\/profiles-([A-Z]+)\.json(?:\?.*)?$/,async route=>{
+    const m=route.request().url().match(/profiles-([A-Z]+)\.json/),symbol=m&&m[1]||'BTCUSDT';
+    if(!failed){failed=true;await route.fulfill({status:404,contentType:'text/plain',body:'synthetic profile miss'});return;}
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(exactProfileFixture(symbol))});
   });
 }
 
@@ -217,6 +258,125 @@ function assertBoundaryStable(before,after,label){
 
       await page.close();
     }
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}});
+      const requests=[],network={delayMs:0};await routeRefreshSeconds(page,3);await routeMarket(page,requests,network);
+      await page.goto(pageUrl+'?symbol=BTCUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>window.__analysisDebug?.model?.symbol==='BTCUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
+      requests.length=0;network.delayMs=1200;
+      await page.click('[data-symbol="ETHUSDT"]');
+      await page.waitForFunction(()=>window.__analysisDebug?.model?.symbol==='ETHUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:20000});
+      await page.waitForFunction(()=>window.__analysisDebug.state.inFlight===null,undefined,{timeout:2000});
+      const ethFull=requests.filter(x=>x.symbol==='ETHUSDT'&&x.interval==='1h'&&x.limit===1500);
+      if(ethFull.length!==3)throw new Error('D4 slow switch duplicated ETH 1h history pages '+JSON.stringify(ethFull));
+      const loadState=await page.evaluate(()=>({token:window.__analysisDebug.state.loadToken,inFlight:!!window.__analysisDebug.state.inFlight,info:document.getElementById('infoLine').textContent}));
+      if(loadState.inFlight)throw new Error('D4 slow switch left load in flight '+JSON.stringify(loadState));
+      if(!loadState.info.includes('最后刷新'))throw new Error('D4 live title missing last refresh '+loadState.info);
+      await page.close();
+    }
+
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}});
+      const requests=[];await routeRefreshSeconds(page,3);await routeMarket(page,requests);
+      await page.goto(pageUrl+'?symbol=BTCUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      await page.evaluate(()=>Object.defineProperty(document,'hidden',{configurable:true,value:true}));
+      await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+      requests.length=0;
+      await page.waitForTimeout(15500);
+      if(requests.length!==0)throw new Error('D4 hidden page refreshed '+JSON.stringify(requests));
+      await page.evaluate(()=>Object.defineProperty(document,'hidden',{configurable:true,value:false}));
+      await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+      await page.waitForFunction(()=>window.__analysisDebug.state.inFlight!==null,{timeout:2000}).catch(()=>{});
+      await page.waitForTimeout(500);
+      if(requests.length<1)throw new Error('D4 foreground did not refresh');
+      await page.close();
+    }
+
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}});
+      const requests=[];await routeMarket(page,requests,{failFirst30m:true});
+      await page.goto(pageUrl+'?symbol=ETHUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const missing=await page.evaluate(()=>({
+        pmMissing:window.__analysisDebug.model.missing.some(m=>m.type==='价值区 PM'),
+        error:window.__analysisDebug.state.bundle.errors['30m'],
+        len:(window.__analysisDebug.state.bundle.series['30m']||[]).length
+      }));
+      if(!missing.pmMissing||!missing.error)throw new Error('D4 30m failure precondition failed '+JSON.stringify(missing));
+      await page.evaluate(()=>window.__analysisDebug.refresh());
+      await page.waitForFunction(()=>window.__analysisDebug.state.inFlight===null,{timeout:30000});
+      const recovered=await page.evaluate(()=>({
+        pmMissing:window.__analysisDebug.model.missing.some(m=>m.type==='价值区 PM'),
+        error:window.__analysisDebug.state.bundle.errors['30m'],
+        len:(window.__analysisDebug.state.bundle.series['30m']||[]).length,
+        status:document.getElementById('status').textContent
+      }));
+      if(recovered.pmMissing||recovered.error||recovered.len<3000||recovered.status.includes('缺失 30m')){
+        throw new Error('D4 30m recovery failed '+JSON.stringify(recovered));
+      }
+      await page.close();
+    }
+
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}});
+      const requests=[];await failProfileOnce(page);await routeMarket(page,requests);
+      await page.goto(pageUrl+'?symbol=BTCUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const before=await page.evaluate(()=>({
+        profile:!!window.__analysisDebug.state.bundle.profile,
+        error:window.__analysisDebug.state.bundle.errors.profile,
+        exactPw:window.__analysisDebug.model.allRegions.some(r=>r.scope==='PW'&&r.source==='exact')
+      }));
+      if(before.profile||!before.error||before.exactPw)throw new Error('D4 profile failure precondition failed '+JSON.stringify(before));
+      await page.evaluate(()=>window.__analysisDebug.refresh());
+      await page.waitForFunction(()=>window.__analysisDebug.state.inFlight===null,{timeout:30000});
+      const after=await page.evaluate(()=>({
+        profile:!!window.__analysisDebug.state.bundle.profile,
+        error:window.__analysisDebug.state.bundle.errors.profile,
+        exactPw:window.__analysisDebug.model.allRegions.some(r=>r.scope==='PW'&&r.source==='exact')
+      }));
+      if(!after.profile||after.error||!after.exactPw)throw new Error('D4 profile recovery failed '+JSON.stringify(after));
+      await page.close();
+    }
+
+    {
+      const page=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:3,isMobile:true});
+      const requests=[];await routeMarket(page,requests);
+      await page.goto(pageUrl+'?symbol=ETHUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const mobile=await page.evaluate(()=> {
+        const d=window.__analysisDebug,s=d.state,width=s.chart.timeScale().width(),rules=s.rules;
+        const base=Number(rules.display.visibleBars['4h']),ratio=Number(rules.display.rightOffset)/base;
+        const fit=Math.floor(width/(Number(rules.display.minBarSpacingPx)*(1+ratio)));
+        return{
+          spacing:Number(s.chart.timeScale().options().barSpacing),
+          width,visible:d.model.visibleBars,expected:Math.max(30,Math.min(base,fit)),
+          scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth,
+          info:document.getElementById('infoLine').textContent,lastSuccessAt:s.lastSuccessAt
+        };
+      });
+      if(mobile.spacing<5)throw new Error('D4 mobile bar spacing '+JSON.stringify(mobile));
+      if(mobile.scrollWidth!==mobile.clientWidth)throw new Error('D4 mobile horizontal scroll '+JSON.stringify(mobile));
+      if(mobile.visible!==mobile.expected)throw new Error('D4 mobile visibleBars '+JSON.stringify(mobile));
+      if(!mobile.info.includes('最后刷新')||Math.abs(Date.now()-Number(mobile.lastSuccessAt))>70000)throw new Error('D4 live refresh time '+JSON.stringify(mobile));
+      await page.setViewportSize({width:844,height:390});
+      await page.waitForTimeout(250);
+      const landscape=await page.evaluate(()=>({range:window.__analysisDebug.state.chart.timeScale().getVisibleLogicalRange(),visible:window.__analysisDebug.model.visibleBars,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth}));
+      if(landscape.scrollWidth!==landscape.clientWidth)throw new Error('D4 landscape horizontal scroll '+JSON.stringify(landscape));
+      await page.close();
+    }
+
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}});
+      await page.goto(pageUrl+'?symbol=BTCUSDT&tf=4h&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const info=await page.locator('#infoLine').textContent();
+      if(!info.includes('数据截至'))throw new Error('D4 snapshot title missing cutoff '+info);
+      await page.close();
+    }
+
+    console.log('D4 browser smoke passed: serialized refresh, recovery, mobile window, visibility and refresh-time labels.');
     console.log('D3 browser smoke passed: manual scale preservation, symbol/timeframe reset, price precision, volume autoscale and reset button.');
     console.log('D2 browser smoke passed: 4h/1h/1d time axis, default view, view preservation, incremental refresh, autoscale, limits and exact axis coordinates.');
   } finally {await browser.close();}
