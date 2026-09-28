@@ -24,8 +24,10 @@
     state.rules=await r.json();return state.rules;
   }
 
-  function createLine(color,pane,width){
-    return state.chart.addSeries(L.LineSeries,{color,lineWidth:width||1.5,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false},pane);
+  function createLine(color,pane,width,autoscale){
+    const options={color,lineWidth:width||1.5,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false};
+    if(autoscale===false)options.autoscaleInfoProvider=()=>null;
+    return state.chart.addSeries(L.LineSeries,options,pane);
   }
   function createChart(){
     const container=$('flowChart');
@@ -43,7 +45,7 @@
       upColor:'rgba(0,0,0,0)',downColor:'#d9dde6',borderUpColor:'#d9dde6',borderDownColor:'#d9dde6',wickUpColor:'#d9dde6',wickDownColor:'#d9dde6',
       priceFormat:{type:'price',precision:precision(),minMove:tick},lastValueVisible:true,priceLineVisible:false
     },0);
-    state.s2u=createLine(state.rules.colors.sigma2,0,1);state.s2l=createLine(state.rules.colors.sigma2,0,1);
+    state.s2u=createLine(state.rules.colors.sigma2,0,1,false);state.s2l=createLine(state.rules.colors.sigma2,0,1,false);
     state.perpCvd=createLine(state.rules.colors.perpCvd,1,1.6);state.perpLive=createLine(state.rules.colors.live,1,2.8);
     state.spotCvd=createLine(state.rules.colors.spotCvd,2,1.6);state.spotLive=createLine(state.rules.colors.live,2,2.8);
     state.depthBid=createLine(state.rules.colors.bid,3,1.2);state.depthAsk=createLine(state.rules.colors.ask,3,1.2);
