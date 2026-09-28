@@ -76,7 +76,7 @@ async function installRoutes(page, counters){
       page.on('pageerror',err=>errors.push(preset+': '+err.message));
       const counters={binance:0};await installRoutes(page,counters);
       await page.goto('http://127.0.0.1:8000/chart.html?fixture='+preset,{waitUntil:'domcontentloaded',timeout:60000});
-      await page.waitForFunction(()=>document.getElementById('status')?.textContent.includes('SAMPLE 样例数据'),{timeout:30000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.includes('SAMPLE 样例数据'),undefined,{timeout:30000});
       if(counters.binance!==0) throw new Error(preset+' sample requested Binance '+counters.binance+' times');
       const visible=await page.evaluate(()=>{
         const box=document.getElementById('chart').getBoundingClientRect();
@@ -111,7 +111,7 @@ async function installRoutes(page, counters){
         await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(rows)});
       });
       await page.goto('http://127.0.0.1:8000/chart.html?symbol=BTCUSDT&market=um&interval=1h',{waitUntil:'domcontentloaded',timeout:60000});
-      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:30000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:30000});
       const before=await page.evaluate(()=>window.__orderFlowChartDebug.state.data.at(-1).close);
       await page.evaluate(()=>window.__orderFlowChartDebug.refreshLatest());
       await page.waitForTimeout(300);
@@ -128,7 +128,7 @@ async function installRoutes(page, counters){
         page.on('pageerror',err=>errors.push(auto+' '+symbol+': '+err.message));
         const counters={binance:0};await installRoutes(page,counters);
         await page.goto('http://127.0.0.1:8000/chart.html?symbol='+symbol+'&market=um&auto='+auto,{waitUntil:'domcontentloaded',timeout:60000});
-        await page.waitForFunction(()=>document.getElementById('status')?.textContent.includes('annotations '),{timeout:60000});
+        await page.waitForFunction(()=>document.getElementById('status')?.textContent.includes('annotations '),undefined,{timeout:60000});
         const state=await page.evaluate(()=>({stats:window.__orderFlowChartDebug.annotationStats(),coords:window.__orderFlowChartDebug.annotationCoordinates(),status:document.getElementById('status').textContent}));
         if(!state.stats.rendered) throw new Error(auto+' '+symbol+' rendered no annotations');
         if(state.status.includes('SAMPLE')) throw new Error(auto+' '+symbol+' incorrectly in sample mode');
