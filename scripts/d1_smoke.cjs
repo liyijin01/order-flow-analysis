@@ -279,20 +279,20 @@ function assertBoundaryStable(before,after,label){
       await page.goto(pageUrl+'?symbol=ETHUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const missing=await page.evaluate(()=>({
-        pm:window.__analysisDebug.model.allRegions.some(r=>r.scope==='PM'),
+        pmMissing:window.__analysisDebug.model.missing.some(m=>m.type==='价值区 PM'),
         error:window.__analysisDebug.state.bundle.errors['30m'],
         len:(window.__analysisDebug.state.bundle.series['30m']||[]).length
       }));
-      if(missing.pm||!missing.error)throw new Error('D4 30m failure precondition failed '+JSON.stringify(missing));
+      if(!missing.pmMissing||!missing.error)throw new Error('D4 30m failure precondition failed '+JSON.stringify(missing));
       await page.evaluate(()=>window.__analysisDebug.refresh());
       await page.waitForFunction(()=>window.__analysisDebug.state.inFlight===null,{timeout:30000});
       const recovered=await page.evaluate(()=>({
-        pm:window.__analysisDebug.model.allRegions.some(r=>r.scope==='PM'),
+        pmMissing:window.__analysisDebug.model.missing.some(m=>m.type==='价值区 PM'),
         error:window.__analysisDebug.state.bundle.errors['30m'],
         len:(window.__analysisDebug.state.bundle.series['30m']||[]).length,
         status:document.getElementById('status').textContent
       }));
-      if(!recovered.pm||recovered.error||recovered.len<3000||recovered.status.includes('缺失 30m')){
+      if(recovered.pmMissing||recovered.error||recovered.len<3000||recovered.status.includes('缺失 30m')){
         throw new Error('D4 30m recovery failed '+JSON.stringify(recovered));
       }
       await page.close();
