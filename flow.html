@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><link rel="icon" href="data:,">
+<title>Order Flow Analysis · Flow Board</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans CJK SC",Arial,sans-serif;color:#e7eaf0;background:#1b2130}
+*{box-sizing:border-box}body{margin:0;background:#1b2130;color:#e7eaf0}main{max-width:1660px;margin:0 auto;padding:14px}a{color:#dfe6f5}
+.topbar,.controls{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.eyebrow{font-size:10px;letter-spacing:.16em;color:#8290a8}.topbar strong{font-size:13px}
+.controls{margin:10px 0}.switches{display:flex;gap:6px;align-items:center}.switches span{font-size:10px;color:#8e98aa}
+button,select{font:inherit;font-size:11px;color:#dce3ef;background:#232b3c;border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:7px 10px}
+button{cursor:pointer}button.active{background:#34425b;border-color:#8aa4cd;color:#fff}button:disabled{opacity:.55}
+#status{font-size:10px;color:#8e98aa;min-height:16px;margin-bottom:8px}.error{color:#ff9f9f!important}
+#flowCapture{background:#1b2130;border:1px solid rgba(255,255,255,.09);padding:10px}.capture-title{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;margin-bottom:6px}
+#boardTitle{font-size:20px;font-weight:700}.capture-meta,#infoLine{font-size:10px;color:#8e98aa}#infoLine{margin-bottom:7px;color:#cbd3e1}
+#flowChartWrap{position:relative}#flowChart{width:100%;height:980px;border:1px solid rgba(255,255,255,.09);background:#1b2130}
+.pane-label{position:absolute;left:10px;z-index:4;font-size:10px;font-weight:600;color:#dfe6f5;background:rgba(27,33,48,.78);padding:2px 5px;pointer-events:none;max-width:calc(100% - 90px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.table-wrap{margin-top:10px;overflow:auto;border-top:1px solid rgba(255,255,255,.09)}table{width:100%;border-collapse:collapse;font-size:10px;font-variant-numeric:tabular-nums}th,td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left;white-space:nowrap}th{color:#8e98aa;background:#181e2b}td{color:#cdd5e3}
+.capture-footer,.page-footer{display:flex;justify-content:space-between;gap:12px;margin-top:8px;font-size:9px;color:#717d91}.page-footer{font-size:10px}
+body.snapshot main{max-width:1600px;padding:0}body.snapshot .topbar,body.snapshot .controls,body.snapshot #status,body.snapshot .page-footer{display:none}body.snapshot #flowCapture{border:0;padding:10px;width:1600px}body.snapshot #flowChart{height:980px}
+@media(max-width:900px){main{padding:8px}#flowChart{height:820px}.capture-title{display:block}.capture-meta{margin-top:4px}}
+@media(max-width:600px){.controls{align-items:flex-start}.table-wrap{font-size:9px}th,td{padding:6px 5px}#flowChart{height:760px}}
+</style>
+</head>
+<body><main>
+<div class="topbar"><div><div class="eyebrow">ORDER FLOW ANALYSIS / FLOW BOARD</div><strong>订单流成品图</strong></div><div><a href="analysis.html">Analysis Board</a> · <a href="index.html">Order Flow</a></div></div>
+<div class="controls">
+  <div class="switches"><span>币种</span><button data-symbol="BTCUSDT">BTC</button><button data-symbol="ETHUSDT">ETH</button><button data-symbol="SOLUSDT">SOL</button></div>
+  <div class="switches"><span>周期</span><button data-tf="15m">15m</button><button data-tf="30m">30m</button></div>
+  <label>AVWAP <select id="anchorMode"><option value="swing">Swing</option><option value="week">Week</option><option value="quarter">Quarter</option><option value="manual">Manual URL</option></select></label>
+  <button id="resetViewBtn">重置视图</button><button id="downloadBtn">下载 PNG</button>
+</div>
+<div id="status">Loading…</div>
+<section id="flowCapture">
+  <div class="capture-title"><div id="boardTitle">BTCUSDT.P · 15m</div><div class="capture-meta">AVWAP / PERP CVD / SPOT CVD / DEPTH</div></div>
+  <div id="infoLine">Loading market data…</div>
+  <div id="flowChartWrap"><div id="flowChart"></div><div id="paneLabels"></div></div>
+  <div class="table-wrap"><table><thead><tr><th>模块</th><th>项目</th><th>值</th><th>数据/时间</th></tr></thead><tbody id="flowRows"><tr><td colspan="4">Loading…</td></tr></tbody></table></div>
+  <div class="capture-footer"><span>Binance public market data · read only</span><span id="cutoff"></span></div>
+</section>
+<div class="page-footer"><span>Display time: JST · calculations use UTC boundaries</span><span>Depth archive is USD-M only; no interpolation.</span></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js" integrity="sha384-KkYqTZlM13Zya6fVUF3IGCBOQ1ehFeJVVgxaVvD/0MebineF9EI8Jkd3NnWNChqN" crossorigin="anonymous"></script>
+<script src="config/symbols.js"></script>
+<script src="web/analysis/data.js"></script>
+<script src="web/analysis/engine.js"></script>
+<script src="web/analysis/export.js"></script>
+<script src="web/analysis/runtime.js"></script>
+<script src="web/chart/indicators.js"></script>
+<script src="web/chart/render/primitives/base.js"></script>
+<script src="web/chart/render/primitives/band.js"></script>
+<script src="web/chart/render/primitives/vline.js"></script>
+<script src="web/flow/engine.js"></script>
+<script src="web/flow/data.js"></script>
+<script src="web/flow/main.js"></script>
+</body></html>
