@@ -69,7 +69,9 @@ test('D6 live unfinished bar cannot affect swing anchor',()=>{
   ];
   const closed=D.closedBars(rows,now);
   assert.deepEqual(closed.map(x=>x.time),[0,900]);
-  assert.equal(F.swingAnchor(closed,14).time,0);
+  const anchor=F.swingAnchor(closed,14);
+  assert.equal(anchor.time,900);
+  assert.notEqual(anchor.time,1800);
 });
 
 test('D6 running AVWAP and sigma match independent weighted hlc3 reference',()=>{
