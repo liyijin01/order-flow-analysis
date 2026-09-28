@@ -49,11 +49,31 @@ async function routeRefreshSeconds(page,seconds){
   });
 }
 
+function exactProfileFixture(symbol){
+  const now=new Date(),today=Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate());
+  const day=(new Date(today).getUTCDay()+6)%7,monday=today-day*86400000,previous=monday-7*86400000;
+  const expectedDays=Array.from({length:7},(_,i)=>new Date(previous+i*86400000).toISOString().slice(0,10));
+  const binSize=symbol==='BTCUSDT'?1:(symbol==='ETHUSDT'?.1:.01);
+  const center=Math.round((baseMap[symbol]||100)*.85/binSize);
+  return{
+    schema:'profiles-v2',symbol,binSize,
+    generatedAt:new Date().toISOString(),source:'synthetic smoke fixture',
+    profiles:{
+      previous:{
+        label:expectedDays[0]+' to '+expectedDays[6],expectedDays,days:expectedDays,missingDays:[],failedDays:[],complete:true,
+        rows:[[center-2,100,90],[center-1,180,160],[center,300,280],[center+1,170,150],[center+2,90,80]]
+      },
+      current:{label:'current',expectedDays:[],days:[],missingDays:[],failedDays:[],complete:true,rows:[]}
+    }
+  };
+}
+
 async function failProfileOnce(page){
   let failed=false;
-  await page.route(/\/profiles-[A-Z]+\.json(?:\?.*)?$/,async route=>{
+  await page.route(/\/profiles-([A-Z]+)\.json(?:\?.*)?$/,async route=>{
+    const m=route.request().url().match(/profiles-([A-Z]+)\.json/),symbol=m&&m[1]||'BTCUSDT';
     if(!failed){failed=true;await route.fulfill({status:404,contentType:'text/plain',body:'synthetic profile miss'});return;}
-    await route.continue();
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(exactProfileFixture(symbol))});
   });
 }
 
