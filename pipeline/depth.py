@@ -86,13 +86,14 @@ def _snapshot_payload(rows, required_levels, close, extra_pct):
     for level in required_levels:
         if -float(level) not in seen or float(level) not in seen:
             return None, "missing-level"
+    price_check_levels = {float(x) for x in required_levels}
     for side in ("bid", "ask"):
         prev_depth = prev_notional = -math.inf
         for pct, depth, notional in sorted(full[side]):
             if depth < prev_depth or notional < prev_notional:
                 return None, "non-monotonic"
             prev_depth, prev_notional = depth, notional
-            if depth > 0 and close and close > 0:
+            if pct in price_check_levels and depth > 0 and close and close > 0:
                 avg = notional / depth
                 deviation = abs(avg - close) / close * 100
                 if deviation > pct + float(extra_pct):
