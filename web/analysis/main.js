@@ -299,7 +299,7 @@
       const spec=defaultWindow(model.display.length);
       if(spec.visible!==model.visibleBars){
         model=buildAnalysis(bundle);state.model=model;
-        applySeries(model);renderTable(model);updateHeader(model);
+        applySeries(model);renderTable(model);
         applyDefaultView(model.display.length);
         stable=0;lastWidth=-1;continue;
       }
@@ -419,9 +419,9 @@
         state.refreshWarning=result.failures.length?result.failures.map(x=>x.interval).join(', ')+' 更新失败':null;
         let model=buildAnalysis(result.bundle);state.model=model;
         applySeries(model);renderTable(model);
+        model=await settleDefaultWindow(result.bundle);
         state.lastSuccessAt=Date.now();
         updateHeader(model);
-        model=await settleDefaultWindow(result.bundle);
         return model;
       }catch(e){
         if(controller.signal.aborted||(e&&e.name==='AbortError'))return null;
