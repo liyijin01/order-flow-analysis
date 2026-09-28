@@ -58,6 +58,7 @@ function assertSubset(meta,label){
             autos:[s.candles,s.perpCvd,s.spotCvd,s.depthDelta[0],s.depthDelta[1],s.depthDelta[2]].map(x=>x.priceScale().options().autoScale),
             paneHeight:h,yLow:s.candles.priceToCoordinate(lo),yHigh:s.candles.priceToCoordinate(hi),
             visible:m.visibleBars,range:d.view().range,anchor:m.anchor,buckets:m.buckets,
+            cvdAnchorTime:m.cvdAnchorTime,expectedCvdAnchor:m.display[Math.max(0,m.display.length-m.visibleBars)].time,
             labels:Array.from(document.querySelectorAll('.pane-label')).map(x=>x.textContent)
           };
         });
@@ -67,6 +68,11 @@ function assertSubset(meta,label){
         const occupied=Math.abs(Number(meta.yLow)-Number(meta.yHigh));
         if(!(occupied>=.6*Number(meta.paneHeight)))throw new Error(symbol+' '+tf+' price occupancy '+occupied+'/'+meta.paneHeight);
         if(meta.labels.length!==6)throw new Error(symbol+' '+tf+' pane labels '+meta.labels.length);
+        if(meta.cvdAnchorTime!==meta.expectedCvdAnchor)throw new Error(symbol+' '+tf+' CVD anchor '+JSON.stringify({actual:meta.cvdAnchorTime,expected:meta.expectedCvdAnchor}));
+        if(!meta.labels[0].includes('Binance USD-M')||!meta.labels[0].includes('anchor '))throw new Error(symbol+' '+tf+' price pane label incomplete '+meta.labels[0]);
+        if(!meta.labels[1].includes('Binance Perp')||!meta.labels[1].includes('from '))throw new Error(symbol+' '+tf+' perp CVD label incomplete '+meta.labels[1]);
+        if(!meta.labels[2].includes('Binance Spot')||!meta.labels[2].includes('from '))throw new Error(symbol+' '+tf+' spot CVD label incomplete '+meta.labels[2]);
+        for(const label of meta.labels.slice(3))if(!label.includes('Binance USD-M book')||!label.includes('through '))throw new Error(symbol+' '+tf+' depth label incomplete '+label);
         if(JSON.stringify(meta.buckets)!==JSON.stringify([[0,1],[1,2],[2,5]]))throw new Error('bucket labels/config mismatch');
         if(tf==='30m'&&meta.avwap.some(t=>!new Set(meta.times.price).has(t)))throw new Error('30m AVWAP logical time leak');
         await page.close();
@@ -127,14 +133,17 @@ function assertSubset(meta,label){
       const page=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:3,isMobile:true});
       await page.goto(pageUrl+'?snapshot=1&symbol=BTCUSDT&tf=15m&anchor=swing',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
-      const portrait=await page.evaluate(()=>({spacing:Number(window.__flowDebug.state.chart.timeScale().options().barSpacing),visible:window.__flowDebug.model.visibleBars,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth}));
-      if(portrait.spacing<5||portrait.scrollWidth!==portrait.clientWidth||portrait.visible>55)throw new Error('flow portrait '+JSON.stringify(portrait));
+      const portrait=await page.evaluate(()=>({spacing:Number(window.__flowDebug.state.chart.timeScale().options().barSpacing),visible:window.__flowDebug.model.visibleBars,cvdAnchor:window.__flowDebug.model.cvdAnchorTime,expected:window.__flowDebug.model.display[Math.max(0,window.__flowDebug.model.display.length-window.__flowDebug.model.visibleBars)].time,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth}));
+      if(portrait.spacing<5||portrait.scrollWidth!==portrait.clientWidth||portrait.visible>55||portrait.cvdAnchor!==portrait.expected)throw new Error('flow portrait '+JSON.stringify(portrait));
       await page.setViewportSize({width:844,height:390});await page.waitForTimeout(1500);
       const landscape=await page.evaluate(()=>({spacing:Number(window.__flowDebug.state.chart.timeScale().options().barSpacing),visible:window.__flowDebug.model.visibleBars,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth}));
       if(landscape.spacing<5||landscape.scrollWidth!==landscape.clientWidth)throw new Error('flow landscape '+JSON.stringify(landscape));
       await page.setViewportSize({width:390,height:844});await page.waitForTimeout(1500);
-      const again=await page.evaluate(()=>({spacing:Number(window.__flowDebug.state.chart.timeScale().options().barSpacing),visible:window.__flowDebug.model.visibleBars}));
-      if(again.spacing<5||again.visible>55)throw new Error('flow portrait return '+JSON.stringify(again));
+      const again=await page.evaluate(()=>({spacing:Number(window.__flowDebug.state.chart.timeScale().options().barSpacing),visible:window.__flowDebug.model.visibleBars,cvdAnchor:window.__flowDebug.model.cvdAnchorTime,expected:window.__flowDebug.model.display[Math.max(0,window.__flowDebug.model.display.length-window.__flowDebug.model.visibleBars)].time}));
+      if(again.spacing<5||again.visible>55||again.cvdAnchor!==again.expected)throw new Error('flow portrait return '+JSON.stringify(again));
+      await page.evaluate(()=>window.__flowDebug.resetView());await page.waitForTimeout(200);
+      const reset=await page.evaluate(()=>({cvdAnchor:window.__flowDebug.model.cvdAnchorTime,expected:window.__flowDebug.model.display[Math.max(0,window.__flowDebug.model.display.length-window.__flowDebug.model.visibleBars)].time}));
+      if(reset.cvdAnchor!==reset.expected)throw new Error('flow reset did not re-anchor CVD '+JSON.stringify(reset));
       await page.evaluate(()=>{window.__d6Export=null;window.OrderFlowAnalysisExport.exportFlowBoard=async o=>{window.__d6Export=o;return{width:1,height:1};};});
       await page.click('#downloadBtn');
       const exp=await page.evaluate(()=>window.__d6Export&&({labels:window.__d6Export.paneLabels.length,rows:window.__d6Export.rows.length}));
