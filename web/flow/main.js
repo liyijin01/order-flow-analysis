@@ -195,12 +195,14 @@
       state.depthCutoff[i].setContext({bars:model.display,intervalSec:D.intervalSec(state.timeframe),timeOffsetSec:9*3600,autoscale:false});
       if(state.depthCutoff[i].requestUpdate)state.depthCutoff[i].requestUpdate();
     }
-    const n=model.display.length;
-    if(!same||!oldRange)R.applyDefaultView(state.chart,state.rules,state.timeframe,n,state);
-    else if(followed){const d=n-oldCount,next={from:Number(oldRange.from)+d,to:Number(oldRange.to)+d};state.chart.timeScale().setVisibleLogicalRange(next);}
-    else state.chart.timeScale().setVisibleLogicalRange(oldRange);
+    const n=model.display.length,oldWasDefault=same&&R.rangesClose(oldRange,state.defaultViewRange,.5);
+    let needsSettle=false;
+    if(!same||!oldRange){R.applyDefaultView(state.chart,state.rules,state.timeframe,n,state);needsSettle=true;}
+    else if(followed){const d=n-oldCount,next={from:Number(oldRange.from)+d,to:Number(oldRange.to)+d};state.chart.timeScale().setVisibleLogicalRange(next);if(oldWasDefault)state.defaultViewRange={from:next.from,to:next.to};needsSettle=oldWasDefault;}
+    else{state.chart.timeScale().setVisibleLogicalRange(oldRange);if(oldWasDefault)state.defaultViewRange={from:Number(oldRange.from),to:Number(oldRange.to)};needsSettle=oldWasDefault;}
     state.viewKey=key;state.lastDisplayCount=n;
     layoutPanes();
+    return needsSettle;
   }
 
   function latestDepth(model,index){
@@ -277,7 +279,7 @@
       before:()=>loadRules(),load:(token,full,signal)=>getBundle(token,full,signal),
       apply:async result=>{
         state.bundle=result.bundle;state.refreshWarning=result.failures&&result.failures.length?result.failures.map(x=>x.interval).join(', ')+' 更新失败':null;
-        const model=buildModel(result.bundle);state.model=model;applySeries(model);renderTable(model);await settleDefault();state.lastSuccessAt=Date.now();updateHeader(model);return model;
+        const model=buildModel(result.bundle);state.model=model;const needsSettle=applySeries(model);renderTable(model);if(needsSettle)await settleDefault();state.lastSuccessAt=Date.now();updateHeader(model);return model;
       },
       error:e=>{console.error(e);state.refreshWarning=String(e.message||e);$('status').textContent='加载失败：'+state.refreshWarning;$('status').classList.add('error');return null;}
     });
