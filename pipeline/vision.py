@@ -70,11 +70,9 @@ def _download_file(url: str, destination: Path, retries: int = 3, sleep=time.sle
     return "failed", str(last_error) if last_error else "unknown network error"
 
 
-def download_verified_day(symbol: str, day, temp_dir: Path, sleep=time.sleep) -> DownloadResult:
-    ds = day.isoformat()
-    url = BASE.format(s=symbol, d=ds)
+def download_verified_url(url: str, temp_dir: Path, filename: str, sleep=time.sleep) -> DownloadResult:
     temp_dir.mkdir(parents=True, exist_ok=True)
-    zip_path = temp_dir / f"{symbol}-aggTrades-{ds}.zip"
+    zip_path = temp_dir / filename
 
     checksum_status, checksum_text = fetch_text(url + ".CHECKSUM", sleep=sleep)
     if checksum_status == "missing":
