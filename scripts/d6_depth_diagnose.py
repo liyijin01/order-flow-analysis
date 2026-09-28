@@ -1,5 +1,8 @@
 from __future__ import annotations
-import csv, io, math, zipfile
+import csv, io, math, zipfile, sys
+from pathlib import Path
+ROOT_PATH=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT_PATH))
 from scripts.d6_probe import verify_zip, csv_rows_from_zip, has_header, to_ms, fetch_1m_close
 
 ROOT="https://data.binance.vision/data"
