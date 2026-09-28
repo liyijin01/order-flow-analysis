@@ -10,7 +10,7 @@ from pipeline.depth import (
 )
 
 
-LEVELS = [0.2, 1, 2, 3, 4, 5]
+LEVELS = [1, 2, 5]
 
 
 def snapshot_rows(ts="2026-09-27 00:00:30"):
@@ -77,6 +77,16 @@ class DepthTests(unittest.TestCase):
         result = parse_bookdepth_csv(io.StringIO(csv_text(rows)), LEVELS, closes)
         self.assertEqual(result["rejected"], 1)
         self.assertEqual(result["reasons"].get("time-order"), 1)
+
+    def test_unused_source_level_average_mismatch_does_not_reject(self):
+        closes = {1790467200: 100}
+        rows = snapshot_rows()
+        for row in rows:
+            if abs(float(row[1])) == 0.2:
+                row[3] = row[2] * 80
+        result = parse_bookdepth_csv(io.StringIO(csv_text(rows)), LEVELS, closes)
+        self.assertEqual(result["rejected"], 0)
+        self.assertEqual(len(result["snapshots"]), 1)
 
     def test_bucket_diff(self):
         snap = {"bid": {"1": 100, "2": 240, "5": 600}, "ask": {"1": 80, "2": 190, "5": 500}}
