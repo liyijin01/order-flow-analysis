@@ -9,21 +9,17 @@
       setTimeout(()=>URL.revokeObjectURL(url),1000);resolve();
     },'image/png'));
   }
-  function legend(ctx,x,y){
-    const entries=[
-      {label:'价值区',kind:'box',color:'rgba(96,165,250,.7)'},
-      {label:'供应区',kind:'box',color:'#ef5350'},
-      {label:'需求区',kind:'box',color:'#26a69a'},
-      {label:'VWAP',kind:'line',color:'#5cb85c'},
-      {label:'未回补 POC',kind:'dash',color:'#ff9800'}
-    ];
+  function legend(ctx,x,y,entries){
     ctx.font='13px -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif';ctx.textBaseline='middle';
     let cx=x;
-    for(const e of entries){
+    for(const e of entries||[]){
       ctx.save();ctx.strokeStyle=e.color;ctx.fillStyle=e.color;ctx.lineWidth=2;
       if(e.kind==='box')ctx.fillRect(cx,y-6,12,12);
       else{if(e.kind==='dash')ctx.setLineDash([6,4]);ctx.beginPath();ctx.moveTo(cx,y);ctx.lineTo(cx+18,y);ctx.stroke();}
-      ctx.restore();ctx.fillStyle='#cbd3e1';ctx.fillText(e.label,cx+(e.kind==='box'?18:24),y);cx+=e.kind==='box'?105:130;
+      ctx.restore();
+      const labelX=cx+(e.kind==='box'?18:24);
+      ctx.fillStyle='#cbd3e1';ctx.fillText(e.label,labelX,y);
+      cx=labelX+ctx.measureText(e.label).width+26;
     }
   }
   function rowText(ctx,text,x,y,align){
@@ -39,7 +35,7 @@
     const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');
     ctx.fillStyle='#1b2130';ctx.fillRect(0,0,width,height);
     ctx.fillStyle='#f1f5f9';ctx.font='600 18px -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif';ctx.fillText(options.info||'',18,28);
-    legend(ctx,18,58);
+    legend(ctx,18,58,options.legend||[]);
     ctx.drawImage(shot,0,headerH,width,chartH);
 
     const tableY=headerH+chartH;
@@ -58,8 +54,8 @@
     }
     const footerY=height-14;rowText(ctx,'order-flow-analysis · read only',18,footerY,'left');
     ctx.textAlign='right';ctx.fillStyle='#8e98aa';ctx.font='11px -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif';
-    const cutoff=model.cutoffUtc?'数据截止 '+String(model.cutoffUtc).slice(0,10)+' UTC':'实时 Binance USD-M';
-    ctx.fillText(cutoff,width-18,footerY);
+    const footer=options.footer||'实时 Binance USD-M';
+    ctx.fillText(footer,width-18,footerY);
     await download(canvas,options.filename||'analysis.png');
     return{width,height};
   }
