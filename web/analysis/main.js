@@ -288,6 +288,23 @@
     return spec;
   }
 
+  function nextFrame(){return new Promise(resolve=>requestAnimationFrame(()=>resolve()));}
+
+  async function settleDefaultWindow(bundle){
+    if(!state.model||!bundle)return state.model;
+    await nextFrame();await nextFrame();
+    let model=state.model;
+    for(let i=0;i<2;i++){
+      const spec=defaultWindow(model.display.length);
+      if(spec.visible===model.visibleBars)break;
+      model=buildAnalysis(bundle);state.model=model;
+      applySeries(model);renderTable(model);updateHeader(model);
+      applyDefaultView(model.display.length);
+      await nextFrame();
+    }
+    return model;
+  }
+
   function resetView(){
     if(!state.model)return;
     state.candles.priceScale().applyOptions({autoScale:true});
@@ -396,15 +413,10 @@
         state.bundle=result.bundle;
         state.refreshWarning=result.failures.length?result.failures.map(x=>x.interval).join(', ')+' 更新失败':null;
         let model=buildAnalysis(result.bundle);state.model=model;
-        applySeries(model);
-        const settledVisible=defaultWindow(model.display.length).visible;
-        if(settledVisible!==model.visibleBars){
-          model=buildAnalysis(result.bundle);state.model=model;
-          applySeries(model);applyDefaultView(model.display.length);
-        }
-        renderTable(model);
+        applySeries(model);renderTable(model);
         state.lastSuccessAt=Date.now();
         updateHeader(model);
+        model=await settleDefaultWindow(result.bundle);
         return model;
       }catch(e){
         if(controller.signal.aborted||(e&&e.name==='AbortError'))return null;
