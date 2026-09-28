@@ -260,13 +260,13 @@ function assertBoundaryStable(before,after,label){
     }
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
-      const requests=[];await routeRefreshSeconds(page,3);await routeMarket(page,requests,{delayMs:1200});
+      const requests=[],network={delayMs:0};await routeRefreshSeconds(page,3);await routeMarket(page,requests,network);
       await page.goto(pageUrl+'?symbol=BTCUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
-      await page.waitForFunction(()=>window.__analysisDebug?.model?.symbol==='BTCUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
-      requests.length=0;
+      await page.waitForFunction(()=>window.__analysisDebug?.model?.symbol==='BTCUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
+      requests.length=0;network.delayMs=1200;
       await page.click('[data-symbol="ETHUSDT"]');
-      await page.waitForFunction(()=>window.__analysisDebug?.model?.symbol==='ETHUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:20000});
-      await page.waitForFunction(()=>window.__analysisDebug.state.inFlight===null,{timeout:2000});
+      await page.waitForFunction(()=>window.__analysisDebug?.model?.symbol==='ETHUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:20000});
+      await page.waitForFunction(()=>window.__analysisDebug.state.inFlight===null,undefined,{timeout:2000});
       const ethFull=requests.filter(x=>x.symbol==='ETHUSDT'&&x.interval==='1h'&&x.limit===1500);
       if(ethFull.length!==3)throw new Error('D4 slow switch duplicated ETH 1h history pages '+JSON.stringify(ethFull));
       const loadState=await page.evaluate(()=>({token:window.__analysisDebug.state.loadToken,inFlight:!!window.__analysisDebug.state.inFlight,info:document.getElementById('infoLine').textContent}));
