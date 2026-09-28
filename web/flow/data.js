@@ -39,12 +39,12 @@
     const step=label=>{done++;progress({done,total,label});};
     let perp15m=[],spot15m=[],perp1h=[],depth=null;
     await Promise.all([
-      D.fetchHistory(symbol,'15m',cap,undefined,signal,'um').then(v=>{perp15m=v;step('perp 15m');}).catch(e=>{if(isAbort(e,signal))throw e;errors.perp=String(e.message||e);step('perp failed');}),
-      D.fetchHistory(symbol,'15m',cap,undefined,signal,'spot').then(v=>{spot15m=v;step('spot 15m');}).catch(e=>{if(isAbort(e,signal))throw e;errors.spot=String(e.message||e);step('spot failed');}),
+      D.fetchHistory(symbol,'15m',cap,undefined,signal,'um').then(v=>{perp15m=v;step('perp 15m');}).catch(e=>{if(isAbort(e,signal))throw e;errors.perp15m=String(e.message||e);step('perp failed');}),
+      D.fetchHistory(symbol,'15m',cap,undefined,signal,'spot').then(v=>{spot15m=v;step('spot 15m');}).catch(e=>{if(isAbort(e,signal))throw e;errors.spot15m=String(e.message||e);step('spot failed');}),
       fetchDepth(symbol,signal).then(v=>{depth=v;step('depth archive');}).catch(e=>{if(isAbort(e,signal))throw e;errors.depth=String(e.message||e);step('depth failed');}),
       ...(anchorMode==='quarter'?[D.fetchHistory(symbol,'1h',2300,undefined,signal,'um').then(v=>{perp1h=v;step('perp 1h');}).catch(e=>{if(isAbort(e,signal))throw e;errors.perp1h=String(e.message||e);step('1h failed');})]:[])
     ]);
-    if(!perp15m.length)throw new Error(errors.perp||'perp 15m unavailable');
+    if(!perp15m.length)throw new Error(errors.perp15m||'perp 15m unavailable');
     return{schema:'flow-live-v1',symbol,generatedAt:new Date().toISOString(),cutoffUtc:null,perp15m,spot15m,perp1h,depth,errors,cap};
   }
   async function refreshLiveBundle(bundle,symbol,anchorMode,manualAnchorMs,signal){
