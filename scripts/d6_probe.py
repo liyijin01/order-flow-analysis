@@ -251,6 +251,7 @@ def probe_bookdepth_symbol(symbol):
             "header": header,
             "columnCount": len(rows[0]),
             "timestampUnits": sorted(units),
+            "sampleTimestamp": data[0][ti] if data else None,
             "snapshots": len(unique_ts),
             "intervalSeconds": {
                 "min": min(gaps) if gaps else None,
@@ -335,7 +336,7 @@ def main():
             f"- cumulative monotonic: {b['cumulativeMonotonic']}",
         ]
         for f in b["files"]:
-            lines.append(f"- {f['date']}: header={f['header']} units={f['timestampUnits']} snapshots={f['snapshots']} interval={f['intervalSeconds']}")
+            lines.append(f"- {f['date']}: header={f['header']} units={f['timestampUnits']} sample={f['sampleTimestamp']} snapshots={f['snapshots']} interval={f['intervalSeconds']}")
         lines.append("")
     lines.append("## 15m kline files")
     for k in out["klines"]:
