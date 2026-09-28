@@ -128,17 +128,17 @@
     const raw=I.anchoredVwap(calcBars,anchor.time,1);
     if(!raw.length)throw new Error('AVWAP data unavailable from selected anchor');
     const avwap=alignedAvwap(raw,display),lastAv=avwap[avwap.length-1];
-    const perp=F.cvdSeries(display,display),spot=F.cvdSeries(display,spotDisplay);
+    const spec=R.defaultWindow(state.chart,state.rules,state.timeframe,display.length);
+    const cvdIndex=Math.max(0,display.length-spec.visible),cvdAnchorTime=Number(display[cvdIndex].time);
+    const perp=F.cvdSeries(display,display,cvdAnchorTime),spot=F.cvdSeries(display,spotDisplay,cvdAnchorTime);
     const depthPayload=bundle.depth||{snapshots:[],bucketsUsed:state.rules.depthBuckets,cutoffUtc:null,totalSnapshots:0,snapshotsRejected:0};
     const buckets=depthPayload.bucketsUsed||state.rules.depthBuckets;
     const depth=F.asOfDepth(display,depthPayload.snapshots||[],D.intervalSec(state.timeframe),buckets);
-    const spec=R.defaultWindow(state.chart,state.rules,state.timeframe,display.length);
     return{
       symbol:state.symbol,timeframe:state.timeframe,display,spotDisplay,anchor,avwap,lastAv,perp,spot,depth,buckets,
       current:Number(display[display.length-1].close),visibleBars:spec.visible,cutoffUtc:bundle.cutoffUtc||null,
       depthCutoffUtc:depthPayload.cutoffUtc||null,depthTotal:Number(depthPayload.totalSnapshots)||0,
-      depthRejected:Number(depthPayload.snapshotsRejected)||0,errors:bundle.errors||{},
-      cvdAnchorTime:display[0].time
+      depthRejected:Number(depthPayload.snapshotsRejected)||0,errors:bundle.errors||{},cvdAnchorTime
     };
   }
 
@@ -212,13 +212,15 @@
   function updateLabels(model){
     const p=model.lastAv||{},d0=latestDepth(model,0),d1=latestDepth(model,1),d2=latestDepth(model,2);
     const bl=i=>{const x=model.buckets[i];return Number(x[0])+'-'+Number(x[1])+'%';};
+    const anchorCalc=state.anchorMode==='quarter'?'1h calc':'15m calc';
+    const depthThrough=model.depthCutoffUtc?' · through '+String(model.depthCutoffUtc).slice(0,10)+' 23:59 UTC':' · unavailable';
     ensurePaneLabels([
-      'USD-M Perp · AVWAP '+state.anchorMode+' '+fmtPrice(p.vwap),
+      'USD-M Perp · AVWAP '+state.anchorMode+' '+fmtPrice(p.vwap)+' · Binance USD-M · anchor '+D.formatJst(model.anchor.time)+' · '+anchorCalc,
       'Volume By Side (delta) Perpetuals '+F.formatSigned(model.perp.value)+' · Binance Perp · from '+D.formatJst(model.cvdAnchorTime),
       'Volume By Side (delta) Spot '+F.formatSigned(model.spot.value)+' · Binance Spot · from '+D.formatJst(model.cvdAnchorTime),
-      'Depth '+bl(0)+' · bid '+F.formatSigned(d0&&d0.bid)+' / ask '+F.formatSigned(d0&&d0.ask)+' / Δ '+F.formatSigned(d0&&d0.delta)+' · Binance USD-M book',
-      'Depth '+bl(1)+' · Δ '+F.formatSigned(d1&&d1.delta)+' · Binance USD-M book',
-      'Depth '+bl(2)+' · Δ '+F.formatSigned(d2&&d2.delta)+' · Binance USD-M book'
+      'Depth '+bl(0)+' · bid '+F.formatSigned(d0&&d0.bid)+' / ask '+F.formatSigned(d0&&d0.ask)+' / Δ '+F.formatSigned(d0&&d0.delta)+' · Binance USD-M book'+depthThrough,
+      'Depth '+bl(1)+' · Δ '+F.formatSigned(d1&&d1.delta)+' · Binance USD-M book'+depthThrough,
+      'Depth '+bl(2)+' · Δ '+F.formatSigned(d2&&d2.delta)+' · Binance USD-M book'+depthThrough
     ]);
   }
   function renderTable(model){
@@ -255,14 +257,21 @@
     for(let i=0;i<10&&stable<3;i++){
       await R.nextFrame();if(shouldContinue&&!shouldContinue())return;
       const width=Number(state.chart.timeScale().width()),spec=R.defaultWindow(state.chart,state.rules,state.timeframe,state.model.display.length);
-      state.model.visibleBars=spec.visible;R.applyDefaultView(state.chart,state.rules,state.timeframe,state.model.display.length,state);
+      if(spec.visible!==state.model.visibleBars&&state.bundle){
+        const rebuilt=buildModel(state.bundle);state.model=rebuilt;
+        applySeries(rebuilt);renderTable(rebuilt);updateLabels(rebuilt);
+      }
+      R.applyDefaultView(state.chart,state.rules,state.timeframe,state.model.display.length,state);
       if(Math.abs(width-last)<.5)stable++;else stable=0;last=width;
     }
   }
   function resetView(){
-    if(!state.model)return;
+    if(!state.model||!state.bundle)return;
     R.resetView([state.candles,state.perpCvd,state.spotCvd,state.depthBid,state.depthAsk,...state.depthDelta],state.chart,null);
-    const spec=R.applyDefaultView(state.chart,state.rules,state.timeframe,state.model.display.length,state);state.model.visibleBars=spec.visible;
+    state.viewKey=null;
+    const rebuilt=buildModel(state.bundle);state.model=rebuilt;
+    applySeries(rebuilt);renderTable(rebuilt);updateHeader(rebuilt);
+    const spec=R.applyDefaultView(state.chart,state.rules,state.timeframe,rebuilt.display.length,state);rebuilt.visibleBars=spec.visible;
   }
 
   async function getBundle(token,full,signal){
