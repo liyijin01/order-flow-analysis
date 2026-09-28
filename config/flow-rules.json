@@ -1,0 +1,44 @@
+{
+  "display": {
+    "visibleBars": {"15m": 480, "30m": 336},
+    "rightOffset": 24,
+    "minBarSpacingPx": 5,
+    "refreshSeconds": 60
+  },
+  "panes": {
+    "price": 0.45,
+    "perpCvd": 0.11,
+    "spotCvd": 0.11,
+    "depth1": 0.12,
+    "depth2": 0.105,
+    "depth3": 0.105
+  },
+  "avwap": {
+    "defaultMode": "swing",
+    "lookbackDays": 14,
+    "bands": [1, 2],
+    "fillBand": 1
+  },
+  "depthLevels": [0.2, 1, 2, 3, 4, 5],
+  "depthBuckets": [[0, 1], [1, 2], [2, 5]],
+  "depthDays": 21,
+  "depthValidation": {
+    "averagePriceExtraPct": 0.5,
+    "maxRejectedPct": 5
+  },
+  "colors": {
+    "vwap": "#f5f5f5",
+    "sigma1": "rgba(96,165,250,.72)",
+    "sigma1Fill": "rgba(96,165,250,.10)",
+    "sigma2": "rgba(167,139,250,.62)",
+    "anchor": "rgba(244,246,251,.58)",
+    "perpCvd": "#60a5fa",
+    "spotCvd": "#f59e0b",
+    "live": "rgba(203,213,225,.45)",
+    "bid": "#26a69a",
+    "ask": "#ef5350",
+    "positive": "rgba(38,166,154,.62)",
+    "negative": "rgba(239,83,80,.62)",
+    "depthCutoff": "rgba(251,191,36,.75)"
+  }
+}
