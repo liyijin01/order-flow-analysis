@@ -308,6 +308,37 @@ def kline_probe_days(market, symbol):
     return latest_available_dates(lambda ds: f"{directory}{symbol}-15m-{ds}.zip", 3)
 
 
+
+def diagnose_bookdepth_day(symbol, ds):
+    url = f"{ROOT}/futures/um/daily/bookDepth/{symbol}/{symbol}-bookDepth-{ds}.zip"
+    rows = csv_rows_from_zip(verify_zip(url))
+    header = rows[0] if rows and has_header(rows[0]) else None
+    data = rows[1:] if header else rows
+    if header:
+        names = [x.strip().lower() for x in header]
+        ti, pi, di, ni = names.index("timestamp"), names.index("percentage"), names.index("depth"), names.index("notional")
+    else:
+        ti, pi, di, ni = 0, 1, 2, 3
+    grouped = {}
+    for r in data:
+        if len(r) <= max(ti, pi, di, ni):
+            continue
+        ts = to_ms(r[ti])
+        grouped.setdefault(ts, []).append((float(r[pi]), float(r[di]), float(r[ni])))
+    closes = fetch_1m_close(symbol, ds)
+    keys = sorted(grouped)
+    picks = [keys[i] for i in sorted(set([0, len(keys)//4, len(keys)//2, (len(keys)*3)//4, len(keys)-1]))]
+    out = []
+    for ts in picks:
+        close = nearest_close(closes, ts)
+        levels = []
+        for pct, depth, notional in sorted(grouped[ts], key=lambda x: x[0]):
+            avg = notional/depth if depth else None
+            dev = abs(avg-close)/close*100 if avg and close else None
+            levels.append({"pct":pct,"depth":depth,"notional":notional,"avg":avg,"close":close,"devPct":dev,"limitPct":abs(pct)+0.5})
+        out.append({"time":datetime.fromtimestamp(ts/1000,tz=timezone.utc).isoformat(),"levels":levels})
+    return out
+
 def main():
     out = {
         "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00","Z"),
@@ -323,6 +354,10 @@ def main():
             for ds in days:
                 print("probing kline", market, symbol, ds, flush=True)
                 out["klines"].append(probe_kline_file(market, symbol, ds))
+    out["diagnostics"] = {
+        "BTCUSDT-2026-09-07": diagnose_bookdepth_day("BTCUSDT","2026-09-07"),
+        "BTCUSDT-2026-09-10": diagnose_bookdepth_day("BTCUSDT","2026-09-10"),
+    }
     Path("d6-probe.json").write_text(json.dumps(out, indent=2), encoding="utf-8")
     lines = ["# D6 data probe", ""]
     for b in out["bookDepth"]:
