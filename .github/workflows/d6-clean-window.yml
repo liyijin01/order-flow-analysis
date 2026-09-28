@@ -1,5 +1,5 @@
 name: D6 clean-window diagnostic
-# rerun after flow autoscale fix
+# rerun after hidden-control smoke fix
 
 on:
   push:
