@@ -292,15 +292,20 @@
 
   async function settleDefaultWindow(bundle){
     if(!state.model||!bundle)return state.model;
-    await nextFrame();await nextFrame();
-    let model=state.model;
-    for(let i=0;i<2;i++){
-      const spec=defaultWindow(model.display.length);
-      if(spec.visible===model.visibleBars)break;
-      model=buildAnalysis(bundle);state.model=model;
-      applySeries(model);renderTable(model);updateHeader(model);
-      applyDefaultView(model.display.length);
+    let model=state.model,stable=0,lastWidth=-1;
+    for(let i=0;i<10&&stable<3;i++){
       await nextFrame();
+      const width=Number(state.chart.timeScale().width());
+      const spec=defaultWindow(model.display.length);
+      if(spec.visible!==model.visibleBars){
+        model=buildAnalysis(bundle);state.model=model;
+        applySeries(model);renderTable(model);updateHeader(model);
+        applyDefaultView(model.display.length);
+        stable=0;lastWidth=-1;continue;
+      }
+      if(Math.abs(width-lastWidth)<.5)stable++;
+      else stable=0;
+      lastWidth=width;
     }
     return model;
   }
