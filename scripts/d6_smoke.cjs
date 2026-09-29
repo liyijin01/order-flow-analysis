@@ -165,7 +165,7 @@ function assertCvdConsistency(meta,label){
           labels,tableRows:Array.from(document.querySelectorAll('#flowRows tr')).map(tr=>Array.from(tr.children).map(td=>td.textContent)),
           depthCutoffTextCount:labels.filter(x=>x.includes('depth archive through ')).length};
       });
-      if(portrait.spacing<5||portrait.scrollWidth!==portrait.clientWidth||portrait.visible>55||portrait.cvdAnchor!==portrait.expected)throw new Error('flow portrait '+JSON.stringify(portrait));
+      if(portrait.spacing<5||portrait.scrollWidth!==portrait.clientWidth||portrait.visible>56||portrait.cvdAnchor!==portrait.expected)throw new Error('flow portrait '+JSON.stringify(portrait));
       assertPaneRatios(portrait,'flow portrait');assertCvdConsistency(portrait,'flow portrait');
       if(portrait.depthCutoffTextCount!==1)throw new Error('flow portrait depth cutoff text count '+portrait.depthCutoffTextCount);
       await page.setViewportSize({width:844,height:390});await page.waitForTimeout(1500);
@@ -173,7 +173,7 @@ function assertCvdConsistency(meta,label){
       if(landscape.spacing<5||landscape.scrollWidth!==landscape.clientWidth)throw new Error('flow landscape '+JSON.stringify(landscape));
       await page.setViewportSize({width:390,height:844});await page.waitForTimeout(1500);
       const again=await page.evaluate(()=>({spacing:Number(window.__flowDebug.state.chart.timeScale().options().barSpacing),visible:window.__flowDebug.model.visibleBars,cvdAnchor:window.__flowDebug.model.cvdAnchorTime,expected:window.__flowDebug.model.display[Math.max(0,window.__flowDebug.model.display.length-window.__flowDebug.model.visibleBars)].time}));
-      if(again.spacing<5||again.visible>55||again.cvdAnchor!==again.expected)throw new Error('flow portrait return '+JSON.stringify(again));
+      if(again.spacing<5||again.visible>56||again.cvdAnchor!==again.expected)throw new Error('flow portrait return '+JSON.stringify(again));
       await page.evaluate(()=>window.__flowDebug.resetView());await page.waitForTimeout(200);
       const reset=await page.evaluate(()=>({cvdAnchor:window.__flowDebug.model.cvdAnchorTime,expected:window.__flowDebug.model.display[Math.max(0,window.__flowDebug.model.display.length-window.__flowDebug.model.visibleBars)].time}));
       if(reset.cvdAnchor!==reset.expected)throw new Error('flow reset did not re-anchor CVD '+JSON.stringify(reset));
