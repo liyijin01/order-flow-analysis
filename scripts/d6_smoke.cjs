@@ -145,7 +145,7 @@ function assertSubset(meta,label){
       const reset=await page.evaluate(()=>({cvdAnchor:window.__flowDebug.model.cvdAnchorTime,expected:window.__flowDebug.model.display[Math.max(0,window.__flowDebug.model.display.length-window.__flowDebug.model.visibleBars)].time}));
       if(reset.cvdAnchor!==reset.expected)throw new Error('flow reset did not re-anchor CVD '+JSON.stringify(reset));
       await page.evaluate(()=>{window.__d6Export=null;window.OrderFlowAnalysisExport.exportFlowBoard=async o=>{window.__d6Export=o;return{width:1,height:1};};});
-      await page.click('#downloadBtn');
+      await page.evaluate(()=>document.getElementById('downloadBtn').click());
       const exp=await page.evaluate(()=>window.__d6Export&&({labels:window.__d6Export.paneLabels.length,rows:window.__d6Export.rows.length}));
       if(!exp||exp.labels!==6||exp.rows<7)throw new Error('flow export missing panes/labels '+JSON.stringify(exp));
       await page.close();
