@@ -41,6 +41,22 @@ function assertSubset(meta,label){
     if(!times.every(t=>allowed.has(t)))throw new Error(label+' '+name+' introduced non-display time');
   }
 }
+function assertPaneRatios(meta,label){
+  const total=meta.paneHeights.reduce((a,b)=>a+Number(b),0);
+  if(!(total>0))throw new Error(label+' pane height total '+total);
+  for(let i=0;i<meta.paneHeights.length;i++){
+    const actual=100*Number(meta.paneHeights[i])/total,expected=100*Number(meta.paneRatios[i]);
+    if(Math.abs(actual-expected)>2)throw new Error(label+' pane ratio '+i+' actual='+actual.toFixed(2)+' expected='+expected.toFixed(2));
+  }
+}
+function assertCvdConsistency(meta,label){
+  const perp=meta.tableRows.find(r=>r[0]==='CVD'&&r[1]==='Binance Perp');
+  const spot=meta.tableRows.find(r=>r[0]==='CVD'&&r[1]==='Binance Spot');
+  if(!perp||!spot)throw new Error(label+' missing CVD table rows '+JSON.stringify(meta.tableRows));
+  const pv=perp[2].split(' · ')[0],sv=spot[2].split(' · ')[0];
+  if(!meta.labels[1].includes('Perpetuals '+pv+' ·')||!meta.labels[1].endsWith('from '+perp[3]))throw new Error(label+' perp CVD label/table mismatch '+JSON.stringify({label:meta.labels[1],row:perp}));
+  if(!meta.labels[2].includes('Spot '+sv+' ·')||!meta.labels[2].endsWith('from '+spot[3]))throw new Error(label+' spot CVD label/table mismatch '+JSON.stringify({label:meta.labels[2],row:spot}));
+}
 
 (async()=>{
   const browser=await chromium.launch({channel:'chrome',headless:true});
@@ -53,17 +69,25 @@ function assertSubset(meta,label){
         const meta=await page.evaluate(()=>{
           const d=window.__flowDebug,s=d.state,m=d.model,n=m.visibleBars,bars=m.display.slice(-n),pane=s.chart.panes()[0],h=pane.getHeight();
           let lo=Infinity,hi=-Infinity;for(const b of bars){lo=Math.min(lo,Number(b.low));hi=Math.max(hi,Number(b.high));}
+          const paneRules=s.rules.panes,labels=Array.from(document.querySelectorAll('.pane-label')).map(x=>x.textContent);
           return{
             panes:d.paneCount(),times:d.seriesTimes(),avwap:m.avwap.map(x=>x.time),
             autos:[s.candles,s.perpCvd,s.spotCvd,s.depthDelta[0],s.depthDelta[1],s.depthDelta[2]].map(x=>x.priceScale().options().autoScale),
             paneHeight:h,yLow:s.candles.priceToCoordinate(lo),yHigh:s.candles.priceToCoordinate(hi),
+            paneHeights:s.chart.panes().map(x=>x.getHeight()),paneRatios:[paneRules.price,paneRules.perpCvd,paneRules.spotCvd,paneRules.depth1,paneRules.depth2,paneRules.depth3],
+            priceFormats:[s.perpCvd,s.spotCvd,s.depthDelta[0],s.depthDelta[1],s.depthDelta[2]].map(x=>x.options().priceFormat&&x.options().priceFormat.type),
             visible:m.visibleBars,range:d.view().range,anchor:m.anchor,buckets:m.buckets,
             cvdAnchorTime:m.cvdAnchorTime,expectedCvdAnchor:m.display[Math.max(0,m.display.length-m.visibleBars)].time,
-            labels:Array.from(document.querySelectorAll('.pane-label')).map(x=>x.textContent)
+            labels,tableRows:Array.from(document.querySelectorAll('#flowRows tr')).map(tr=>Array.from(tr.children).map(td=>td.textContent)),
+            depthCutoffTextCount:labels.filter(x=>x.includes('depth archive through ')).length
           };
         });
         if(meta.panes!==6)throw new Error(symbol+' '+tf+' pane count '+meta.panes);
         assertSubset({...meta.times,avwap:meta.avwap},symbol+' '+tf);
+        assertPaneRatios(meta,symbol+' '+tf);
+        assertCvdConsistency(meta,symbol+' '+tf);
+        if(meta.priceFormats.some(x=>x!=='custom'))throw new Error(symbol+' '+tf+' secondary price formats '+JSON.stringify(meta.priceFormats));
+        if(meta.depthCutoffTextCount!==1)throw new Error(symbol+' '+tf+' depth cutoff text count '+meta.depthCutoffTextCount);
         if(meta.autos.some(x=>x!==true))throw new Error(symbol+' '+tf+' independent autoscale '+JSON.stringify(meta.autos));
         const occupied=Math.abs(Number(meta.yLow)-Number(meta.yHigh));
         if(!(occupied>=.6*Number(meta.paneHeight)))throw new Error(symbol+' '+tf+' price occupancy '+occupied+'/'+meta.paneHeight);
@@ -72,7 +96,8 @@ function assertSubset(meta,label){
         if(!meta.labels[0].includes('Binance USD-M')||!meta.labels[0].includes('anchor '))throw new Error(symbol+' '+tf+' price pane label incomplete '+meta.labels[0]);
         if(!meta.labels[1].includes('Binance Perp')||!meta.labels[1].includes('from '))throw new Error(symbol+' '+tf+' perp CVD label incomplete '+meta.labels[1]);
         if(!meta.labels[2].includes('Binance Spot')||!meta.labels[2].includes('from '))throw new Error(symbol+' '+tf+' spot CVD label incomplete '+meta.labels[2]);
-        for(const label of meta.labels.slice(3))if(!label.includes('Binance USD-M book')||!label.includes('through '))throw new Error(symbol+' '+tf+' depth label incomplete '+label);
+        for(const label of meta.labels.slice(3))if(!label.includes('Binance USD-M book'))throw new Error(symbol+' '+tf+' depth label incomplete '+label);
+        if(!meta.labels[3].includes('depth archive through ')||meta.labels[4].includes('depth archive through ')||meta.labels[5].includes('depth archive through '))throw new Error(symbol+' '+tf+' depth cutoff label placement '+JSON.stringify(meta.labels.slice(3)));
         if(JSON.stringify(meta.buckets)!==JSON.stringify([[0,1],[1,2],[2,5]]))throw new Error('bucket labels/config mismatch');
         if(tf==='30m'&&meta.avwap.some(t=>!new Set(meta.times.price).has(t)))throw new Error('30m AVWAP logical time leak');
         await page.close();
@@ -133,8 +158,16 @@ function assertSubset(meta,label){
       const page=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:3,isMobile:true});
       await page.goto(pageUrl+'?snapshot=1&symbol=BTCUSDT&tf=15m&anchor=swing',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
-      const portrait=await page.evaluate(()=>({spacing:Number(window.__flowDebug.state.chart.timeScale().options().barSpacing),visible:window.__flowDebug.model.visibleBars,cvdAnchor:window.__flowDebug.model.cvdAnchorTime,expected:window.__flowDebug.model.display[Math.max(0,window.__flowDebug.model.display.length-window.__flowDebug.model.visibleBars)].time,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth}));
+      const portrait=await page.evaluate(()=>{
+        const d=window.__flowDebug,s=d.state,m=d.model,p=s.rules.panes,labels=Array.from(document.querySelectorAll('.pane-label')).map(x=>x.textContent);
+        return{spacing:Number(s.chart.timeScale().options().barSpacing),visible:m.visibleBars,cvdAnchor:m.cvdAnchorTime,expected:m.display[Math.max(0,m.display.length-m.visibleBars)].time,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth,
+          paneHeights:s.chart.panes().map(x=>x.getHeight()),paneRatios:[p.price,p.perpCvd,p.spotCvd,p.depth1,p.depth2,p.depth3],
+          labels,tableRows:Array.from(document.querySelectorAll('#flowRows tr')).map(tr=>Array.from(tr.children).map(td=>td.textContent)),
+          depthCutoffTextCount:labels.filter(x=>x.includes('depth archive through ')).length};
+      });
       if(portrait.spacing<5||portrait.scrollWidth!==portrait.clientWidth||portrait.visible>55||portrait.cvdAnchor!==portrait.expected)throw new Error('flow portrait '+JSON.stringify(portrait));
+      assertPaneRatios(portrait,'flow portrait');assertCvdConsistency(portrait,'flow portrait');
+      if(portrait.depthCutoffTextCount!==1)throw new Error('flow portrait depth cutoff text count '+portrait.depthCutoffTextCount);
       await page.setViewportSize({width:844,height:390});await page.waitForTimeout(1500);
       const landscape=await page.evaluate(()=>({spacing:Number(window.__flowDebug.state.chart.timeScale().options().barSpacing),visible:window.__flowDebug.model.visibleBars,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth}));
       if(landscape.spacing<5||landscape.scrollWidth!==landscape.clientWidth)throw new Error('flow landscape '+JSON.stringify(landscape));
