@@ -1,5 +1,4 @@
-name: D6 clean-window diagnostic
-# rerun after hidden-control smoke fix
+name: D6 depth validation diagnostic
 
 on:
   push:
@@ -16,51 +15,32 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - run: npm install --no-save playwright-core@1.55.0
-      - name: Attach data branch
-        run: |
-          git fetch origin data
-          git worktree add --detach datarepo origin/data
-      - name: Build analysis parity data
-        run: |
-          python -m pipeline.build --data-dir datarepo --output-dir _d6-generated
-          python scripts/d1_build_snapshot.py --profile-dir _d6-generated --output-dir _flow-site/analysis/data
-      - name: Build 16-day clean-window flow snapshot
+      - name: Diagnose 21-day ETH depth validation
         run: |
           python - <<'PY'
-          import json
+          import json, tempfile
+          from datetime import date, timedelta
           from pathlib import Path
-          p=json.loads(Path('config/flow-rules.json').read_text())
-          p['depthDays']=16
-          Path('/tmp/flow-rules-clean.json').write_text(json.dumps(p))
+          from scripts.d6_build_flow_snapshot import ensure_depth_day
+
+          rules=json.loads(Path('config/flow-rules.json').read_text())
+          end=date(2026,9,28)
+          start=end-timedelta(days=21)
+          with tempfile.TemporaryDirectory(prefix='d6-diag-') as td:
+              root=Path(td)
+              total_rejected=total=0
+              for i in range(21):
+                  day=start+timedelta(days=i)
+                  status,payload,error=ensure_depth_day('ETHUSDT',day,root/'data',root/'tmp',rules)
+                  if not payload:
+                      print(day,status,error)
+                      continue
+                  rejected=int(payload.get('rejected',0))
+                  count=int(payload.get('totalSnapshots',0))
+                  total_rejected+=rejected;total+=count
+                  print(day,'rejected',rejected,'/',count,'reasons',payload.get('reasons'),'samples',payload.get('rejectedSamples'))
+              print('TOTAL',total_rejected,'/',total,'pct',total_rejected/total*100 if total else None)
           PY
-          python scripts/d6_build_flow_snapshot.py --data-dir datarepo --output-dir _flow-site/flow/data --rules /tmp/flow-rules-clean.json
-      - name: Prepare site
-        run: |
-          mkdir -p _flow-site/web _flow-site/config
-          cp flow.html _flow-site/
-          cp -R web/analysis web/chart web/flow _flow-site/web/
-          cp config/symbols.js config/flow-rules.json _flow-site/config/
-          python3 -m http.server 8000 --directory _flow-site >/tmp/d6-clean-http.log 2>&1 &
-          sleep 2
-      - name: Browser regression
-        run: node scripts/d6_smoke.cjs
-      - name: Six real-market PNGs
-        env:
-          FLOW_PNG_DIR: _d6-clean-artifacts/png
-          FLOW_LATEST: _d6-clean-artifacts/latest.json
-        run: node scripts/d6_flow_png.cjs
-      - uses: actions/upload-artifact@v7
-        with:
-          name: d6-clean-window-diagnostic
-          path: _d6-clean-artifacts/
-          if-no-files-found: error
-          retention-days: 7
