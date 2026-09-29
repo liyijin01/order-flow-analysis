@@ -24,11 +24,13 @@
     state.rules=await r.json();return state.rules;
   }
 
-  function createLine(color,pane,width,autoscale){
+  function createLine(color,pane,width,autoscale,priceFormat){
     const options={color,lineWidth:width||1.5,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false};
+    if(priceFormat)options.priceFormat=priceFormat;
     if(autoscale===false)options.autoscaleInfoProvider=()=>null;
     return state.chart.addSeries(L.LineSeries,options,pane);
   }
+  function flowPriceFormat(){return{type:'custom',minMove:1,formatter:v=>F.formatSigned(v)};}
   function createChart(){
     const container=$('flowChart');
     const chart=L.createChart(container,{
@@ -46,13 +48,14 @@
       priceFormat:{type:'price',precision:precision(),minMove:tick},lastValueVisible:true,priceLineVisible:false
     },0);
     state.s2u=createLine(state.rules.colors.sigma2,0,1,false);state.s2l=createLine(state.rules.colors.sigma2,0,1,false);
-    state.perpCvd=createLine(state.rules.colors.perpCvd,1,1.6);state.perpLive=createLine(state.rules.colors.live,1,2.8);
-    state.spotCvd=createLine(state.rules.colors.spotCvd,2,1.6);state.spotLive=createLine(state.rules.colors.live,2,2.8);
-    state.depthBid=createLine(state.rules.colors.bid,3,1.2);state.depthAsk=createLine(state.rules.colors.ask,3,1.2);
+    const secondaryFormat=flowPriceFormat();
+    state.perpCvd=createLine(state.rules.colors.perpCvd,1,1.6,true,secondaryFormat);state.perpLive=createLine(state.rules.colors.live,1,2.8,true,secondaryFormat);
+    state.spotCvd=createLine(state.rules.colors.spotCvd,2,1.6,true,secondaryFormat);state.spotLive=createLine(state.rules.colors.live,2,2.8,true,secondaryFormat);
+    state.depthBid=createLine(state.rules.colors.bid,3,1.2,true,secondaryFormat);state.depthAsk=createLine(state.rules.colors.ask,3,1.2,true,secondaryFormat);
     state.depthDelta=[
-      chart.addSeries(L.HistogramSeries,{priceLineVisible:false,lastValueVisible:false,base:0},3),
-      chart.addSeries(L.HistogramSeries,{priceLineVisible:false,lastValueVisible:false,base:0},4),
-      chart.addSeries(L.HistogramSeries,{priceLineVisible:false,lastValueVisible:false,base:0},5)
+      chart.addSeries(L.HistogramSeries,{priceLineVisible:false,lastValueVisible:false,base:0,priceFormat:secondaryFormat},3),
+      chart.addSeries(L.HistogramSeries,{priceLineVisible:false,lastValueVisible:false,base:0,priceFormat:secondaryFormat},4),
+      chart.addSeries(L.HistogramSeries,{priceLineVisible:false,lastValueVisible:false,base:0,priceFormat:secondaryFormat},5)
     ];
     state.band=new P.band({id:'flow-avwap-band',type:'band',points:[],label:'AVWAP',color:state.rules.colors.vwap,fill:state.rules.colors.sigma1Fill});
     state.anchorLine=new P.vline({id:'flow-avwap-anchor',type:'vline',time:0,label:'AVWAP anchor',color:state.rules.colors.anchor,style:'dashed'});
@@ -195,7 +198,7 @@
     for(let i=0;i<3;i++)state.depthDelta[i].setData(depthHist(model,i));
     const cutoff=model.depthCutoffUtc?Date.parse(model.depthCutoffUtc)/1000:null;
     for(let i=0;i<3;i++){
-      state.depthCutoff[i].item={id:'depth-cutoff-'+i,type:'vline',time:cutoff||model.display[0].time,label:cutoff?'depth archive through '+String(model.depthCutoffUtc).slice(0,10)+' 23:59 UTC':'depth unavailable',color:state.rules.colors.depthCutoff,style:'dashed'};
+      state.depthCutoff[i].item={id:'depth-cutoff-'+i,type:'vline',time:cutoff||model.display[0].time,label:'',color:state.rules.colors.depthCutoff,style:'dashed'};
       state.depthCutoff[i].setContext({bars:model.display,intervalSec:D.intervalSec(state.timeframe),timeOffsetSec:9*3600,autoscale:false});
       if(state.depthCutoff[i].requestUpdate)state.depthCutoff[i].requestUpdate();
     }
@@ -217,14 +220,14 @@
     const p=model.lastAv||{},d0=latestDepth(model,0),d1=latestDepth(model,1),d2=latestDepth(model,2);
     const bl=i=>{const x=model.buckets[i];return Number(x[0])+'-'+Number(x[1])+'%';};
     const anchorCalc=state.anchorMode==='quarter'?'1h calc':'15m calc';
-    const depthThrough=model.depthCutoffUtc?' · through '+String(model.depthCutoffUtc).slice(0,10)+' 23:59 UTC':' · unavailable';
+    const depthThrough=model.depthCutoffUtc?' · depth archive through '+String(model.depthCutoffUtc).slice(0,10)+' 23:59 UTC':' · depth unavailable';
     ensurePaneLabels([
       'USD-M Perp · AVWAP '+state.anchorMode+' '+fmtPrice(p.vwap)+' · Binance USD-M · anchor '+D.formatJst(model.anchor.time)+' · '+anchorCalc,
       'Volume By Side (delta) Perpetuals '+F.formatSigned(model.perp.value)+' · Binance Perp · from '+D.formatJst(model.cvdAnchorTime),
       'Volume By Side (delta) Spot '+F.formatSigned(model.spot.value)+' · Binance Spot · from '+D.formatJst(model.cvdAnchorTime),
       'Depth '+bl(0)+' · bid '+F.formatSigned(d0&&d0.bid)+' / ask '+F.formatSigned(d0&&d0.ask)+' / Δ '+F.formatSigned(d0&&d0.delta)+' · Binance USD-M book'+depthThrough,
-      'Depth '+bl(1)+' · Δ '+F.formatSigned(d1&&d1.delta)+' · Binance USD-M book'+depthThrough,
-      'Depth '+bl(2)+' · Δ '+F.formatSigned(d2&&d2.delta)+' · Binance USD-M book'+depthThrough
+      'Depth '+bl(1)+' · Δ '+F.formatSigned(d1&&d1.delta)+' · Binance USD-M book',
+      'Depth '+bl(2)+' · Δ '+F.formatSigned(d2&&d2.delta)+' · Binance USD-M book'
     ]);
   }
   function renderTable(model){
