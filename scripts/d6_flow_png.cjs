@@ -40,6 +40,8 @@ const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],tfs=['15m','30m'];
         if(JSON.stringify(meta.depth.bucketsUsed)!==JSON.stringify([[0,1],[1,2],[2,5]]))throw new Error(symbol+' '+tf+' unexpected buckets '+JSON.stringify(meta.depth.bucketsUsed));
         cutoff=cutoff||meta.cutoffUtc;if(cutoff!==meta.cutoffUtc)throw new Error('flow snapshot cutoff mismatch');
         const file=path.join(outDir,symbol+'-flow-'+tf+'.png');
+        const box=await page.locator('#flowCapture').boundingBox();
+        if(!box||Math.round(box.width)!==1600)throw new Error(symbol+' '+tf+' flow PNG width '+JSON.stringify(box));
         await page.locator('#flowCapture').screenshot({path:file});
         const size=fs.statSync(file).size;if(size<50*1024)throw new Error(file+' is only '+size+' bytes');
         files.push({symbol,tf,file:path.basename(file),bytes:size,cutoffUtc:meta.cutoffUtc,visibleBars:meta.visibleBars,logicalSlots:meta.logicalSlots,avwap:meta.avwap,cvd:meta.cvd,depth:meta.depth});
