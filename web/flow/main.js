@@ -140,7 +140,9 @@
       symbol:state.symbol,timeframe:state.timeframe,display,spotDisplay,anchor,avwap,lastAv,perp,spot,depth,buckets,
       current:Number(display[display.length-1].close),visibleBars:spec.visible,cutoffUtc:bundle.cutoffUtc||null,
       depthCutoffUtc:depthPayload.cutoffUtc||null,depthTotal:Number(depthPayload.totalSnapshots)||0,
-      depthRejected:Number(depthPayload.snapshotsRejected)||0,errors:bundle.errors||{},cvdAnchorTime
+      depthRejected:Number(depthPayload.snapshotsRejected)||0,depthRawTotal:Number(depthPayload.rawSnapshots)||Number(depthPayload.totalSnapshots)||0,
+      depthInvalidSnapshots:Number(depthPayload.invalidSnapshots)||0,depthInvalidDays:(depthPayload.invalidDays||[]).slice(),
+      errors:bundle.errors||{},cvdAnchorTime
     };
   }
 
@@ -249,7 +251,8 @@
       $('cutoff').textContent=model.depthCutoffUtc?'实时 Kline · depth archive through '+String(model.depthCutoffUtc).slice(0,10)+' 23:59 UTC':'实时 Kline · depth unavailable';
     }
     const errs=Object.keys(model.errors||{});
-    $('status').textContent=state.refreshWarning?'刷新失败：'+state.refreshWarning:'Loaded '+model.display.length+' bars · AVWAP '+state.anchorMode+' · depth rejected '+model.depthRejected+'/'+model.depthTotal+(errs.length?' · 缺失 '+errs.join(', '):'');
+    const invalid=model.depthInvalidDays.length?' · depth invalid days '+model.depthInvalidDays.length:'';
+    $('status').textContent=state.refreshWarning?'刷新失败：'+state.refreshWarning:'Loaded '+model.display.length+' bars · AVWAP '+state.anchorMode+' · depth rejected '+model.depthRejected+'/'+model.depthTotal+invalid+(errs.length?' · 缺失 '+errs.join(', '):'');
     $('status').classList.toggle('error',!!state.refreshWarning||errs.length>0);
     updateLabels(model);
   }
