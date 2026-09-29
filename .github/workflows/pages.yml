@@ -6,6 +6,7 @@ on:
     paths:
       - 'index.html'
       - 'analysis.html'
+      - 'flow.html'
       - 'chart.html'
       - 'config/**'
       - 'web/**'
@@ -61,7 +62,7 @@ jobs:
           node --check web/live.js
           node --check web/render.js
           node --check web/app.js
-          find web/chart web/analysis -name '*.js' -print0 | xargs -0 -n1 node --check
+          find web/chart web/analysis web/flow -name '*.js' -print0 | xargs -0 -n1 node --check
 
       - name: Ban large-array argument spreading
         run: |
@@ -71,7 +72,7 @@ jobs:
           fi
 
   chart-smoke:
-    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'c4-1-'))
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-'))
     needs: test
     runs-on: ubuntu-24.04
     permissions:
@@ -91,13 +92,13 @@ jobs:
           python3 -m http.server 8000 >/tmp/order-flow-http.log 2>&1 &
           sleep 2
       - name: Render C2.1-C4 regression suite
-        if: startsWith(github.head_ref, 'c2-')
+        if: startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-')
         run: node scripts/c2_1_c4_smoke.cjs
       - name: Run C4.1 browser regression checks
-        if: startsWith(github.head_ref, 'c4-1-')
+        if: startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-')
         run: node scripts/c4_1_smoke.cjs
       - name: Upload C2.1-C4 screenshots
-        if: always() && startsWith(github.head_ref, 'c2-')
+        if: always() && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-'))
         uses: actions/upload-artifact@v7
         with:
           name: c2-1-c4-chart-screenshots
@@ -159,6 +160,61 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  flow-smoke:
+    if: github.event_name == 'pull_request'
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install Playwright core
+        run: npm install --no-save playwright-core@1.55.0
+      - name: Attach persistent data branch
+        run: |
+          git fetch origin data
+          git worktree add --detach datarepo origin/data
+      - name: Build exact weekly profiles
+        run: python -m pipeline.build --data-dir datarepo --output-dir _d6-generated
+      - name: Build analysis snapshot for quarter AVWAP parity
+        run: python scripts/d1_build_snapshot.py --profile-dir _d6-generated --output-dir _flow-site/analysis/data
+      - name: Build real archived flow snapshot
+        run: python scripts/d6_build_flow_snapshot.py --data-dir datarepo --output-dir _flow-site/flow/data
+      - name: Prepare local flow site
+        run: |
+          mkdir -p _flow-site/web _flow-site/config
+          cp flow.html _flow-site/
+          cp -R web/analysis web/chart web/flow _flow-site/web/
+          cp config/symbols.js config/flow-rules.json _flow-site/config/
+      - name: Start local flow site
+        run: |
+          python3 -m http.server 8000 --directory _flow-site >/tmp/d6-http.log 2>&1 &
+          sleep 2
+      - name: Flow browser regression
+        run: node scripts/d6_smoke.cjs
+      - name: Generate six real-market flow PNGs
+        env:
+          FLOW_PNG_DIR: _d6-artifacts/png
+          FLOW_LATEST: _d6-artifacts/latest.json
+        run: node scripts/d6_flow_png.cjs
+      - name: Upload D6 real-market screenshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: d6-flow-real-market-screenshots
+          path: _d6-artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
   data:
     if: github.event_name != 'pull_request'
     needs: test
@@ -201,14 +257,17 @@ jobs:
       - name: Build missing daily ladders and exact weekly profiles
         run: python -m pipeline.build --data-dir datarepo --output-dir _generated
 
-      - name: Persist new ladders to data branch
+      - name: Build archived flow snapshot and persistent depth
+        run: python scripts/d6_build_flow_snapshot.py --data-dir datarepo --output-dir _generated/flow/data
+
+      - name: Persist new ladders and depth to data branch
         shell: bash
         run: |
           set -euo pipefail
           cd datarepo
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add ladders .data-branch 2>/dev/null || git add ladders
+          git add ladders depth .data-branch 2>/dev/null || git add ladders depth
           if ! git diff --cached --quiet; then
             git commit -m 'data: refresh daily ladders'
             git push origin HEAD:data
@@ -224,6 +283,7 @@ jobs:
           path: |
             _generated/profiles-*.json
             _generated/analysis/data/*.json
+            _generated/flow/data/*.json
           if-no-files-found: error
           retention-days: 1
 
@@ -249,13 +309,14 @@ jobs:
           path: _generated
       - name: Prepare static site
         run: |
-          mkdir -p _site/web _site/config _site/analysis/data
-          cp index.html chart.html analysis.html _site/
+          mkdir -p _site/web _site/config _site/analysis/data _site/flow/data
+          cp index.html chart.html analysis.html flow.html _site/
           cp web/core.js web/live.js web/render.js web/app.js _site/web/
-          cp -R web/chart web/analysis _site/web/
-          cp config/symbols.js config/analysis-rules.json config/annotation-rules.json _site/config/
+          cp -R web/chart web/analysis web/flow _site/web/
+          cp config/symbols.js config/analysis-rules.json config/annotation-rules.json config/flow-rules.json _site/config/
           cp _generated/profiles-*.json _site/
           cp _generated/analysis/data/*.json _site/analysis/data/
+          cp _generated/flow/data/*.json _site/flow/data/
           touch _site/.nojekyll
       - name: Install Playwright core
         run: npm install --no-save playwright-core@1.55.0
@@ -268,6 +329,11 @@ jobs:
           ANALYSIS_PNG_DIR: _site/analysis/png
           ANALYSIS_LATEST: _site/analysis/latest.json
         run: node scripts/d1_daily_png.cjs
+      - name: Generate daily flow PNGs
+        env:
+          FLOW_PNG_DIR: _site/flow/png
+          FLOW_LATEST: _site/flow/latest.json
+        run: node scripts/d6_flow_png.cjs
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:

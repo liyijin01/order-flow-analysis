@@ -35,7 +35,7 @@ async function installRoutes(page){
     const page=await browser.newPage({viewport:{width:1500,height:900},deviceScaleFactor:1});
     await installRoutes(page);
     await page.goto('http://127.0.0.1:8000/chart.html?symbol=BTCUSDT&market=um&interval=1h',{waitUntil:'domcontentloaded',timeout:60000});
-    await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:30000});
+    await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:30000});
 
     // B5: ten tightly packed levels must get readable right-side label coordinates.
     const spacing=await page.evaluate(()=>{
@@ -47,11 +47,16 @@ async function installRoutes(page){
       });
       d.annotations.render({schema:'annotations-v1',symbol:d.state.symbol,market:d.state.market,interval:d.state.interval,generatedAt:new Date().toISOString(),items});
       d.annotations.relayoutLabels();
-      return d.annotationCoordinates().filter(x=>x.type==='level').map(x=>({labelY:x.labelY,axisY:x.axisY})).sort((a,b)=>a.labelY-b.labelY);
+      const prices=new Map(items.map(x=>[x.id,x.price]));
+      return d.annotationCoordinates().filter(x=>x.type==='level').map(x=>({
+        labelY:x.labelY,axisY:x.axisY,trueY:d.state.candles.priceToCoordinate(Number(prices.get(x.id)))
+      })).sort((a,b)=>a.labelY-b.labelY);
     });
     for(let i=1;i<spacing.length;i++){
       if(spacing[i].labelY-spacing[i-1].labelY<11.99)throw new Error('B5 label spacing failed '+JSON.stringify(spacing));
-      if(spacing[i].axisY-spacing[i-1].axisY<11.99)throw new Error('B5 axis spacing failed '+JSON.stringify(spacing));
+    }
+    for(const row of spacing)if(Math.abs(Number(row.axisY)-Number(row.trueY))>1){
+      throw new Error('B5 price-axis label moved off true price '+JSON.stringify(spacing));
     }
 
     // Mock router contract: symbol/interval/startTime/endTime are all honored over >= 6 months of source data.

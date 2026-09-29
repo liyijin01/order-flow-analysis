@@ -232,7 +232,10 @@
     const q=new URLSearchParams(location.search),symbol=q.get('symbol'),market=q.get('market'),interval=q.get('interval'),fixture=q.get('fixture'),auto=q.get('auto');
     if(fixture&&PRESETS[fixture]){$('fixture').value=fixture;$('autoPreset').value='none';$('symbol').value=PRESETS[fixture].symbol;$('market').value=PRESETS[fixture].market;$('interval').value=PRESETS[fixture].interval;return;}
     if(symbol&&SYMBOLS[symbol])$('symbol').value=symbol;if(market==='um'||market==='spot')$('market').value=market;if(['15m','30m','1h','2h','4h','1d'].includes(interval))$('interval').value=interval;
-    if(['p1','p2','p3','p4'].includes(auto))$('autoPreset').value=auto;
+    if(['p1','p2','p3','p4'].includes(auto)){
+      $('autoPreset').value=auto;
+      const preset=PRESETS[auto];if(preset){$('market').value=preset.market;$('interval').value=preset.interval;}
+    }
   }
 
   function footerText(){return'Generated '+D.formatLocalDateTime(Math.floor(Date.now()/1000),false)+' JST · Data: '+(state.fixture!=='none'?'Static sample':'Binance')+' · order-flow-analysis';}

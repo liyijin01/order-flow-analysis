@@ -60,5 +60,29 @@
     return{width,height};
   }
 
-  global.OrderFlowAnalysisExport={exportBoard};
+  async function exportFlowBoard(options){
+    await nextPaint();
+    const shot=options.chart.takeScreenshot(true,false);
+    const width=Math.max(1400,shot.width),chartH=Math.round(shot.height*width/shot.width),headerH=70,rowH=23;
+    const rows=options.rows||[],tableH=34+rows.length*rowH,footerH=34,height=headerH+chartH+tableH+footerH;
+    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');
+    ctx.fillStyle='#1b2130';ctx.fillRect(0,0,width,height);
+    ctx.fillStyle='#f1f5f9';ctx.font='600 18px -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif';ctx.fillText(options.title||'',18,27);
+    ctx.fillStyle='#9aa6bb';ctx.font='12px -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif';ctx.fillText(options.info||'',18,50);
+    ctx.drawImage(shot,0,headerH,width,chartH);
+    for(const p of options.paneLabels||[]){
+      ctx.fillStyle='#e7eaf0';ctx.font='600 12px -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif';
+      ctx.fillText(String(p.text||''),14,headerH+Number(p.y||0)+16);
+    }
+    const tableY=headerH+chartH;ctx.fillStyle='#161c29';ctx.fillRect(0,tableY,width,tableH);
+    ctx.fillStyle='#e7eaf0';ctx.font='600 12px -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif';ctx.fillText('FLOW SUMMARY',18,tableY+22);
+    ctx.font='12px -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif';
+    for(let i=0;i<rows.length;i++){ctx.fillStyle='#cbd3e1';ctx.fillText(String(rows[i]),18,tableY+34+i*rowH+16);}
+    rowText(ctx,'order-flow-analysis · read only',18,height-14,'left');
+    ctx.textAlign='right';ctx.fillStyle='#8e98aa';ctx.font='11px -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif';ctx.fillText(options.footer||'',width-18,height-14);
+    await download(canvas,options.filename||'flow.png');
+    return{width,height};
+  }
+
+  global.OrderFlowAnalysisExport={exportBoard,exportFlowBoard};
 })(typeof globalThis!=='undefined'?globalThis:window);

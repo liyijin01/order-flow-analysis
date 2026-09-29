@@ -1,7 +1,7 @@
 (function(){
   'use strict';
 
-  const L=window.LightweightCharts,D=window.OrderFlowAnalysisData,E=window.OrderFlowAnalysisEngine,P=window.OrderFlowAnalysisPrimitive,X=window.OrderFlowAnalysisExport;
+  const L=window.LightweightCharts,D=window.OrderFlowAnalysisData,E=window.OrderFlowAnalysisEngine,P=window.OrderFlowAnalysisPrimitive,X=window.OrderFlowAnalysisExport,R=window.OrderFlowBoardRuntime;
   const SYMBOLS=window.ORDER_FLOW_SYMBOLS||{};
   const $=id=>document.getElementById(id);
   const state={
@@ -52,10 +52,7 @@
       item.appendChild(mark);item.appendChild(document.createTextNode(e.label));root.appendChild(item);
     }
   }
-  function rangesClose(a,b,tolerance){
-    if(!a||!b)return false;const t=Number(tolerance)||0;
-    return Math.abs(Number(a.from)-Number(b.from))<=t&&Math.abs(Number(a.to)-Number(b.to))<=t;
-  }
+  const rangesClose=R.rangesClose;
   function fillAlpha(base,tested){
     if(!tested)return base;
     if(base.startsWith('rgba('))return base.replace(/,[^,]+\)$/g,',.08)');
@@ -282,32 +279,13 @@
     }
   }
 
-  function defaultWindow(count){
-    const baseVisible=Math.max(1,Number(state.rules.display.visibleBars&&state.rules.display.visibleBars[state.timeframe])||count);
-    const baseOffset=Math.max(0,Number(state.rules.display.rightOffset)||30);
-    const ratio=baseOffset/baseVisible;
-    const minSpacing=Math.max(1,Number(state.rules.display.minBarSpacingPx)||5);
-    const paneWidth=state.chart&&state.chart.timeScale?Number(state.chart.timeScale().width()):0;
-    const fit=paneWidth>0?Math.floor(paneWidth/(minSpacing*(1+ratio))):baseVisible;
-    const visible=Math.min(count,Math.max(30,Math.min(baseVisible,Math.max(1,fit))));
-    const rightOffsetBars=Math.max(3,Math.round(visible*ratio));
-    return{
-      visible,rightOffsetBars,
-      range:{from:Math.max(0,count-visible),to:Math.max(0,count-1)+rightOffsetBars}
-    };
-  }
+  function defaultWindow(count){return R.defaultWindow(state.chart,state.rules,state.timeframe,count);}
 
   function defaultVisibleRange(count){return defaultWindow(count).range;}
 
-  function applyDefaultView(count){
-    const spec=defaultWindow(count);
-    state.chart.timeScale().applyOptions({rightOffset:spec.rightOffsetBars});
-    state.chart.timeScale().setVisibleLogicalRange(spec.range);
-    state.defaultViewRange={from:spec.range.from,to:spec.range.to};
-    return spec;
-  }
+  function applyDefaultView(count){return R.applyDefaultView(state.chart,state.rules,state.timeframe,count,state);}
 
-  function nextFrame(){return new Promise(resolve=>requestAnimationFrame(()=>resolve()));}
+  const nextFrame=R.nextFrame;
 
   async function settleDefaultWindow(bundle,shouldContinue){
     if(!state.model||!bundle)return state.model;
@@ -331,29 +309,13 @@
   }
 
   function scheduleResizeSettle(wasDefault,beforeRange){
-    const token=++state.resizeToken;
-    (async()=>{
-      await nextFrame();await nextFrame();
-      if(token!==state.resizeToken||!state.model||!state.bundle)return;
-      if(!wasDefault){
-        if(beforeRange)state.chart.timeScale().setVisibleLogicalRange({from:Number(beforeRange.from),to:Number(beforeRange.to)});
-        return;
-      }
-      if(state.resizeSettle){
-        await state.resizeSettle;
-        if(token!==state.resizeToken)return;
-      }
-      const task=settleDefaultWindow(state.bundle,()=>token===state.resizeToken);
-      state.resizeSettle=task;
-      try{await task;}
-      finally{if(state.resizeSettle===task)state.resizeSettle=null;}
-    })();
+    if(!state.model||!state.bundle)return;
+    R.scheduleResize(state,wasDefault,beforeRange,state.chart,shouldContinue=>settleDefaultWindow(state.bundle,shouldContinue));
   }
 
   function resetView(){
     if(!state.model)return;
-    state.candles.priceScale().applyOptions({autoScale:true});
-    state.volume.priceScale().applyOptions({autoScale:true});
+    R.resetView([state.candles,state.volume],state.chart,null);
     applyDefaultView(state.model.display.length);
   }
 
@@ -442,20 +404,10 @@
   }
 
   async function refresh(forceFull,options){
-    const opts=options||{};
-    if(opts.scheduled&&document.hidden)return null;
-    if(state.inFlight){
-      if(opts.cancelPrevious&&state.abortController)state.abortController.abort();
-      else return state.inFlight;
-    }
-    const controller=new AbortController(),token=++state.loadToken;
-    state.abortController=controller;
-    const task=(async()=>{
-      try{
-        await loadRules();
-        if(controller.signal.aborted)return null;
-        const result=await getBundle(token,!!forceFull,controller.signal);
-        if(token!==state.loadToken||controller.signal.aborted)return null;
+    return R.runRefresh(state,forceFull,options,{
+      before:()=>loadRules(),
+      load:(token,full,signal)=>getBundle(token,full,signal),
+      apply:async(result)=>{
         state.bundle=result.bundle;
         state.refreshWarning=result.failures.length?result.failures.map(x=>x.interval).join(', ')+' 更新失败':null;
         let model=buildAnalysis(result.bundle);state.model=model;
@@ -464,8 +416,8 @@
         state.lastSuccessAt=Date.now();
         updateHeader(model);
         return model;
-      }catch(e){
-        if(controller.signal.aborted||(e&&e.name==='AbortError'))return null;
+      },
+      error:(e)=>{
         console.error(e);
         if(state.model){
           state.refreshWarning=String(e.message||e);
@@ -475,13 +427,7 @@
         }
         return null;
       }
-    })();
-    state.inFlight=task;
-    try{return await task;}
-    finally{
-      if(state.inFlight===task)state.inFlight=null;
-      if(state.abortController===controller)state.abortController=null;
-    }
+    });
   }
 
   function setSelection(symbol,tf){
@@ -541,11 +487,7 @@
     await refresh(true);
     if(!state.snapshot){
       const refreshMs=Number(state.rules.display.refreshSeconds||60)*1000;
-      state.refreshTimer=setInterval(()=>refresh(false,{scheduled:true}),refreshMs);
-      document.addEventListener('visibilitychange',()=>{
-        if(document.hidden||state.inFlight)return;
-        if(Date.now()-state.lastSuccessAt>=refreshMs)refresh(false,{scheduled:true});
-      });
+      R.startRefreshLoop(state,refreshMs,refresh);
     }
   }
   init();
