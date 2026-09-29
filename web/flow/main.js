@@ -71,9 +71,9 @@
 
   function layoutPanes(){
     if(!state.chart)return;
-    const panes=state.chart.panes(),h=$('flowChart').clientHeight,p=state.rules.panes;
+    const panes=state.chart.panes(),p=state.rules.panes;
     const ratios=[p.price,p.perpCvd,p.spotCvd,p.depth1,p.depth2,p.depth3];
-    for(let i=0;i<panes.length&&i<ratios.length;i++)panes[i].setHeight(Math.max(70,Math.round(h*Number(ratios[i]))));
+    for(let i=0;i<panes.length&&i<ratios.length;i++)panes[i].setStretchFactor(Math.round(Number(ratios[i])*1000));
     positionPaneLabels();
   }
   function positionPaneLabels(){
