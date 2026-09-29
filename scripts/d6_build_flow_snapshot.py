@@ -134,16 +134,30 @@ def main(argv=None):
     with tempfile.TemporaryDirectory(prefix="d6-flow-") as td:
         temp=Path(td)
         for symbol in SYMBOLS:
-            perp=[];spot=[];depth=[];missing_depth=[];missing_perp=[];missing_spot=[]
-            rejected=total=0;rejected_samples=[];statuses={}
+            perp=[];spot=[];depth=[];missing_depth=[];invalid_depth=[];missing_perp=[];missing_spot=[]
+            rejected=total=0;raw_total=invalid_snapshots=0;rejected_samples=[];invalid_samples=[];statuses={}
+            max_rejected_pct=float(rules["depthValidation"]["maxRejectedPct"])
             for day in dates:
                 ds=day.isoformat()
                 st,payload,err=ensure_depth_day(symbol,day,args.data_dir,temp,rules)
                 statuses[ds]=st
                 if payload:
-                    depth.extend(payload.get("snapshots",[]))
-                    rejected+=int(payload.get("rejected",0));total+=int(payload.get("totalSnapshots",0))
-                    rejected_samples.extend(payload.get("rejectedSamples",[])[:max(0,5-len(rejected_samples))])
+                    day_rejected=int(payload.get("rejected",0));day_total=int(payload.get("totalSnapshots",0))
+                    raw_total+=day_total
+                    day_ratio=(day_rejected/day_total*100) if day_total else 100
+                    if day_ratio>=max_rejected_pct:
+                        invalid_depth.append(ds);invalid_snapshots+=day_total
+                        statuses[ds]=st+"-invalid"
+                        invalid_samples.append({
+                            "date":ds,"rejected":day_rejected,"total":day_total,
+                            "ratioPct":round(day_ratio,6),"reasons":payload.get("reasons",{}),
+                            "samples":payload.get("rejectedSamples",[])[:3],
+                        })
+                        print(f"::warning::{symbol} depth {ds} quarantined: {day_rejected}/{day_total} ({day_ratio:.3f}%) invalid snapshots")
+                    else:
+                        depth.extend(payload.get("snapshots",[]))
+                        rejected+=day_rejected;total+=day_total
+                        rejected_samples.extend(payload.get("rejectedSamples",[])[:max(0,5-len(rejected_samples))])
                 else:
                     missing_depth.append(ds);print(f"::warning::{symbol} depth {ds} {st}: {err}")
                 st,rows,err=load_kline_day(symbol,day,"um","15m",temp)
@@ -164,13 +178,22 @@ def main(argv=None):
                 "schema":"flow-depth-v1","symbol":symbol,"generatedAt":generated,"cutoffUtc":cutoff,
                 "source":"Binance USD-M bookDepth","levels":rules["depthLevels"],"bucketsUsed":rules["depthBuckets"],
                 "snapshots":depth,"totalSnapshots":total,"snapshotsRejected":rejected,
-                "rejectedSamples":rejected_samples,"missingDays":missing_depth,"statuses":statuses,
+                "rawSnapshots":raw_total,"invalidSnapshots":invalid_snapshots,
+                "rejectedSamples":rejected_samples,"invalidDays":invalid_depth,"invalidSamples":invalid_samples,
+                "missingDays":missing_depth,"statuses":statuses,
             }
             (args.output_dir/f"{symbol}.json").write_text(json.dumps(kpayload,separators=(",",":")),encoding="utf-8")
             (args.output_dir/f"depth-{symbol}.json").write_text(json.dumps(dpayload,separators=(",",":")),encoding="utf-8")
             ratio=(rejected/total*100) if total else 100
-            print(f"{symbol}: perp={len(perp)} spot={len(spot)} depth={len(depth)} rejected={rejected}/{total} ({ratio:.3f}%)",flush=True)
-            if ratio>=float(rules["depthValidation"]["maxRejectedPct"]):
+            print(
+                f"{symbol}: perp={len(perp)} spot={len(spot)} depth={len(depth)} "
+                f"rejected={rejected}/{total} ({ratio:.3f}%) invalidDays={len(invalid_depth)} "
+                f"invalidSnapshots={invalid_snapshots}/{raw_total}",
+                flush=True,
+            )
+            if invalid_samples:
+                print("quarantined depth days:",json.dumps(invalid_samples,ensure_ascii=False),flush=True)
+            if ratio>=max_rejected_pct:
                 print("rejected samples:",json.dumps(rejected_samples,ensure_ascii=False),file=sys.stderr)
                 return 2
 
