@@ -241,6 +241,10 @@
     for(const row of rows){const tr=document.createElement('tr');for(const v of row){const td=document.createElement('td');td.textContent=v;tr.appendChild(td);}body.appendChild(tr);}
     model.tableText=rows.map(r=>r.join(' · '));
   }
+  function renderModelDetails(model){
+    updateLabels(model);
+    renderTable(model);
+  }
   function updateHeader(model){
     $('boardTitle').textContent=meta().displayName+' · '+state.timeframe;
     document.querySelectorAll('[data-symbol]').forEach(b=>b.classList.toggle('active',b.dataset.symbol===state.symbol));
@@ -257,7 +261,6 @@
     const invalid=model.depthInvalidDays.length?' · depth invalid days '+model.depthInvalidDays.length:'';
     $('status').textContent=state.refreshWarning?'刷新失败：'+state.refreshWarning:'Loaded '+model.display.length+' bars · AVWAP '+state.anchorMode+' · depth rejected '+model.depthRejected+'/'+model.depthTotal+invalid+(errs.length?' · 缺失 '+errs.join(', '):'');
     $('status').classList.toggle('error',!!state.refreshWarning||errs.length>0);
-    updateLabels(model);
   }
 
   async function settleDefault(shouldContinue){
@@ -267,7 +270,7 @@
       const width=Number(state.chart.timeScale().width()),spec=R.defaultWindow(state.chart,state.rules,state.timeframe,state.model.display.length);
       if(spec.visible!==state.model.visibleBars&&state.bundle){
         const rebuilt=buildModel(state.bundle);state.model=rebuilt;
-        applySeries(rebuilt);renderTable(rebuilt);updateLabels(rebuilt);
+        applySeries(rebuilt);renderModelDetails(rebuilt);
       }
       R.applyDefaultView(state.chart,state.rules,state.timeframe,state.model.display.length,state);
       if(Math.abs(width-last)<.5)stable++;else stable=0;last=width;
@@ -278,7 +281,7 @@
     R.resetView([state.candles,state.perpCvd,state.spotCvd,state.depthBid,state.depthAsk,...state.depthDelta],state.chart,null);
     state.viewKey=null;
     const rebuilt=buildModel(state.bundle);state.model=rebuilt;
-    applySeries(rebuilt);renderTable(rebuilt);updateHeader(rebuilt);
+    applySeries(rebuilt);renderModelDetails(rebuilt);updateHeader(rebuilt);
     const spec=R.applyDefaultView(state.chart,state.rules,state.timeframe,rebuilt.display.length,state);rebuilt.visibleBars=spec.visible;
   }
 
@@ -296,7 +299,8 @@
       before:()=>loadRules(),load:(token,full,signal)=>getBundle(token,full,signal),
       apply:async result=>{
         state.bundle=result.bundle;state.refreshWarning=result.failures&&result.failures.length?result.failures.map(x=>x.interval).join(', ')+' 更新失败':null;
-        const model=buildModel(result.bundle);state.model=model;const needsSettle=applySeries(model);renderTable(model);if(needsSettle)await settleDefault();state.lastSuccessAt=Date.now();updateHeader(model);return model;
+        const model=buildModel(result.bundle);state.model=model;const needsSettle=applySeries(model);renderModelDetails(model);if(needsSettle)await settleDefault();
+        const finalModel=state.model;state.lastSuccessAt=Date.now();renderModelDetails(finalModel);updateHeader(finalModel);return finalModel;
       },
       error:e=>{console.error(e);state.refreshWarning=String(e.message||e);$('status').textContent='加载失败：'+state.refreshWarning;$('status').classList.add('error');return null;}
     });
