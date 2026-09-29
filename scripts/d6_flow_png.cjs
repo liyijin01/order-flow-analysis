@@ -27,7 +27,8 @@ const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],tfs=['15m','30m'];
             cvd:{anchorTime:new Date(m.cvdAnchorTime*1000).toISOString(),perp:m.perp.value,spot:m.spot.value,
               perpBars:m.perp.matched,spotBars:m.spot.matched,missingPerp:m.perp.missing,missingSpot:m.spot.missing},
             depth:{bucketsUsed:m.buckets,cutoffUtc:m.depthCutoffUtc,snapshotsUsed:depth.snapshotsUsed||0,
-              snapshotsRejected:m.depthRejected,emptyBars:depth.emptyBars||0,totalSnapshots:m.depthTotal}
+              snapshotsRejected:m.depthRejected,emptyBars:depth.emptyBars||0,totalSnapshots:m.depthTotal,
+              rawSnapshots:m.depthRawTotal,invalidSnapshots:m.depthInvalidSnapshots,invalidDays:m.depthInvalidDays}
           };
         });
         if(errors.length)throw new Error(symbol+' '+tf+' browser errors: '+errors.join(' | '));
