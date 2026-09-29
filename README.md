@@ -26,7 +26,7 @@ The dashboard uses only public market-data endpoints. It has no API keys, wallet
 - the actual probed depth buckets `0–1%`, `1–2%`, `2–5%` because the archive exposes ±0.2/1/2/3/4/5% levels and no ±2.5% level;
 - six daily snapshot PNGs and `flow/latest.json`.
 
-Processed daily depth snapshots are persisted under `depth/{SYMBOL}/{YYYY-MM-DD}.json.gz` on the orphan `data` branch. Invalid depth snapshots are rejected rather than interpolated. The depth pane intentionally stops at the latest completed archived UTC day; it is not spliced with REST depth.
+Processed daily depth snapshots are persisted under `depth/{SYMBOL}/{YYYY-MM-DD}.json.gz` on the orphan `data` branch. Invalid depth snapshots are rejected rather than interpolated. If a daily archive is systemically bad (at least 5% of its snapshots fail the configured validation), the entire UTC day is quarantined and left blank; `flow/latest.json` reports the invalid days and raw invalid snapshot count separately. The depth pane intentionally stops at the latest completed archived UTC day; it is not spliced with REST depth.
 
 
 ## Local preview
