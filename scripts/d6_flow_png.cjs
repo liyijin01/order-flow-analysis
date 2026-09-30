@@ -12,6 +12,11 @@ const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],tfs=['15m','30m'];
   const files=[];let cutoff=null;
   try{
     for(const symbol of symbols){
+      const depthUrl=new URL('flow/data/depth-'+symbol+'.json',base).href;
+      const depthResponse=await fetch(depthUrl);
+      if(!depthResponse.ok)throw new Error(symbol+' depth HTTP '+depthResponse.status);
+      const depthBytes=(await depthResponse.arrayBuffer()).byteLength;
+      if(depthBytes>=300*1024)throw new Error(symbol+' depth JSON is '+depthBytes+' bytes; expected < 300KB');
       for(const tf of tfs){
         const page=await browser.newPage({viewport:{width:1600,height:1500},deviceScaleFactor:1});
         const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
@@ -44,7 +49,7 @@ const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],tfs=['15m','30m'];
         if(!box||Math.round(box.width)!==1600)throw new Error(symbol+' '+tf+' flow PNG width '+JSON.stringify(box));
         await page.locator('#flowCapture').screenshot({path:file});
         const size=fs.statSync(file).size;if(size<50*1024)throw new Error(file+' is only '+size+' bytes');
-        files.push({symbol,tf,file:path.basename(file),bytes:size,cutoffUtc:meta.cutoffUtc,visibleBars:meta.visibleBars,logicalSlots:meta.logicalSlots,avwap:meta.avwap,cvd:meta.cvd,depth:meta.depth});
+        files.push({symbol,tf,file:path.basename(file),bytes:size,depthFileBytes:depthBytes,cutoffUtc:meta.cutoffUtc,visibleBars:meta.visibleBars,logicalSlots:meta.logicalSlots,avwap:meta.avwap,cvd:meta.cvd,depth:meta.depth});
         await page.close();
       }
     }

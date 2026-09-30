@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 
-from pipeline.depth import load_depth_gz, minute_close_lookup, parse_bookdepth_csv, parse_kline_csv, write_depth_gz
+from pipeline.depth import load_depth_gz, minute_close_lookup, parse_bookdepth_csv, parse_kline_csv, sample_depth15m_day, write_depth_gz
 from pipeline.vision import download_verified_url, fetch_text
 from scripts.d1_build_snapshot import floor_utc_day
 
@@ -81,7 +81,7 @@ def load_kline_day(symbol,day,market,interval,temp_dir):
 
 
 def ensure_depth_day(symbol,day,data_dir,temp_dir,rules):
-    path=data_dir/"depth"/symbol/f"{day.isoformat()}.json.gz"
+    path=data_dir/"depth15m"/symbol/f"{day.isoformat()}.json.gz"
     if path.exists():return "existing",load_depth_gz(path),None
     book_url=archive_url("bookDepth",symbol,day)
     result=download_verified_url(book_url,temp_dir,book_url.rsplit("/",1)[-1])
@@ -97,10 +97,18 @@ def ensure_depth_day(symbol,day,data_dir,temp_dir,rules):
             minute_close_lookup(one_rows),
             rules["depthValidation"]["averagePriceExtraPct"],
         )
+        total=int(parsed.get("totalSnapshots",0));rejected=int(parsed.get("rejected",0))
+        ratio=(rejected/total*100) if total else 100
+        quarantined=ratio>=float(rules["depthValidation"]["maxRejectedPct"])
+        samples=sample_depth15m_day(day,parsed.get("snapshots",[]),rules["depthLevels"],quarantined)
+        used=sum(1 for row in samples if row.get("snapshotTime") is not None)
         payload={
-            "schema":"depth-day-v1","symbol":symbol,"date":day.isoformat(),
+            "schema":"depth15m-day-v1","symbol":symbol,"date":day.isoformat(),
             "source":"Binance Vision USD-M bookDepth","levels":rules["depthLevels"],
-            **parsed,
+            "totalSnapshots":total,"rejected":rejected,
+            "reasons":parsed.get("reasons",{}),"rejectedSamples":parsed.get("rejectedSamples",[]),
+            "quarantined":quarantined,"samples":samples,
+            "samplesUsed":used,"emptySamples":len(samples)-used,
         }
         write_depth_gz(path,payload)
         return "created",payload,None
@@ -135,7 +143,7 @@ def main(argv=None):
         temp=Path(td)
         for symbol in SYMBOLS:
             perp=[];spot=[];depth=[];missing_depth=[];invalid_depth=[];missing_perp=[];missing_spot=[]
-            rejected=total=0;raw_total=invalid_snapshots=0;rejected_samples=[];invalid_samples=[];statuses={}
+            rejected=total=0;raw_total=invalid_snapshots=0;sampled_used=sampled_empty=0;rejected_samples=[];invalid_samples=[];statuses={}
             max_rejected_pct=float(rules["depthValidation"]["maxRejectedPct"])
             for day in dates:
                 ds=day.isoformat()
@@ -145,7 +153,8 @@ def main(argv=None):
                     day_rejected=int(payload.get("rejected",0));day_total=int(payload.get("totalSnapshots",0))
                     raw_total+=day_total
                     day_ratio=(day_rejected/day_total*100) if day_total else 100
-                    if day_ratio>=max_rejected_pct:
+                    quarantined=bool(payload.get("quarantined",day_ratio>=max_rejected_pct))
+                    if quarantined:
                         invalid_depth.append(ds);invalid_snapshots+=day_total
                         statuses[ds]=st+"-invalid"
                         invalid_samples.append({
@@ -155,7 +164,10 @@ def main(argv=None):
                         })
                         print(f"::warning::{symbol} depth {ds} quarantined: {day_rejected}/{day_total} ({day_ratio:.3f}%) invalid snapshots")
                     else:
-                        depth.extend(payload.get("snapshots",[]))
+                        day_samples=payload.get("samples",[])
+                        depth.extend(day_samples)
+                        sampled_used+=int(payload.get("samplesUsed",sum(1 for row in day_samples if row.get("snapshotTime") is not None)))
+                        sampled_empty+=int(payload.get("emptySamples",sum(1 for row in day_samples if row.get("snapshotTime") is None)))
                         rejected+=day_rejected;total+=day_total
                         rejected_samples.extend(payload.get("rejectedSamples",[])[:max(0,5-len(rejected_samples))])
                 else:
@@ -175,9 +187,10 @@ def main(argv=None):
                 "missingPerpDays":missing_perp,"missingSpotDays":missing_spot,
             }
             dpayload={
-                "schema":"flow-depth-v1","symbol":symbol,"generatedAt":generated,"cutoffUtc":cutoff,
-                "source":"Binance USD-M bookDepth","levels":rules["depthLevels"],"bucketsUsed":rules["depthBuckets"],
-                "snapshots":depth,"totalSnapshots":total,"snapshotsRejected":rejected,
+                "schema":"flow-depth-v2","symbol":symbol,"generatedAt":generated,"cutoffUtc":cutoff,
+                "source":"Binance USD-M bookDepth, validated and sampled at 15m bar close","levels":rules["depthLevels"],"bucketsUsed":rules["depthBuckets"],
+                "samples":depth,"snapshotsUsed":sampled_used,"emptyBars":sampled_empty,
+                "totalSnapshots":total,"snapshotsRejected":rejected,
                 "rawSnapshots":raw_total,"invalidSnapshots":invalid_snapshots,
                 "rejectedSamples":rejected_samples,"invalidDays":invalid_depth,"invalidSamples":invalid_samples,
                 "missingDays":missing_depth,"statuses":statuses,
@@ -186,7 +199,7 @@ def main(argv=None):
             (args.output_dir/f"depth-{symbol}.json").write_text(json.dumps(dpayload,separators=(",",":")),encoding="utf-8")
             ratio=(rejected/total*100) if total else 100
             print(
-                f"{symbol}: perp={len(perp)} spot={len(spot)} depth={len(depth)} "
+                f"{symbol}: perp={len(perp)} spot={len(spot)} depth15m={sampled_used}/{len(depth)} "
                 f"rejected={rejected}/{total} ({ratio:.3f}%) invalidDays={len(invalid_depth)} "
                 f"invalidSnapshots={invalid_snapshots}/{raw_total}",
                 flush=True,

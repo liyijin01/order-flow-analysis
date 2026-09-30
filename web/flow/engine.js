@@ -103,6 +103,23 @@
     return{rows:out,emptyBars:empty,snapshotsUsed:used};
   }
 
+  function sampledDepth(displayBars,samples,timeframe,buckets){
+    const map=new Map((samples||[]).map(row=>[Number(row.time),row])),out=[];let empty=0,used=0;
+    const offset=timeframe==='30m'?900:0;
+    for(const bar of displayBars||[]){
+      const sample=map.get(Number(bar.time)+offset);
+      if(!sample||!finite(sample.snapshotTime)||!sample.bid||!sample.ask){
+        out.push({time:Number(bar.time),buckets:null});empty++;continue;
+      }
+      const vals=depthBuckets(sample,buckets);
+      if(vals.some(v=>v==null)){
+        out.push({time:Number(bar.time),buckets:null});empty++;continue;
+      }
+      out.push({time:Number(bar.time),snapshotTime:Number(sample.snapshotTime),buckets:vals});used++;
+    }
+    return{rows:out,emptyBars:empty,snapshotsUsed:used};
+  }
+
   function formatSigned(value){
     const n=Number(value);if(!Number.isFinite(n))return'—';
     const a=Math.abs(n),sign=n>0?'+':(n<0?'−':'');
@@ -121,5 +138,5 @@
     return'inside ±1σ';
   }
 
-  global.OrderFlowFlowEngine={utcWeekStart,aggregateBars,swingAnchor,manualAnchor,cvdDelta,cvdSeries,depthBuckets,asOfDepth,formatSigned,positionText};
+  global.OrderFlowFlowEngine={utcWeekStart,aggregateBars,swingAnchor,manualAnchor,cvdDelta,cvdSeries,depthBuckets,asOfDepth,sampledDepth,formatSigned,positionText};
 })(typeof globalThis!=='undefined'?globalThis:window);

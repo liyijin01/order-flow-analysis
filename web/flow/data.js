@@ -9,8 +9,16 @@
     const age=Math.ceil((Date.now()-Number(manualAnchorMs))/900000)+16;
     return Math.max(base,age);
   }
-  async function fetchDepth(symbol,signal){
-    const r=await fetch('flow/data/depth-'+symbol+'.json',{cache:'no-store',signal});
+  async function fetchDepthVersion(signal){
+    const r=await fetch('flow/data/index.json',{cache:'no-store',signal});
+    if(!r.ok)throw new Error('flow index HTTP '+r.status);
+    const p=await r.json();
+    return p.generatedAt||'';
+  }
+  async function fetchDepth(symbol,generatedAt,signal){
+    const version=generatedAt||await fetchDepthVersion(signal);
+    const suffix=version?'?v='+encodeURIComponent(version):'';
+    const r=await fetch('flow/data/depth-'+symbol+'.json'+suffix,{signal});
     if(!r.ok)throw new Error('depth '+symbol+' HTTP '+r.status);
     return r.json();
   }
@@ -25,7 +33,7 @@
     if(!r.ok)throw new Error('flow snapshot '+symbol+' HTTP '+r.status);
     const p=await r.json();
     let depth=null,perp1h=[];
-    try{depth=await fetchDepth(symbol,signal);}catch(e){if(isAbort(e,signal))throw e;}
+    try{depth=await fetchDepth(symbol,p.generatedAt,signal);}catch(e){if(isAbort(e,signal))throw e;}
     try{perp1h=await fetchAnalysisSnapshot1h(symbol,signal);}catch(e){if(isAbort(e,signal))throw e;}
     return{
       schema:p.schema||'flow-snapshot-v1',symbol,generatedAt:p.generatedAt,cutoffUtc:p.cutoffUtc,
@@ -41,7 +49,7 @@
     await Promise.all([
       D.fetchHistory(symbol,'15m',cap,undefined,signal,'um').then(v=>{perp15m=v;step('perp 15m');}).catch(e=>{if(isAbort(e,signal))throw e;errors.perp15m=String(e.message||e);step('perp failed');}),
       D.fetchHistory(symbol,'15m',cap,undefined,signal,'spot').then(v=>{spot15m=v;step('spot 15m');}).catch(e=>{if(isAbort(e,signal))throw e;errors.spot15m=String(e.message||e);step('spot failed');}),
-      fetchDepth(symbol,signal).then(v=>{depth=v;step('depth archive');}).catch(e=>{if(isAbort(e,signal))throw e;errors.depth=String(e.message||e);step('depth failed');}),
+      fetchDepth(symbol,null,signal).then(v=>{depth=v;step('depth archive');}).catch(e=>{if(isAbort(e,signal))throw e;errors.depth=String(e.message||e);step('depth failed');}),
       ...(anchorMode==='quarter'?[D.fetchHistory(symbol,'1h',2300,undefined,signal,'um').then(v=>{perp1h=v;step('perp 1h');}).catch(e=>{if(isAbort(e,signal))throw e;errors.perp1h=String(e.message||e);step('1h failed');})]:[])
     ]);
     if(!perp15m.length)throw new Error(errors.perp15m||'perp 15m unavailable');
@@ -61,7 +69,7 @@
     const [perp15m,spot15m]=await Promise.all([update('um','perp15m'),update('spot','spot15m')]);
     let depth=bundle&&bundle.depth||null;
     if(!depth||errors.depth){
-      try{depth=await fetchDepth(symbol,signal);delete errors.depth;}
+      try{depth=await fetchDepth(symbol,null,signal);delete errors.depth;}
       catch(e){if(isAbort(e,signal))throw e;errors.depth=String(e.message||e);failures.push({interval:'depth',error:errors.depth});}
     }
     let perp1h=bundle&&bundle.perp1h||[];
