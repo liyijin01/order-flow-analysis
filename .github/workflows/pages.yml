@@ -260,16 +260,19 @@ jobs:
       - name: Build archived flow snapshot and persistent depth
         run: python scripts/d6_build_flow_snapshot.py --data-dir datarepo --output-dir _generated/flow/data
 
-      - name: Persist new ladders and depth to data branch
+      - name: Persist new ladders and sampled depth to data branch
         shell: bash
         run: |
           set -euo pipefail
           cd datarepo
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add ladders depth .data-branch 2>/dev/null || git add ladders depth
+          if [ -d depth ]; then
+            git rm -r --quiet depth
+          fi
+          git add ladders depth15m .data-branch 2>/dev/null || git add ladders depth15m
           if ! git diff --cached --quiet; then
-            git commit -m 'data: refresh daily ladders'
+            git commit -m 'data: refresh daily ladders and sampled depth'
             git push origin HEAD:data
           fi
 
