@@ -1,5 +1,6 @@
 import io
 import unittest
+from datetime import date
 
 from pipeline.depth import (
     asof_sample,
@@ -7,6 +8,7 @@ from pipeline.depth import (
     normalize_epoch_ms,
     parse_bookdepth_csv,
     parse_kline_csv,
+    sample_depth15m_day,
 )
 
 
@@ -111,6 +113,59 @@ class DepthTests(unittest.TestCase):
         self.assertIsNotNone(out["rows"][1]["buckets"])
         self.assertIsNone(out["rows"][2]["buckets"])
         self.assertEqual(out["emptyBars"], 1)
+
+    def test_depth15m_sampling_keeps_96_slots_levels_rounding_and_stale_blanks(self):
+        day = date(2026, 9, 27)
+        start = 1790467200
+        snapshots = [
+            {
+                "time": start + 890,
+                "bid": {"1": 100.4, "2": 240.6, "3": 400.2, "5": 600.2},
+                "ask": {"1": 80.4, "2": 190.6, "3": 300.2, "5": 500.2},
+            },
+            {
+                "time": start + 1790,
+                "bid": {"1": 110.4, "2": 250.6, "3": 410.2, "5": 620.2},
+                "ask": {"1": 90.4, "2": 200.6, "3": 310.2, "5": 520.2},
+            },
+        ]
+        rows = sample_depth15m_day(day, snapshots, LEVELS)
+        self.assertEqual(len(rows), 96)
+        self.assertEqual(rows[0]["bid"], {"1": 100, "2": 241, "5": 600})
+        self.assertEqual(rows[0]["ask"], {"1": 80, "2": 191, "5": 500})
+        self.assertEqual(set(rows[0]["bid"]), {"1", "2", "5"})
+        self.assertEqual(rows[1]["snapshotTime"], start + 1790)
+        self.assertNotIn("bid", rows[2])
+        self.assertNotIn("ask", rows[2])
+
+    def test_depth15m_quarantined_day_has_no_samples(self):
+        day = date(2026, 9, 27)
+        rows = sample_depth15m_day(
+            day,
+            [{"time": 1790468090, "bid": {"1": 1, "2": 2, "5": 5}, "ask": {"1": 1, "2": 2, "5": 5}}],
+            LEVELS,
+            quarantined=True,
+        )
+        self.assertEqual(rows, [])
+
+    def test_depth15m_matches_old_asof_and_30m_uses_second_15m_close(self):
+        day = date(2026, 9, 27)
+        start = 1790467200
+        snapshots = [
+            {"time": start + 890, "bid": {"1": 100, "2": 240, "5": 600}, "ask": {"1": 80, "2": 190, "5": 500}},
+            {"time": start + 1790, "bid": {"1": 110, "2": 260, "5": 630}, "ask": {"1": 90, "2": 205, "5": 525}},
+        ]
+        sampled = sample_depth15m_day(day, snapshots, LEVELS)
+        bars15 = [{"time": start}, {"time": start + 900}, {"time": start + 1800}]
+        old15 = asof_sample(bars15, snapshots, 900, [[0,1],[1,2],[2,5]])
+        for index in range(3):
+            if "bid" not in sampled[index]:
+                self.assertIsNone(old15["rows"][index]["buckets"])
+            else:
+                self.assertEqual(bucket_diff(sampled[index], [[0,1],[1,2],[2,5]]), old15["rows"][index]["buckets"])
+
+        old30 = asof_sample([{"time": start}], snapshots, 1800, [[0,1],[1,2],[2,5]])
+        self.assertEqual(bucket_diff(sampled[1], [[0,1],[1,2],[2,5]]), old30["rows"][0]["buckets"])
 
     def test_spot_kline_microseconds_and_quote_fields(self):
         text = "1790467200000000,100,101,99,100.5,12,1790468099999999,1206,9,7,704,0\n"

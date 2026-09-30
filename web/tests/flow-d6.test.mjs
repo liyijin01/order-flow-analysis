@@ -128,3 +128,23 @@ test('D6 30m alignment introduces no extra logical timestamps',()=>{
   assert.equal(aligned.every(x=>allowed.has(x.time)),true);
   assert.equal(aligned.length,display.length);
 });
+
+
+test('D8 sampled depth maps 15m directly and 30m to the second 15m close',()=>{
+  const samples=[
+    {time:0,snapshotTime:890,bid:{'1':100,'2':240,'5':600},ask:{'1':80,'2':190,'5':500}},
+    {time:900,snapshotTime:1790,bid:{'1':110,'2':260,'5':630},ask:{'1':90,'2':205,'5':525}},
+    {time:1800}
+  ];
+  const display15=[bar(0),bar(900),bar(1800)];
+  const depth15=F.sampledDepth(display15,samples,'15m',[[0,1],[1,2],[2,5]]);
+  assert.deepEqual(depth15.rows[1].buckets,F.depthBuckets(samples[1],[[0,1],[1,2],[2,5]]));
+  assert.equal(depth15.rows[2].buckets,null);
+
+  const display30=F.aggregateBars(display15.slice(0,2),'30m');
+  const depth30=F.sampledDepth(display30,samples,'30m',[[0,1],[1,2],[2,5]]);
+  assert.equal(depth30.rows.length,1);
+  assert.equal(depth30.rows[0].time,0);
+  assert.equal(depth30.rows[0].snapshotTime,1790);
+  assert.deepEqual(depth30.rows[0].buckets,depth15.rows[1].buckets);
+});
