@@ -172,6 +172,51 @@ def parse_bookdepth_csv(text_stream, required_levels, one_minute_closes, extra_p
     }
 
 
+def _level_key(level) -> str:
+    return str(float(level)).rstrip("0").rstrip(".")
+
+
+def compact_depth_snapshot(snapshot, levels):
+    out = {"bid": {}, "ask": {}}
+    for side in ("bid", "ask"):
+        src = snapshot.get(side, {})
+        for level in levels:
+            key = _level_key(level)
+            raw = src.get(key)
+            if raw is None or not math.isfinite(float(raw)):
+                return None
+            out[side][key] = int(round(float(raw)))
+    return out
+
+
+def sample_depth15m_day(day, snapshots, levels, quarantined=False):
+    if quarantined:
+        return []
+    interval = 900
+    start = int(datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp())
+    src = sorted(snapshots or [], key=lambda x: int(x["time"]))
+    rows = []
+    j = 0
+    last = None
+    for index in range(96):
+        bar_time = start + index * interval
+        close = bar_time + interval
+        while j < len(src) and int(src[j]["time"]) <= close:
+            last = src[j]
+            j += 1
+        row = {"time": bar_time}
+        if last is None or close - int(last["time"]) > interval:
+            rows.append(row)
+            continue
+        compact = compact_depth_snapshot(last, levels)
+        if compact is None:
+            rows.append(row)
+            continue
+        row.update({"snapshotTime": int(last["time"]), **compact})
+        rows.append(row)
+    return rows
+
+
 def bucket_diff(snapshot, buckets):
     out = []
     for a, b in buckets:
