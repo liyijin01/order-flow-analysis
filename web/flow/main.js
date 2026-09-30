@@ -136,9 +136,9 @@
     const spec=R.defaultWindow(state.chart,state.rules,state.timeframe,display.length);
     const cvdIndex=Math.max(0,display.length-spec.visible),cvdAnchorTime=Number(display[cvdIndex].time);
     const perp=F.cvdSeries(display,display,cvdAnchorTime),spot=F.cvdSeries(display,spotDisplay,cvdAnchorTime);
-    const depthPayload=bundle.depth||{snapshots:[],bucketsUsed:state.rules.depthBuckets,cutoffUtc:null,totalSnapshots:0,snapshotsRejected:0};
+    const depthPayload=bundle.depth||{samples:[],bucketsUsed:state.rules.depthBuckets,cutoffUtc:null,totalSnapshots:0,snapshotsRejected:0};
     const buckets=depthPayload.bucketsUsed||state.rules.depthBuckets;
-    const depth=F.asOfDepth(display,depthPayload.snapshots||[],D.intervalSec(state.timeframe),buckets);
+    const depth=F.sampledDepth(display,depthPayload.samples||[],state.timeframe,buckets);
     return{
       symbol:state.symbol,timeframe:state.timeframe,display,spotDisplay,anchor,avwap,lastAv,perp,spot,depth,buckets,
       current:Number(display[display.length-1].close),visibleBars:spec.visible,cutoffUtc:bundle.cutoffUtc||null,
