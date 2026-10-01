@@ -83,6 +83,12 @@
     "pqVwap": "#2e7d32",
     "nPoc": "#ff9800",
     "quarterBandFill": "rgba(190,196,208,.13)",
-    "quarterBandEdge": "rgba(190,196,208,.5)"
+    "quarterBandEdge": "rgba(190,196,208,.5)",
+    "keyLevel": "rgba(236,239,244,.75)",
+    "keyMonth": "#4fc3f7",
+    "keyAxis": "#eceff4"
+  },
+  "keyLevels": {
+    "maxCount": 6
   }
 }

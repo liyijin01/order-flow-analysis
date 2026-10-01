@@ -119,19 +119,29 @@
     }
   }
 
+  async function fetchKeyLevels(symbol,generatedAt,signal){
+    const suffix=generatedAt?'?v='+encodeURIComponent(generatedAt):'';
+    const r=await fetch('analysis/levels/'+symbol+'.json'+suffix,{signal});
+    if(!r.ok)throw new Error('levels '+symbol+' HTTP '+r.status);
+    return r.json();
+  }
+
   async function loadSnapshot(symbol){
     const r=await fetch('analysis/data/'+symbol+'.json',{cache:'no-store'});
     if(!r.ok)throw new Error('snapshot '+symbol+' HTTP '+r.status);
-    const payload=await r.json(),series={};
+    const payload=await r.json(),series={},errors={...(payload.errors||{})};
     for(const [k,v] of Object.entries(payload.series||{}))series[k]=parseRows(v);
-    return{schema:payload.schema||'analysis-snapshot-v1',symbol,generatedAt:payload.generatedAt,cutoffUtc:payload.cutoffUtc,series,profile:payload.profile||null,errors:payload.errors||{}};
+    let keyLevels=null;
+    try{keyLevels=await fetchKeyLevels(symbol,payload.generatedAt);}
+    catch(e){errors.levels=String(e.message||e);}
+    return{schema:payload.schema||'analysis-snapshot-v1',symbol,generatedAt:payload.generatedAt,cutoffUtc:payload.cutoffUtc,series,profile:payload.profile||null,keyLevels,errors};
   }
 
   async function loadLive(symbol,timeframe,onProgress,signal){
     const progress=typeof onProgress==='function'?onProgress:()=>{},errors={},series={};
     const required=[timeframe,'1h','30m',calcMap[timeframe]];
     const intervals=[];for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
-    let done=0;const total=intervals.length+1;
+    let done=0;const total=intervals.length+2;
     const step=(label)=>{done++;progress({done,total,label});};
     await Promise.all(intervals.map(interval=>
       fetchHistory(symbol,interval,capFor(interval,timeframe),undefined,signal)
@@ -140,8 +150,11 @@
     ));
     const profile=await fetchProfile(symbol,signal);step('exact weekly profile');
     if(!profile)errors.profile='profiles-'+symbol+'.json unavailable';
+    const generatedAt=new Date().toISOString();let keyLevels=null;
+    try{keyLevels=await fetchKeyLevels(symbol,generatedAt,signal);step('historical key levels');}
+    catch(e){if(isAbort(e,signal))throw e;errors.levels=String(e.message||e);step('historical key levels failed');}
     if(!(series[timeframe]||[]).length)throw new Error(errors[timeframe]||'display candles unavailable');
-    return{schema:'analysis-live-v2',symbol,generatedAt:new Date().toISOString(),cutoffUtc:null,series,profile,errors};
+    return{schema:'analysis-live-v2',symbol,generatedAt,cutoffUtc:null,series,profile,keyLevels,errors};
   }
 
   async function refreshLiveBundle(bundle,symbol,timeframe,signal){
@@ -177,8 +190,16 @@
         failures.push({interval:'profile',error:errors.profile});
       }
     }
+    const generatedAt=new Date().toISOString();let keyLevels=bundle&&bundle.keyLevels||null;
+    if(!keyLevels||errors.levels){
+      try{keyLevels=await fetchKeyLevels(symbol,generatedAt,signal);delete errors.levels;}
+      catch(e){
+        if(isAbort(e,signal))throw e;
+        errors.levels=String(e.message||e);failures.push({interval:'levels',error:errors.levels});
+      }
+    }
     return{
-      bundle:{...(bundle||{}),schema:'analysis-live-v2',symbol,generatedAt:new Date().toISOString(),series,profile,errors},
+      bundle:{...(bundle||{}),schema:'analysis-live-v2',symbol,generatedAt,series,profile,keyLevels,errors},
       failures
     };
   }
@@ -203,6 +224,6 @@
 
   global.OrderFlowAnalysisData={
     intervalMs,intervalSec,displayCounts,calcMap,parseRows,closedBars,fetchHistory,fetchLatest,mergeBars,capFor,
-    fetchProfile,loadSnapshot,loadLive,refreshLiveBundle,formatJst,toDisplayTime,formatDisplayTime,formatDisplayTick
+    fetchProfile,fetchKeyLevels,loadSnapshot,loadLive,refreshLiveBundle,formatJst,toDisplayTime,formatDisplayTime,formatDisplayTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);
