@@ -180,9 +180,37 @@ function assertBoundaryStable(before,after,label){
 (async()=>{
   const browser=await chromium.launch({channel:'chrome',headless:true});
   try{
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
+      await routeMarket(page,requests);await routeKeyLevels(page,'fixture');
+      await page.goto(pageUrl+'?symbol=ETHUSDT',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const q=await page.evaluate(()=>{
+        const d=window.__analysisDebug,m=d.model,r=d.view().range,style=d.candleStyle(),pq=m.levels.filter(x=>x.kind==='pq-bound'),span=Number(r.to)-Number(r.from),right=Math.max(0,Number(r.to)-(m.display.length-1));
+        return{
+          template:d.template(),tf:d.state.timeframe,display:m.display.length,days:(m.last.time-m.display[0].time)/86400,rightFraction:span>0?right/span:0,
+          regions:m.regions.map(x=>x.scope||x.type),npoc:m.levels.some(x=>x.kind==='npoc'),pq:pq.map(x=>({label:x.label,style:x.style,axisLabel:x.axisLabel,color:x.color})),
+          keyCount:(m.keyLevels||[]).length,keyWhiteDashed:(m.keyLevels||[]).every(x=>x.style==='dashed'&&x.color===d.state.rules.templates.quarter.keyLevelStyle.color),
+          tableRows:m.tableRows.length,tableDisplay:getComputedStyle(document.querySelector('.table-wrap')).display,legendDisplay:getComputedStyle(document.getElementById('analysisLegend')).display,
+          volumeAbsent:d.state.volume===null,upColor:style.upColor,downColor:style.downColor,watermarkColor:d.chartInfo().watermarkColor
+        };
+      });
+      if(q.template!=='quarter'||q.tf!=='1h')throw new Error('D12 default template '+JSON.stringify(q));
+      if(q.display!==720||q.days<29||q.days>31)throw new Error('D12 1h 30-day window '+JSON.stringify(q));
+      if(Math.abs(q.rightFraction-.18)>.025)throw new Error('D12 right margin '+JSON.stringify(q));
+      if(q.regions.length||q.npoc||q.tableRows||q.tableDisplay!=='none'||q.legendDisplay!=='none'||!q.volumeAbsent)throw new Error('D12 disabled layers '+JSON.stringify(q));
+      if(q.pq.length!==2||q.pq.some(x=>x.style!=='dashed'||x.axisLabel!==false)||q.keyCount>6||!q.keyWhiteDashed)throw new Error('D12 quarter lines '+JSON.stringify(q));
+      if(q.upColor!=='#e6e9ef'||q.downColor!=='rgba(0,0,0,0)'||q.watermarkColor!=='rgba(196,140,60,.30)')throw new Error('D12 global style '+JSON.stringify(q));
+      await page.click('[data-tpl="combined"]');
+      await page.waitForFunction(()=>window.__analysisDebug?.template()==='combined'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
+      const combined=await page.evaluate(()=>({table:getComputedStyle(document.querySelector('.table-wrap')).display,legend:getComputedStyle(document.getElementById('analysisLegend')).display,volume:!!window.__analysisDebug.state.volume}));
+      if(combined.table==='none'||combined.legend==='none'||!combined.volume)throw new Error('D12 combined restore '+JSON.stringify(combined));
+      await page.close();
+    }
+
     for(const tf of ['4h','1h','1d']){
       const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];await routeMarket(page,requests);
-      await page.goto(pageUrl+'?symbol=ETHUSDT&tf='+tf,{waitUntil:'domcontentloaded',timeout:60000});
+      await page.goto(pageUrl+'?tpl=combined&symbol=ETHUSDT&tf='+tf,{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const q=await page.evaluate(tf=>{
         const d=window.__analysisDebug,m=d.model,E=window.OrderFlowAnalysisEngine,I=window.OrderFlowIndicators,D=window.OrderFlowAnalysisData;
@@ -220,7 +248,7 @@ function assertBoundaryStable(before,after,label){
     }
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
-      await page.goto(pageUrl+'?snapshot=1&symbol=ETHUSDT&tf=1h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.goto(pageUrl+'?tpl=combined&snapshot=1&symbol=ETHUSDT&tf=1h',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       if(await page.evaluate(()=>window.__analysisDebug.chartInfo().countdown))throw new Error('D9 snapshot countdown should be absent');
       await page.close();
@@ -229,7 +257,7 @@ function assertBoundaryStable(before,after,label){
     for(const tf of ['4h','1h','1d']){
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
       const requests=[];await routeMarket(page,requests);
-      await page.goto(pageUrl+'?view=recent&symbol=ETHUSDT&tf='+tf,{waitUntil:'domcontentloaded',timeout:60000});
+      await page.goto(pageUrl+'?tpl=combined&view=recent&symbol=ETHUSDT&tf='+tf,{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const first=await page.evaluate(()=>({
         model:window.__analysisDebug.model,
@@ -287,7 +315,7 @@ function assertBoundaryStable(before,after,label){
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
       const requests=[];await routeMarket(page,requests);
-      await page.goto(pageUrl+'?view=recent&symbol=BTCUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.goto(pageUrl+'?tpl=combined&view=recent&symbol=BTCUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
 
       await dragPriceAxis(page,'main');
@@ -350,7 +378,7 @@ function assertBoundaryStable(before,after,label){
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
       const requests=[],network={delayMs:0};await routeRefreshSeconds(page,3);await routeMarket(page,requests,network);
-      await page.goto(pageUrl+'?view=recent&symbol=BTCUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.goto(pageUrl+'?tpl=combined&view=recent&symbol=BTCUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>window.__analysisDebug?.model?.symbol==='BTCUSDT'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
       requests.length=0;network.delayMs=1200;
       await page.click('[data-symbol="ETHUSDT"]');
@@ -367,7 +395,7 @@ function assertBoundaryStable(before,after,label){
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
       const requests=[];await routeRefreshSeconds(page,3);await routeMarket(page,requests);
-      await page.goto(pageUrl+'?view=recent&symbol=BTCUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.goto(pageUrl+'?tpl=combined&view=recent&symbol=BTCUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       await page.evaluate(()=>Object.defineProperty(document,'hidden',{configurable:true,value:true}));
       await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
@@ -385,7 +413,7 @@ function assertBoundaryStable(before,after,label){
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
       const requests=[];await routeMarket(page,requests,{failFirst30m:true});
-      await page.goto(pageUrl+'?view=recent&symbol=ETHUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.goto(pageUrl+'?tpl=combined&view=recent&symbol=ETHUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const missing=await page.evaluate(()=>({
         pmMissing:window.__analysisDebug.model.missing.some(m=>m.type==='价值区 PM'),
@@ -410,7 +438,7 @@ function assertBoundaryStable(before,after,label){
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
       const requests=[];await failProfileOnce(page);await routeMarket(page,requests);
-      await page.goto(pageUrl+'?view=recent&symbol=BTCUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.goto(pageUrl+'?tpl=combined&view=recent&symbol=BTCUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const before=await page.evaluate(()=>({
         profile:!!window.__analysisDebug.state.bundle.profile,
@@ -433,7 +461,7 @@ function assertBoundaryStable(before,after,label){
       for(const tf of ['4h','1h','1d']){
         const page=await browser.newPage({viewport:{width:1600,height:1000}});
         const requests=[];await routeMarket(page,requests);
-        await page.goto(pageUrl+'?view=recent&symbol='+symbol+'&tf='+tf,{waitUntil:'domcontentloaded',timeout:60000});
+        await page.goto(pageUrl+'?tpl=combined&view=recent&symbol='+symbol+'&tf='+tf,{waitUntil:'domcontentloaded',timeout:60000});
         await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
         const labels=await page.evaluate(()=> {
           const d=window.__analysisDebug,gap=Number(d.state.rules.axisLabels.minGapPx),currentY=d.priceCoordinate(d.model.current);
@@ -475,7 +503,7 @@ function assertBoundaryStable(before,after,label){
     {
       const page=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:3,isMobile:true});
       const requests=[];await routeMarket(page,requests);
-      await page.goto(pageUrl+'?view=recent&symbol=ETHUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.goto(pageUrl+'?tpl=combined&view=recent&symbol=ETHUSDT&tf=4h',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const portrait=await page.evaluate(()=> {
         const d=window.__analysisDebug,s=d.state,width=s.chart.timeScale().width(),rules=s.rules;
@@ -531,7 +559,7 @@ function assertBoundaryStable(before,after,label){
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
       await routeMarket(page,requests);await routeKeyLevels(page,'fixture');
-      await page.goto(pageUrl+'?symbol=ETHUSDT&tf=1h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.goto(pageUrl+'?tpl=combined&symbol=ETHUSDT&tf=1h',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const result=await page.evaluate(()=>{
         const d=window.__analysisDebug,m=d.model,E=window.OrderFlowAnalysisEngine,r=d.state.rules;
@@ -560,7 +588,7 @@ function assertBoundaryStable(before,after,label){
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
       await routeMarket(page,requests);await routeKeyLevels(page,'404');
-      await page.goto(pageUrl+'?view=recent&symbol=ETHUSDT&tf=1h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.goto(pageUrl+'?tpl=combined&view=recent&symbol=ETHUSDT&tf=1h',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const missing=await page.evaluate(()=>({
         levelsError:window.__analysisDebug.state.bundle.errors.levels,
@@ -574,7 +602,7 @@ function assertBoundaryStable(before,after,label){
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
       await routeMarket(page,requests);await routeKeyLevels(page,'fixture');await routeSnapshotThrough(page,'2026-09-30T00:00:00Z');
-      await page.goto(pageUrl+'?symbol=ETHUSDT&tf=1h&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.goto(pageUrl+'?tpl=combined&symbol=ETHUSDT&tf=1h&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const q3=await page.evaluate(()=>({
         drawn:(window.__analysisDebug.model.keyLevels||[]).some(x=>x.sourceId==='q3-vah'||x.sourceId==='q3-val'),
@@ -586,7 +614,7 @@ function assertBoundaryStable(before,after,label){
 
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
-      await page.goto(pageUrl+'?view=recent&symbol=BTCUSDT&tf=4h&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.goto(pageUrl+'?tpl=combined&view=recent&symbol=BTCUSDT&tf=4h&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const meta=await page.evaluate(()=>({info:document.getElementById('infoLine').textContent,footer:document.getElementById('cutoff').textContent}));
       if(!meta.info.includes('数据截至'))throw new Error('D4 snapshot title missing cutoff '+meta.info);
@@ -595,6 +623,7 @@ function assertBoundaryStable(before,after,label){
       await page.close();
     }
 
+    console.log('D12 browser smoke passed: default quarter template, 30-day 1h window, 18% margin, layer gating, PQ lines, global style and combined restore.');
     console.log('D10 browser smoke passed: filtered merged key levels, 404 fallback and axis-label spacing.');
     console.log('D5 browser smoke passed: rotation settling, latest-price reservation, legend consistency, mobile table and snapshot cutoff.');
     console.log('D4 browser smoke passed: serialized refresh, recovery, mobile window, visibility and refresh-time labels.');

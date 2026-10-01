@@ -92,5 +92,71 @@
     "maxCount": 6,
     "maxMonthly": 2,
     "minGapPct": 2
+  },
+  "templates": {
+    "quarter": {
+      "label": "季度价值",
+      "timeframes": [
+        "1h",
+        "4h"
+      ],
+      "defaultTimeframe": "1h",
+      "window": {
+        "1h": {
+          "mode": "recent",
+          "visibleBars": 720
+        },
+        "4h": {
+          "mode": "quarter"
+        }
+      },
+      "rightMarginPct": 18,
+      "layers": {
+        "quarterBands": true,
+        "keyLevels": true,
+        "pqArea": false,
+        "pqBounds": true,
+        "pqVwap": true,
+        "pm": false,
+        "pw": false,
+        "zones": false,
+        "nPoc": false,
+        "volume": false
+      },
+      "table": false,
+      "legend": false,
+      "keyLevelStyle": {
+        "color": "rgba(236,239,244,.75)",
+        "style": "dashed",
+        "axisLabel": false
+      }
+    },
+    "combined": {
+      "label": "综合",
+      "timeframes": [
+        "4h",
+        "1h",
+        "1d"
+      ],
+      "defaultTimeframe": "4h",
+      "window": {
+        "mode": "view"
+      },
+      "rightMarginPct": null,
+      "layers": {
+        "quarterBands": true,
+        "keyLevels": true,
+        "pqArea": true,
+        "pqBounds": false,
+        "pqVwap": true,
+        "pm": true,
+        "pw": true,
+        "zones": true,
+        "nPoc": true,
+        "volume": true
+      },
+      "table": true,
+      "legend": true
+    }
   }
 }
