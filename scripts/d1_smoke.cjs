@@ -141,7 +141,7 @@ function assertBoundaryStable(before,after,label){
       const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];await routeMarket(page,requests);
       await page.goto(pageUrl+'?symbol=ETHUSDT&tf='+tf,{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
-      const q=await page.evaluate(()=>{
+      const q=await page.evaluate(tf=>{
         const d=window.__analysisDebug,m=d.model,E=window.OrderFlowAnalysisEngine,I=window.OrderFlowIndicators,D=window.OrderFlowAnalysisData;
         const start=E.previousQuarterStart(m.last.time),set=new Set(m.display.map(x=>x.time)),bands=m.quarterVwaps;
         let maxRel=0;
@@ -154,7 +154,7 @@ function assertBoundaryStable(before,after,label){
         const cur=bands.find(x=>x.start===E.utcQuarterStart(m.last.time)),first=cur&&cur.points[0],bar=(d.state.bundle.series['1h']||[]).find(x=>x.time===cur?.start);
         const hlc3=bar?(Number(bar.high)+Number(bar.low)+Number(bar.close))/3:null;
         return{start,firstTime:m.display[0].time,count:m.display.length,slots:d.view().logicalSlots,allBandTimes:bands.flatMap(x=>x.points.map(p=>p.time)).every(t=>set.has(t)),maxRel,firstVwap:first&&first.vwap,hlc3,view:d.viewMode(),watermark:d.chartInfo().watermark,line2:d.chartInfo().line2};
-      });
+      },tf);
       if(q.view!=='quarter'||Math.abs(q.firstTime-q.start)>intervalSec[tf])throw new Error('D9 quarter start '+tf+' '+JSON.stringify(q));
       if(Math.abs(q.slots-q.count*1.04)>2)throw new Error('D9 quarter span '+tf+' '+JSON.stringify(q));
       if(!q.allBandTimes)throw new Error('D9 band introduced non-display time '+tf);
