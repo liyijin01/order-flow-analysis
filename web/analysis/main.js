@@ -83,10 +83,16 @@
         status,period:r.period||'',source:r.source||'exact',missing:false
       });
     }
+    let hiddenKeyCount=0;
     for(const l of payload.levels){
+      if(l.kind==='key'&&l.offView){hiddenKeyCount++;continue;}
       let status=l.kind==='npoc'?'未回补':'有效';if(l.offView)status+='（图外）';
       out.push({type:l.label,low:l.price,high:l.price,distance:Math.abs(l.price-current)/current*100,status,period:l.period||'',source:l.source||'exact',missing:false});
     }
+    if(hiddenKeyCount>0)out.push({
+      type:'关键价位 · 另有 '+hiddenKeyCount+' 条不在当前视图',low:null,high:null,distance:null,status:'图外',
+      period:'',source:'precomputed',missing:false,summary:true
+    });
     for(const m of payload.missing||[])out.push({type:m.type,low:null,high:null,distance:null,status:'缺失',period:m.period||'',source:m.source||'',missing:true});
     out.sort((a,b)=>{
       const ap=a.high==null?-Infinity:a.high,bp=b.high==null?-Infinity:b.high;
@@ -292,7 +298,20 @@
     const linePad=rules.valueAreas.visiblePadPct;
     let keySelection={all:[],selected:[]};
     if(bundle.keyLevels&&Array.isArray(bundle.keyLevels.levels)){
-      keySelection=E.selectKeyLevels(bundle.keyLevels.levels,current,view.min,view.max,linePad,tick,rules.keyLevels&&rules.keyLevels.maxCount||6,pqStart);
+      const keyAsOfMs=state.snapshot&&bundle.cutoffUtc?Date.parse(bundle.cutoffUtc):Date.now();
+      const closedDisplay=D.closedBars(display,keyAsOfMs);
+      const lastClosedDisplay=closedDisplay[closedDisplay.length-1];
+      const keyPeriodCutoffMs=lastClosedDisplay&&Number.isFinite(Number(lastClosedDisplay.closeTime))
+        ?Number(lastClosedDisplay.closeTime)+1:keyAsOfMs;
+      const eligibleKeyLevels=bundle.keyLevels.levels.filter(row=>{
+        const periodEnd=Date.parse(String(row.periodEnd||''));
+        return Number.isFinite(periodEnd)&&periodEnd<=keyPeriodCutoffMs;
+      });
+      const keyCfg=rules.keyLevels||{};
+      keySelection=E.selectKeyLevels(
+        eligibleKeyLevels,current,view.min,view.max,linePad,tick,keyCfg.maxCount||6,pqStart,
+        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,pq?[pq.bottom,pq.top]:[]
+      );
       const firstTime=Number(display[0].time);
       for(const row of keySelection.all){
         const monthly=row.keyKind==='py-month';
@@ -329,10 +348,13 @@
     const tbody=$('regionRows');tbody.textContent='';
     for(const r of model.tableRows){
       const tr=document.createElement('tr');
-      const range=r.missing?'—':(r.low===r.high?fmtPrice(r.low):fmtPrice(r.low)+' – '+fmtPrice(r.high));
+      const range=r.missing||r.summary?'—':(r.low===r.high?fmtPrice(r.low):fmtPrice(r.low)+' – '+fmtPrice(r.high));
       const dist=r.distance==null?'—':r.distance.toFixed(2)+'%';
-      for(const value of [r.type,range,dist,r.status,r.period,r.source||'—']){
-        const td=document.createElement('td');td.textContent=value;tr.appendChild(td);
+      const values=[r.type,range,dist,r.status,r.period,r.source||'—'];
+      for(let i=0;i<values.length;i++){
+        const td=document.createElement('td');td.textContent=values[i];
+        if(r.summary&&i===0){td.style.whiteSpace='normal';td.style.overflowWrap='anywhere';}
+        tr.appendChild(td);
       }
       if(r.missing)tr.classList.add('missing');tbody.appendChild(tr);
     }

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.c4_1_golden import load_range
+from scripts.c4_1_golden import Bar, load_range
 from scripts.d10_build_levels import (
     build_symbol,
     expected_ids,
@@ -55,6 +55,9 @@ class D10LevelTests(unittest.TestCase):
                     "periodStart": spec["start"].isoformat().replace("+00:00", "Z"),
                     "periodEnd": spec["end"].isoformat().replace("+00:00", "Z"),
                     "definition": "cached",
+                    "bars": 1,
+                    "expectedBars": 1,
+                    "complete": True,
                 })
         with tempfile.TemporaryDirectory() as tmp:
             cache = Path(tmp) / "cache.json"
@@ -65,6 +68,107 @@ class D10LevelTests(unittest.TestCase):
             self.assertEqual(computed, [])
             self.assertEqual(mocked.call_count, 0)
             self.assertEqual(len(payload["levels"]), len(rows))
+
+    @staticmethod
+    def _cached_rows(cutoff, skip_label=None, legacy_label=None):
+        rows = []
+        for spec in target_periods(cutoff):
+            if spec["label"] == skip_label:
+                continue
+            for side in ("VAH", "VAL"):
+                level_id = next(x for x in expected_ids(spec) if x.endswith(side.lower()))
+                row = {
+                    "id": level_id,
+                    "label": f"{spec['label']} {side}",
+                    "kind": spec["kind"],
+                    "side": side,
+                    "price": 100.0,
+                    "periodStart": spec["start"].isoformat().replace("+00:00", "Z"),
+                    "periodEnd": spec["end"].isoformat().replace("+00:00", "Z"),
+                    "definition": "cached",
+                }
+                if spec["label"] != legacy_label:
+                    row.update({"bars": 1, "expectedBars": 1, "complete": True})
+                rows.append(row)
+        return rows
+
+    @staticmethod
+    def _bars(spec, interval, missing_indexes=()):
+        step_ms = 3600_000 if interval == "1h" else 1800_000
+        start_ms = int(spec["start"].timestamp() * 1000)
+        end_ms = int(spec["end"].timestamp() * 1000)
+        count = (end_ms - start_ms) // step_ms
+        missing = set(missing_indexes)
+        return [
+            Bar(start_ms + i * step_ms, 100.0, 101.0, 99.0, 100.0, 1.0, 0.5)
+            for i in range(count)
+            if i not in missing
+        ]
+
+    def test_incomplete_final_day_is_not_cached(self):
+        cutoff = datetime(2026, 10, 1, tzinfo=timezone.utc)
+        q3 = next(spec for spec in target_periods(cutoff) if spec["label"] == "Q3")
+        expected = int((q3["end"] - q3["start"]).total_seconds() // 3600)
+        rows = self._cached_rows(cutoff, skip_label="Q3")
+
+        def fake_load(_symbol, _market, interval, start, end):
+            self.assertEqual((start, end, interval), (q3["start"], q3["end"], "1h"))
+            return self._bars(q3, interval, range(expected - 24, expected))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = Path(tmp) / "cache.json"
+            out = Path(tmp) / "out.json"
+            cache.write_text(json.dumps({"levels": rows}), encoding="utf-8")
+            payload, computed = build_symbol("ETHUSDT", cutoff, cache, out, fake_load)
+            self.assertEqual(computed, [])
+            self.assertFalse(any(row["id"] in expected_ids(q3) for row in payload["levels"]))
+            written = json.loads(out.read_text(encoding="utf-8"))
+            self.assertFalse(any(row["id"] in expected_ids(q3) for row in written["levels"]))
+
+    def test_single_middle_gap_is_allowed_and_records_completeness(self):
+        cutoff = datetime(2026, 10, 1, tzinfo=timezone.utc)
+        q3 = next(spec for spec in target_periods(cutoff) if spec["label"] == "Q3")
+        expected = int((q3["end"] - q3["start"]).total_seconds() // 3600)
+        rows = self._cached_rows(cutoff, skip_label="Q3")
+
+        def fake_load(_symbol, _market, interval, start, end):
+            self.assertEqual((start, end, interval), (q3["start"], q3["end"], "1h"))
+            return self._bars(q3, interval, {expected // 2})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = Path(tmp) / "cache.json"
+            out = Path(tmp) / "out.json"
+            cache.write_text(json.dumps({"levels": rows}), encoding="utf-8")
+            payload, computed = build_symbol("ETHUSDT", cutoff, cache, out, fake_load)
+            self.assertEqual(computed, ["Q3"])
+            q3_rows = [row for row in payload["levels"] if row["id"] in expected_ids(q3)]
+            self.assertEqual(len(q3_rows), 2)
+            for row in q3_rows:
+                self.assertTrue(row["complete"])
+                self.assertEqual(row["bars"], expected - 1)
+                self.assertEqual(row["expectedBars"], expected)
+
+    def test_legacy_cache_rows_are_recomputed(self):
+        cutoff = datetime(2026, 10, 1, tzinfo=timezone.utc)
+        q3 = next(spec for spec in target_periods(cutoff) if spec["label"] == "Q3")
+        rows = self._cached_rows(cutoff, legacy_label="Q3")
+        calls = []
+
+        def fake_load(_symbol, _market, interval, start, end):
+            calls.append((interval, start, end))
+            self.assertEqual((start, end, interval), (q3["start"], q3["end"], "1h"))
+            return self._bars(q3, interval)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = Path(tmp) / "cache.json"
+            out = Path(tmp) / "out.json"
+            cache.write_text(json.dumps({"levels": rows}), encoding="utf-8")
+            payload, computed = build_symbol("ETHUSDT", cutoff, cache, out, fake_load)
+            self.assertEqual(computed, ["Q3"])
+            self.assertEqual(len(calls), 1)
+            q3_rows = [row for row in payload["levels"] if row["id"] in expected_ids(q3)]
+            self.assertEqual(len(q3_rows), 2)
+            self.assertTrue(all(row.get("complete") is True for row in q3_rows))
 
 
 if __name__ == "__main__":

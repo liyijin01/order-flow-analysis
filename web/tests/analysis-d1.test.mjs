@@ -120,9 +120,31 @@ test('D10 key levels exclude PQ, merge under one tick, filter to view and cap at
     {id:'q2',label:'PY Q2 VAL',kind:'py-quarter',price:105,periodStart:iso(Date.UTC(2025,3,1)/1000),definition:'Q'},
     {id:'far',label:'PY Jan VAL',kind:'py-month',price:140,periodStart:iso(Date.UTC(2025,0,1)/1000),definition:'M'}
   ];
-  const got=E.selectKeyLevels(items,100,90,110,10,.01,6,pq);
+  const got=E.selectKeyLevels(items,100,90,110,10,.01,6,pq,2,2,[]);
   assert.ok(got.selected.length<=6);
   assert.equal(got.selected.some(x=>x.label.includes('Q2 VAL')&&!x.label.includes('PY')),false);
   assert.ok(got.all.some(x=>x.label.includes('Q1 VAH')&&x.label.includes('PY Q4 VAH')&&x.label.includes(' · ')));
   assert.equal(got.selected.every(x=>E.inPriceView(x.price,90,110,10)),true);
 });
+
+test('D11 key levels prefer quarters, cap monthly lines and enforce price-span gap',()=>{
+  const iso=(y,m,d)=>new Date(Date.UTC(y,m-1,d)).toISOString(),items=[];
+  for(let i=0;i<12;i++)items.push({
+    id:'q'+i,label:'PY Q'+i+' VAH',kind:'py-quarter',price:80+i*3,
+    periodStart:iso(2025,1+(i%4)*3,1),definition:'Q'
+  });
+  for(let i=0;i<24;i++)items.push({
+    id:'m'+i,label:'PY M'+i+' VAL',kind:'py-month',price:81+i,
+    periodStart:iso(2025,1+(i%12),1),definition:'M'
+  });
+  const got=E.selectKeyLevels(items,100,70,130,0,.01,6,Date.UTC(2026,3,1)/1000,2,2,[88,112]);
+  assert.ok(got.selected.length<=6);
+  assert.ok(got.selected.filter(x=>x.keyKind==='py-month').length<=2);
+  const gap=(130-70)*.02;
+  for(let i=0;i<got.selected.length;i++)for(let j=i+1;j<got.selected.length;j++){
+    assert.ok(Math.abs(got.selected[i].price-got.selected[j].price)>=gap);
+  }
+  for(const row of got.selected)assert.ok(Math.abs(row.price-88)>=gap&&Math.abs(row.price-112)>=gap);
+  assert.ok(got.selected.filter(x=>x.keyKind!=='py-month').length>=4);
+});
+

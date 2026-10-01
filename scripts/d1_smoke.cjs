@@ -80,7 +80,7 @@ async function failProfileOnce(page){
 function keyLevelFixture(symbol){
   const base=baseMap[symbol]||100,tick=symbol==='BTCUSDT'?.1:(symbol==='ETHUSDT'?.01:.001);
   const iso=(y,m,d)=>new Date(Date.UTC(y,m-1,d)).toISOString();
-  const row=(id,label,kind,side,price,start,definition)=>({id,label,kind,side,price,periodStart:start,periodEnd:iso(2026,1,1),definition});
+  const row=(id,label,kind,side,price,start,definition,end=iso(2026,1,1))=>({id,label,kind,side,price,periodStart:start,periodEnd:end,definition});
   return{
     schema:'analysis-key-levels-v1',symbol,generatedAt:'2026-09-27T00:00:00Z',cutoffUtc:'2026-09-26T23:59:59Z',
     levels:[
@@ -92,7 +92,9 @@ function keyLevelFixture(symbol){
       row('py-sep-val','PY Sep VAL','py-month','VAL',base*1.02,iso(2025,9,1),'M / 30m TPO'),
       row('py-q3-val','PY Q3 VAL','py-quarter','VAL',base*.96,iso(2025,7,1),'Q / 1h VWAP±1σ'),
       row('py-q2-vah','PY Q2 VAH','py-quarter','VAH',base*1.03,iso(2025,4,1),'Q / 1h VWAP±1σ'),
-      row('py-jan-val','PY Jan VAL','py-month','VAL',base*.95,iso(2025,1,1),'M / 30m TPO')
+      row('py-jan-val','PY Jan VAL','py-month','VAL',base*.95,iso(2025,1,1),'M / 30m TPO'),
+      row('q3-vah','Q3 VAH','quarter','VAH',base*1.01,iso(2026,7,1),'Q / 1h VWAP±1σ',iso(2026,10,1)),
+      row('q3-val','Q3 VAL','quarter','VAL',base*.99,iso(2026,7,1),'Q / 1h VWAP±1σ',iso(2026,10,1))
     ]
   };
 }
@@ -102,6 +104,19 @@ async function routeKeyLevels(page,mode){
     const m=route.request().url().match(/levels\/([A-Z]+)\.json/),symbol=m&&m[1]||'ETHUSDT';
     if(mode==='404'){await route.fulfill({status:404,contentType:'text/plain',body:'synthetic levels miss'});return;}
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(keyLevelFixture(symbol))});
+  });
+}
+
+async function routeSnapshotThrough(page,cutoffIso){
+  const cutoff=Date.parse(cutoffIso);
+  await page.route(/\/analysis\/data\/([A-Z]+)\.json(?:\?.*)?$/,async route=>{
+    const response=await route.fetch(),body=await response.json();
+    body.cutoffUtc=cutoffIso;
+    for(const [interval,rows] of Object.entries(body.series||{})){
+      if(!Array.isArray(rows))continue;
+      body.series[interval]=rows.filter(row=>Number(row&&row[0])<cutoff);
+    }
+    await route.fulfill({response,contentType:'application/json',body:JSON.stringify(body)});
   });
 }
 
@@ -532,6 +547,13 @@ function assertBoundaryStable(before,after,label){
       if(result.count>6||!result.inside)throw new Error('D10 selected key levels '+JSON.stringify(result));
       if(result.labels.some(x=>x.includes('Q2 VAL')))throw new Error('D10 previous quarter duplicated '+JSON.stringify(result));
       if(!result.labels.some(x=>x.includes('Q1 VAH')&&x.includes('PY Q4 VAH')&&x.includes(' · ')))throw new Error('D10 near-tick merge missing '+JSON.stringify(result));
+      const tableCheck=await page.evaluate(()=>{
+        const rows=window.__analysisDebug.model.tableRows,keyRows=rows.filter(x=>x.source==='precomputed'&&!x.summary),summary=rows.find(x=>x.summary);
+        return{keyCount:keyRows.length,drawn:(window.__analysisDebug.model.keyLevels||[]).length,summary:summary&&summary.type,offView:keyRows.some(x=>String(x.status).includes('图外'))};
+      });
+      if(tableCheck.keyCount!==tableCheck.drawn||tableCheck.offView||!tableCheck.summary||!tableCheck.summary.includes('另有 ')){
+        throw new Error('D11 compact key-level table '+JSON.stringify(tableCheck));
+      }
       await verifyAxis(page,'D10 fixture');
       await page.close();
     }
@@ -546,6 +568,19 @@ function assertBoundaryStable(before,after,label){
         pq:window.__analysisDebug.model.allRegions.some(x=>x.scope==='PQ')
       }));
       if(!missing.levelsError||!missing.missing||!missing.pq)throw new Error('D10 levels 404 fallback '+JSON.stringify(missing));
+      await page.close();
+    }
+
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
+      await routeMarket(page,requests);await routeKeyLevels(page,'fixture');await routeSnapshotThrough(page,'2026-09-30T00:00:00Z');
+      await page.goto(pageUrl+'?symbol=ETHUSDT&tf=1h&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const q3=await page.evaluate(()=>({
+        drawn:(window.__analysisDebug.model.keyLevels||[]).some(x=>x.sourceId==='q3-vah'||x.sourceId==='q3-val'),
+        table:(window.__analysisDebug.model.tableRows||[]).some(x=>String(x.type||'').startsWith('Q3 '))
+      }));
+      if(q3.drawn||q3.table)throw new Error('D11 snapshot rendered unfinished Q3 '+JSON.stringify(q3));
       await page.close();
     }
 

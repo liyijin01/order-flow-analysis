@@ -315,14 +315,33 @@
     return groups.map(({_rows,...row})=>row);
   }
 
-  function selectKeyLevels(items,current,viewMin,viewMax,padPct,tick,maxCount,previousQuarter){
+  function selectKeyLevels(items,current,viewMin,viewMax,padPct,tick,maxCount,previousQuarter,maxMonthly,minGapPct,reservedPrices){
     const pq=Number(previousQuarter),filtered=(items||[]).filter(item=>{
       const start=Date.parse(String(item.periodStart||''))/1000;
       return !(finite(pq)&&finite(start)&&Math.abs(start-pq)<1);
     });
     const merged=mergeKeyLevels(filtered,tick),eligible=merged.filter(x=>inPriceView(x.price,viewMin,viewMax,padPct));
-    eligible.sort((a,b)=>Math.abs(Number(a.price)-Number(current))-Math.abs(Number(b.price)-Number(current))||Number(a.price)-Number(b.price));
-    const selected=eligible.slice(0,Math.max(0,Number(maxCount)||0)),ids=new Set(selected.map(x=>x.id));
+    const byDistance=(a,b)=>Math.abs(Number(a.price)-Number(current))-Math.abs(Number(b.price)-Number(current))||Number(a.price)-Number(b.price);
+    const quarters=eligible.filter(x=>x.keyKind!=='py-month').sort(byDistance);
+    const monthly=eligible.filter(x=>x.keyKind==='py-month').sort(byDistance);
+    const limit=Math.max(0,Number(maxCount)||0),monthLimit=Math.max(0,Number(maxMonthly)||0);
+    const span=Math.max(1e-12,Number(viewMax)-Number(viewMin)),minGap=span*Math.max(0,Number(minGapPct)||0)/100;
+    const selected=[],reserved=(reservedPrices||[]).map(Number).filter(finite);
+    const canAdd=item=>{
+      const p=Number(item.price);
+      return reserved.every(x=>Math.abs(p-x)>=minGap)&&selected.every(x=>Math.abs(p-Number(x.price))>=minGap);
+    };
+    for(const item of quarters){
+      if(selected.length>=limit)break;
+      if(canAdd(item))selected.push(item);
+    }
+    let monthlyCount=0;
+    for(const item of monthly){
+      if(selected.length>=limit||monthlyCount>=monthLimit)break;
+      if(!canAdd(item))continue;
+      selected.push(item);monthlyCount++;
+    }
+    const ids=new Set(selected.map(x=>x.id));
     return{all:merged.map(x=>({...x,offView:!ids.has(x.id)})),selected:selected.map(x=>({...x,offView:false}))};
   }
 

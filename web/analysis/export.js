@@ -48,7 +48,7 @@
     for(let i=0;i<heads.length;i++)ctx.fillText(heads[i],cols[i],tableY+22);
     for(let i=0;i<rows.length;i++){
       const r=rows[i],y=tableY+tableHeaderH+i*rowH+16;
-      const range=r.missing?'—':(r.low===r.high?fmt(r.low):fmt(r.low)+' – '+fmt(r.high));
+      const range=r.missing||r.summary?'—':(r.low===r.high?fmt(r.low):fmt(r.low)+' – '+fmt(r.high));
       const dist=r.distance==null?'—':Number(r.distance).toFixed(2)+'%';
       const vals=[r.type,range,dist,r.status,r.period,r.source||'—'];
       for(let j=0;j<vals.length;j++)rowText(ctx,vals[j],cols[j],y,'left');
