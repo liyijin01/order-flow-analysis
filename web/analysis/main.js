@@ -39,7 +39,8 @@
       {key:'demand',label:'需求区',kind:'box',color:c.demandBorder},
       {key:'current-vwap',label:'本季 VWAP ±1σ',kind:'line',color:c.vwap},
       {key:'pq-vwap',label:'PQ VWAP',kind:'line',color:c.pqVwap},
-      {key:'npoc',label:'未回补 POC',kind:'dash',color:c.nPoc}
+      {key:'npoc',label:'未回补 POC',kind:'dash',color:c.nPoc},
+      {key:'key-level',label:'关键价位',kind:'dash',color:c.keyLevel}
     ];
   }
   function renderLegend(){
@@ -289,7 +290,23 @@
     allLevels.push(...E.selectNakedPocs(pocCandidates,current,rules.nakedPoc.maxCount));
 
     const linePad=rules.valueAreas.visiblePadPct;
-    const drawnLevelIds=new Set(allLevels.filter(l=>E.inPriceView(l.price,view.min,view.max,linePad)).map(l=>l.id));
+    let keySelection={all:[],selected:[]};
+    if(bundle.keyLevels&&Array.isArray(bundle.keyLevels.levels)){
+      keySelection=E.selectKeyLevels(bundle.keyLevels.levels,current,view.min,view.max,linePad,tick,rules.keyLevels&&rules.keyLevels.maxCount||6,pqStart);
+      const firstTime=Number(display[0].time);
+      for(const row of keySelection.all){
+        const monthly=row.keyKind==='py-month';
+        allLevels.push({
+          id:'key-'+row.id,kind:'key',price:Number(row.price),from:firstTime,label:row.label,
+          color:monthly?rules.colors.keyMonth:rules.colors.keyLevel,axisColor:rules.colors.keyAxis,
+          style:monthly?'solid':'dashed',width:1,period:monthly?'M / 30m TPO':'Q / 1h VWAP±1σ',
+          source:'precomputed',keyKind:row.keyKind,sourceId:row.id
+        });
+      }
+    }else missing.push({type:'关键价位',period:'Q / 1h VWAP±1σ + M / 30m TPO',source:'precomputed'});
+
+    const selectedKeyIds=new Set(keySelection.selected.map(x=>'key-'+x.id));
+    const drawnLevelIds=new Set(allLevels.filter(l=>l.kind==='key'?selectedKeyIds.has(l.id):E.inPriceView(l.price,view.min,view.max,linePad)).map(l=>l.id));
 
     const allRegions=allAreas.concat(selectedZones).map(r=>({...r,offView:r.type==='value'?!drawnAreaIds.has(r.id):!drawnZoneIds.has(r.id)}));
     const levelsForTable=allLevels.map(l=>({...l,offView:!drawnLevelIds.has(l.id)}));
@@ -300,7 +317,7 @@
     const lastClosed=closedCalc[closedCalc.length-1];
     const calcLastClosedUtc=lastClosed?new Date(Number(lastClosed.closeTime)+1).toISOString():null;
     return{
-      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,pqStats,missing,
+      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,pqStats,keyLevels:levels.filter(l=>l.kind==='key'),missing,
       allRegions,allLevels:levelsForTable,viewMin:view.min,viewMax:view.max,visibleBars:visibleN,
       cutoffUtc:bundle.cutoffUtc||null,generatedAt:bundle.generatedAt||new Date().toISOString(),
       calcTf,calcLastClosedUtc,bundleErrors:bundle.errors||{},

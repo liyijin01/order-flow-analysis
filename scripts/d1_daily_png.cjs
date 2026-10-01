@@ -34,6 +34,7 @@ const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
           offView:(window.__analysisDebug.model?.allRegions||[]).filter(x=>x.offView).length+(window.__analysisDebug.model?.allLevels||[]).filter(x=>x.offView).length,
           regions:window.__analysisDebug.model?.regions?.length||0,
           levels:window.__analysisDebug.model?.levels?.length||0,
+          keyLevels:window.__analysisDebug.model?.keyLevels?.length||0,
           axis:window.__analysisDebug.axisLabels()
         }));
         if(errors.length)throw new Error(symbol+' '+tf+' browser errors: '+errors.join(' | '));
@@ -54,7 +55,7 @@ const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
           symbol,timeframe:tf,view:'quarter',file:path.basename(file),bytes:size,status:meta.status,
           visibleBars:meta.visibleBars,logicalSlots:meta.logicalSlots,calcLastClosedUtc:meta.calcLastClosedUtc,
           supply:meta.supply,demand:meta.demand,drawn:meta.drawn,offView:meta.offView,
-          regions:meta.regions,levels:meta.levels
+          regions:meta.regions,levels:meta.levels,keyLevels:meta.keyLevels
         });
         await page.close();
       }

@@ -299,6 +299,33 @@
     return (items||[]).filter(Boolean).sort((a,b)=>Math.abs(a.price-current)-Math.abs(b.price-current)).slice(0,Number(maxCount)||2);
   }
 
+  function mergeKeyLevels(items,tick){
+    const t=Math.max(1e-12,Number(tick)||1),src=(items||[]).filter(x=>finite(x&&x.price)).slice().sort((a,b)=>Number(a.price)-Number(b.price)||String(a.label).localeCompare(String(b.label))),groups=[];
+    for(const item of src){
+      const last=groups[groups.length-1];
+      if(last&&Math.abs(Number(item.price)-Number(last.price))<t){
+        const rows=last._rows.concat([item]),avg=rows.reduce((sum,x)=>sum+Number(x.price),0)/rows.length;
+        last._rows=rows;last.price=roundToTick(avg,t);
+        last.label=Array.from(new Set(rows.map(x=>String(x.label)))).join(' · ');
+        last.definition=Array.from(new Set(rows.map(x=>String(x.definition||'')))).filter(Boolean).join(' + ');
+        last.keyKind=rows.every(x=>x.kind==='py-month')?'py-month':'quarter';
+        last.id=rows.map(x=>String(x.id)).sort().join('+');
+      }else groups.push({...item,price:Number(item.price),keyKind:item.kind==='py-month'?'py-month':'quarter',_rows:[item]});
+    }
+    return groups.map(({_rows,...row})=>row);
+  }
+
+  function selectKeyLevels(items,current,viewMin,viewMax,padPct,tick,maxCount,previousQuarter){
+    const pq=Number(previousQuarter),filtered=(items||[]).filter(item=>{
+      const start=Date.parse(String(item.periodStart||''))/1000;
+      return !(finite(pq)&&finite(start)&&Math.abs(start-pq)<1);
+    });
+    const merged=mergeKeyLevels(filtered,tick),eligible=merged.filter(x=>inPriceView(x.price,viewMin,viewMax,padPct));
+    eligible.sort((a,b)=>Math.abs(Number(a.price)-Number(current))-Math.abs(Number(b.price)-Number(current))||Number(a.price)-Number(b.price));
+    const selected=eligible.slice(0,Math.max(0,Number(maxCount)||0)),ids=new Set(selected.map(x=>x.id));
+    return{all:merged.map(x=>({...x,offView:!ids.has(x.id)})),selected:selected.map(x=>({...x,offView:false}))};
+  }
+
   function axisLabelSelection(candidates,coordinateFn,minGap,reserved){
     const gap=Number(minGap||14);
     const blocked=(reserved||[]).map(Number).filter(finite);
@@ -333,6 +360,6 @@
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,utcWeekStart,
     weightedStats,anchoredVwapSeries,alignSeriesToBars,valueArea,approxVolumeProfile,tpoProfile,exactProfile,profileIsFresh,
     atr14,detectZones,markZoneTouches,mergeZones,zoneState,selectZones,rangeOverlapRatio,suppressValueAreas,filterValueAreas,inPriceView,zoneIntersectsView,
-    wasZoneTouched,isPocNaked,selectNakedPocs,axisLabelSelection,regionLabelLayout,roundToTick
+    wasZoneTouched,isPocNaked,selectNakedPocs,mergeKeyLevels,selectKeyLevels,axisLabelSelection,regionLabelLayout,roundToTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);
