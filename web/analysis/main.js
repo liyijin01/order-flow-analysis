@@ -403,7 +403,7 @@
   function applyDefaultView(count){
     const win=windowSpec(),cfg=templateConfig(),spec=defaultWindow(count),customMargin=Number(cfg.rightMarginPct)>0;
     if(win.mode==='quarter'||customMargin){
-      state.chart.timeScale().applyOptions({rightOffset:spec.rightOffsetBars,minBarSpacing:win.mode==='quarter'?Number(state.rules.display.quarterMinBarSpacing||.05):Number(state.rules.display.minBarSpacingPx||5)});
+      state.chart.timeScale().applyOptions({rightOffset:spec.rightOffsetBars,minBarSpacing:(win.mode==='quarter'||customMargin)?Number(state.rules.display.quarterMinBarSpacing||.05):Number(state.rules.display.minBarSpacingPx||5)});
       state.chart.timeScale().setVisibleLogicalRange(spec.range);state.defaultViewRange={...spec.range};return spec;
     }
     state.chart.timeScale().applyOptions({minBarSpacing:Number(state.rules.display.minBarSpacingPx||5)});return R.applyDefaultView(state.chart,state.rules,state.timeframe,count,state);
