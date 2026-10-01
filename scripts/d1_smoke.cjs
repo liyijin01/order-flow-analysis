@@ -107,6 +107,19 @@ async function routeKeyLevels(page,mode){
   });
 }
 
+async function routeSnapshotThrough(page,cutoffIso){
+  const cutoff=Date.parse(cutoffIso);
+  await page.route(/\/analysis\/data\/([A-Z]+)\.json(?:\?.*)?$/,async route=>{
+    const response=await route.fetch(),body=await response.json();
+    body.cutoffUtc=cutoffIso;
+    for(const [interval,rows] of Object.entries(body.series||{})){
+      if(!Array.isArray(rows))continue;
+      body.series[interval]=rows.filter(row=>Number(row&&row[0])<cutoff);
+    }
+    await route.fulfill({response,contentType:'application/json',body:JSON.stringify(body)});
+  });
+}
+
 function verifyLimits(model){
   const values=model.allRegions.filter(r=>r.type==='value');
   const supply=model.allRegions.filter(r=>r.type==='supply');
@@ -560,7 +573,7 @@ function assertBoundaryStable(before,after,label){
 
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
-      await routeMarket(page,requests);await routeKeyLevels(page,'fixture');
+      await routeMarket(page,requests);await routeKeyLevels(page,'fixture');await routeSnapshotThrough(page,'2026-09-30T00:00:00Z');
       await page.goto(pageUrl+'?symbol=ETHUSDT&tf=1h&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const q3=await page.evaluate(()=>({
