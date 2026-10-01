@@ -299,7 +299,7 @@
         allLevels.push({
           id:'key-'+row.id,kind:'key',price:Number(row.price),from:firstTime,label:row.label,
           color:monthly?rules.colors.keyMonth:rules.colors.keyLevel,axisColor:rules.colors.keyAxis,
-          style:monthly?'solid':'dashed',width:1,period:row.definition||'',
+          style:monthly?'solid':'dashed',width:1,period:monthly?'M / 30m TPO':'Q / 1h VWAP±1σ',
           source:'precomputed',keyKind:row.keyKind,sourceId:row.id
         });
       }
