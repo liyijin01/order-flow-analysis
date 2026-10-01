@@ -28,6 +28,15 @@
     document.querySelectorAll('[data-tf]').forEach(b=>{const allowed=(cfg.timeframes||[]).includes(b.dataset.tf);b.style.display=allowed?'':'none';b.disabled=!allowed;});
     const meta=document.querySelector('.capture-meta');if(meta)meta.textContent=String(cfg.label||state.template).toUpperCase();
   }
+  function syncVolumeLayer(){
+    if(!state.chart)return;
+    if(layerEnabled('volume')){
+      if(!state.volume)state.volume=state.chart.addSeries(L.HistogramSeries,{priceFormat:{type:'volume'},priceLineVisible:false,lastValueVisible:false},1);
+      const panes=state.chart.panes();if(state.volume&&panes[1])panes[1].setHeight(Math.max(105,Math.round($('analysisChart').clientHeight*.18)));
+    }else if(state.volume){state.chart.removeSeries(state.volume);state.volume=null;}
+  }
+  function regionLayerEnabled(r){if(r.type!=='value')return layerEnabled('zones');if(r.scope==='PQ')return layerEnabled('pqArea');if(r.scope==='PM')return layerEnabled('pm');if(r.scope==='PW')return layerEnabled('pw');return true;}
+  function levelLayerEnabled(l){if(l.kind==='pq')return layerEnabled('pqVwap');if(l.kind==='pq-bound')return layerEnabled('pqBounds');if(l.kind==='npoc')return layerEnabled('nPoc');if(l.kind==='key')return layerEnabled('keyLevels');return true;}
   function fmtPrice(v){
     const p=pricePrecision(),tick=Number(symbolMeta().tickSize)||.01,n=E.roundToTick(Number(v),tick);
     return n.toLocaleString(undefined,{minimumFractionDigits:p,maximumFractionDigits:p});
@@ -138,18 +147,16 @@
       upColor:'rgba(0,0,0,0)',downColor:'#d9dde6',borderUpColor:'#d9dde6',borderDownColor:'#d9dde6',wickUpColor:'#d9dde6',wickDownColor:'#d9dde6',
       priceFormat:{type:'price',precision:pricePrecision(),minMove:tick},lastValueVisible:true,priceLineVisible:false
     },0);
-    const volume=chart.addSeries(L.HistogramSeries,{priceFormat:{type:'volume'},priceLineVisible:false,lastValueVisible:false},1);
     const primitive=new P.AnalysisBoardPrimitive({});
     candles.attachPrimitive(primitive);
-    const panes=chart.panes();if(panes[1])panes[1].setHeight(Math.max(110,Math.round(container.clientHeight*.18)));
-    state.chart=chart;state.candles=candles;state.volume=volume;state.primitive=primitive;
+    state.chart=chart;state.candles=candles;state.volume=null;state.primitive=primitive;syncVolumeLayer();
     state.watermark=L.createTextWatermark(chart.panes()[0],{horzAlign:'center',vertAlign:'center',lines:[{text:symbolMeta().displayName+', '+tfLabel(state.timeframe),color:'rgba(255,255,255,.07)',fontSize:44,fontStyle:'bold'}]});
     for(let i=0;i<2;i++){const b=new AP.band({id:'quarter-band-'+i,type:'band',points:[],label:'',color:state.rules.colors.vwap,fill:state.rules.colors.quarterBandFill});b.autoscaleInfo=()=>{const m=state.model;if(!m||!b.item.points||!b.item.points.length)return null;const span=Math.max(1e-12,Number(m.viewMax)-Number(m.viewMin)),pad=span*Number(state.rules.valueAreas.visiblePadPct||0)/100,lo=Number(m.viewMin)-pad,hi=Number(m.viewMax)+pad;let mn=Infinity,mx=-Infinity;for(const p of b.item.points)for(const v of p.slice(1)){const n=Math.max(lo,Math.min(hi,Number(v)));if(Number.isFinite(n)){mn=Math.min(mn,n);mx=Math.max(mx,n);}}return Number.isFinite(mn)&&Number.isFinite(mx)?{priceRange:{minValue:mn,maxValue:mx}}:null;};candles.attachPrimitive(b);state.quarterBands.push(b);}
     new ResizeObserver(()=>{
       const before=chart.timeScale().getVisibleLogicalRange();
       const wasDefault=rangesClose(before,state.defaultViewRange,.5);
       chart.resize(container.clientWidth,container.clientHeight);
-      const ps=chart.panes();if(ps[1])ps[1].setHeight(Math.max(100,Math.round(container.clientHeight*.18)));
+      const ps=chart.panes();if(state.volume&&ps[1])ps[1].setHeight(Math.max(100,Math.round(container.clientHeight*.18)));
       scheduleResizeSettle(wasDefault,before);
       if(primitive.requestUpdate)primitive.requestUpdate();
     }).observe(container);
@@ -299,7 +306,11 @@
 
     const allLevels=[];
     const pq=areas.find(a=>a.scope==='PQ');
-    if(pq)allLevels.push({id:'line-pq-vwap',kind:'pq',price:pq.pqVwap,from:qStart,label:'PQ VWAP',color:rules.colors.pqVwap,style:'solid',period:'Q / 1h',source:'exact'});
+    if(pq&&layerEnabled('pqVwap'))allLevels.push({id:'line-pq-vwap',kind:'pq',price:pq.pqVwap,from:qStart,label:'PQ VWAP',color:rules.colors.pqVwap,style:'solid',period:'Q / 1h',source:'exact'});
+    if(pq&&layerEnabled('pqBounds')){
+      allLevels.push({id:'line-pq-vah',kind:'pq-bound',price:pq.top,from:qStart,label:'PQ VAH',color:rules.colors.keyLevel,axisColor:rules.colors.keyAxis,axisLabel:false,style:'dashed',width:1,period:'Q / 1h VWAP±1σ',source:'exact'});
+      allLevels.push({id:'line-pq-val',kind:'pq-bound',price:pq.bottom,from:qStart,label:'PQ VAL',color:rules.colors.keyLevel,axisColor:rules.colors.keyAxis,axisLabel:false,style:'dashed',width:1,period:'Q / 1h VWAP±1σ',source:'exact'});
+    }
 
     const pocCandidates=[];
     if(pw&&weekEnd&&E.isPocNaked(pw.poc,weekEnd,thirty.length?thirty:one)){
@@ -328,13 +339,13 @@
         eligibleKeyLevels,current,view.min,view.max,linePad,tick,keyCfg.maxCount||6,pqStart,
         keyCfg.maxMonthly||2,keyCfg.minGapPct||2,pq?[pq.bottom,pq.top]:[]
       );
-      const firstTime=Number(display[0].time);
+      const firstTime=Number(display[0].time),keyStyle=templateConfig().keyLevelStyle||{};
       for(const row of keySelection.all){
         const monthly=row.keyKind==='py-month';
         allLevels.push({
           id:'key-'+row.id,kind:'key',price:Number(row.price),from:firstTime,label:row.label,
-          color:monthly?rules.colors.keyMonth:rules.colors.keyLevel,axisColor:rules.colors.keyAxis,
-          style:monthly?'solid':'dashed',width:1,period:monthly?'M / 30m TPO':'Q / 1h VWAP±1σ',
+          color:keyStyle.color||(monthly?rules.colors.keyMonth:rules.colors.keyLevel),axisColor:rules.colors.keyAxis,axisLabel:keyStyle.axisLabel,
+          style:keyStyle.style||(monthly?'solid':'dashed'),width:1,period:monthly?'M / 30m TPO':'Q / 1h VWAP±1σ',
           source:'precomputed',keyKind:row.keyKind,sourceId:row.id
         });
       }
@@ -345,7 +356,7 @@
 
     const allRegions=allAreas.concat(selectedZones).map(r=>({...r,offView:r.type==='value'?!drawnAreaIds.has(r.id):!drawnZoneIds.has(r.id)}));
     const levelsForTable=allLevels.map(l=>({...l,offView:!drawnLevelIds.has(l.id)}));
-    const regions=allRegions.filter(r=>!r.offView),levels=levelsForTable.filter(l=>!l.offView);
+    const regions=allRegions.filter(r=>!r.offView&&regionLayerEnabled(r)),levels=levelsForTable.filter(l=>!l.offView&&levelLayerEnabled(l));
 
     const quarterVwaps=quarterVwapSegments(one,display);
     const currentVwap=(quarterVwaps.find(x=>x.start===qStart)||quarterVwaps[quarterVwaps.length-1]||{points:[]}).points.map(p=>({time:p.time,value:p.vwap}));
@@ -356,7 +367,7 @@
       allRegions,allLevels:levelsForTable,viewMin:view.min,viewMax:view.max,visibleBars:visibleN,
       cutoffUtc:bundle.cutoffUtc||null,generatedAt:bundle.generatedAt||new Date().toISOString(),
       calcTf,calcLastClosedUtc,bundleErrors:bundle.errors||{},
-      tableRows:sourceRows({regions:allRegions,levels:levelsForTable,current,missing})
+      tableRows:templateConfig().table===false?[]:sourceRows({regions:allRegions,levels:levelsForTable,current,missing})
     };
   }
 
@@ -427,11 +438,12 @@
 
   function resetView(){
     if(!state.model)return;
-    R.resetView([state.candles,state.volume],state.chart,null);
+    R.resetView([state.candles,state.volume].filter(Boolean),state.chart,null);
     applyDefaultView(state.model.display.length);
   }
 
   function applySeries(model){
+    syncVolumeLayer();
     const key=state.symbol+'|'+state.timeframe+'|'+state.template+'|'+state.viewMode,sameView=state.viewKey===key;
     const oldRange=sameView?state.chart.timeScale().getVisibleLogicalRange():null;
     const oldWasDefault=sameView&&rangesClose(oldRange,state.defaultViewRange,.5);
@@ -439,15 +451,15 @@
     const followedRight=!!(oldRange&&Number(oldRange.to)>=oldCount-1);
     if(!sameView){
       state.candles.priceScale().applyOptions({autoScale:true});
-      state.volume.priceScale().applyOptions({autoScale:true});
+      if(state.volume)state.volume.priceScale().applyOptions({autoScale:true});
       const tick=Number(symbolMeta().tickSize)||.01;
       const fmt={type:'price',precision:pricePrecision(),minMove:tick};
       state.candles.applyOptions({priceFormat:fmt});
     }
     const candleData=model.display.map(b=>({time:D.toDisplayTime(b.time),open:b.open,high:b.high,low:b.low,close:b.close}));
     const volumeData=model.display.map(b=>({time:D.toDisplayTime(b.time),value:b.volume,color:b.close>=b.open?'rgba(230,234,242,.42)':'rgba(230,234,242,.68)'}));
-    state.candles.setData(candleData);state.volume.setData(volumeData);
-    for(let i=0;i<state.quarterBands.length;i++){const seg=model.quarterVwaps[i],b=state.quarterBands[i];b.item={id:'quarter-band-'+i,type:'band',points:seg?seg.points.map(p=>[p.time,p.vwap,p.upper,p.lower]):[],label:'',color:state.rules.colors.vwap,fill:state.rules.colors.quarterBandFill};b.setContext({bars:model.display,intervalSec:D.intervalSec(state.timeframe),timeOffsetSec:9*3600,autoscale:true,priceFormatter:fmtPrice});if(b.requestUpdate)b.requestUpdate();}
+    state.candles.setData(candleData);if(state.volume)state.volume.setData(volumeData);
+    for(let i=0;i<state.quarterBands.length;i++){const seg=layerEnabled('quarterBands')?model.quarterVwaps[i]:null,b=state.quarterBands[i];b.item={id:'quarter-band-'+i,type:'band',points:seg?seg.points.map(p=>[p.time,p.vwap,p.upper,p.lower]):[],label:'',color:state.rules.colors.vwap,fill:state.rules.colors.quarterBandFill};b.setContext({bars:model.display,intervalSec:D.intervalSec(state.timeframe),timeOffsetSec:9*3600,autoscale:true,priceFormatter:fmtPrice});if(b.requestUpdate)b.requestUpdate();}
     const autoscaleSpan=Math.max(1e-12,Number(model.viewMax)-Number(model.viewMin));
     const autoscalePad=autoscaleSpan*Number(state.rules.valueAreas.visiblePadPct||0)/100;
     state.primitive.setModel({
@@ -633,6 +645,7 @@
       axisLabels:()=>state.primitive?state.primitive.debugAxisLabels():[],
       priceCoordinate:p=>state.candles?state.candles.priceToCoordinate(Number(p)):null,
       volumeFormat:()=>state.volume?state.volume.options().priceFormat:null,
+      layerEnabled:name=>layerEnabled(name),
       view:debugView,
       mainPaneHeight:()=>{const p=state.chart&&state.chart.panes&&state.chart.panes()[0];return p&&typeof p.getHeight==='function'?p.getHeight():Math.round($('analysisChart').clientHeight*.82);},
       candleTimes:()=>state.model?state.model.display.map(x=>x.time):[],

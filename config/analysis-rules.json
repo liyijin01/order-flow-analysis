@@ -127,7 +127,8 @@
       "legend": false,
       "keyLevelStyle": {
         "color": "rgba(236,239,244,.75)",
-        "style": "dashed"
+        "style": "dashed",
+        "axisLabel": false
       }
     },
     "combined": {

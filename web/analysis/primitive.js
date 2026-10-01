@@ -58,7 +58,7 @@
           out.push({id:r.id+':near',price:r.top,priority:3,color,currentPrice:current});
         }
       }
-      for(const l of this.model.levels||[])out.push({id:l.id+':price',price:l.price,priority:1,color:l.axisColor||l.color||'#e5e7eb',currentPrice:current});
+      for(const l of this.model.levels||[])if(l.axisLabel!==false)out.push({id:l.id+':price',price:l.price,priority:1,color:l.axisColor||l.color||'#e5e7eb',currentPrice:current});
       return out;
     }
     axisLayout(){
