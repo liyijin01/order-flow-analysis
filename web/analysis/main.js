@@ -83,10 +83,16 @@
         status,period:r.period||'',source:r.source||'exact',missing:false
       });
     }
+    let hiddenKeyCount=0;
     for(const l of payload.levels){
+      if(l.kind==='key'&&l.offView){hiddenKeyCount++;continue;}
       let status=l.kind==='npoc'?'未回补':'有效';if(l.offView)status+='（图外）';
       out.push({type:l.label,low:l.price,high:l.price,distance:Math.abs(l.price-current)/current*100,status,period:l.period||'',source:l.source||'exact',missing:false});
     }
+    if(hiddenKeyCount>0)out.push({
+      type:'关键价位 · 另有 '+hiddenKeyCount+' 条不在当前视图',low:null,high:null,distance:null,status:'图外',
+      period:'',source:'precomputed',missing:false,summary:true
+    });
     for(const m of payload.missing||[])out.push({type:m.type,low:null,high:null,distance:null,status:'缺失',period:m.period||'',source:m.source||'',missing:true});
     out.sort((a,b)=>{
       const ap=a.high==null?-Infinity:a.high,bp=b.high==null?-Infinity:b.high;
@@ -342,7 +348,7 @@
     const tbody=$('regionRows');tbody.textContent='';
     for(const r of model.tableRows){
       const tr=document.createElement('tr');
-      const range=r.missing?'—':(r.low===r.high?fmtPrice(r.low):fmtPrice(r.low)+' – '+fmtPrice(r.high));
+      const range=r.missing||r.summary?'—':(r.low===r.high?fmtPrice(r.low):fmtPrice(r.low)+' – '+fmtPrice(r.high));
       const dist=r.distance==null?'—':r.distance.toFixed(2)+'%';
       for(const value of [r.type,range,dist,r.status,r.period,r.source||'—']){
         const td=document.createElement('td');td.textContent=value;tr.appendChild(td);

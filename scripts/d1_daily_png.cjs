@@ -51,8 +51,10 @@ const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
         const file=path.join(outDir,symbol+'-'+tf+'.png');
         await page.locator('#analysisCapture').screenshot({path:file});
         const size=fs.statSync(file).size;if(size<50*1024)throw new Error(file+' is only '+size+' bytes');
+        const png=fs.readFileSync(file),height=png.readUInt32BE(20);
+        if(height>1300)throw new Error(file+' height '+height+' exceeds 1300px');
         manifest.push({
-          symbol,timeframe:tf,view:'quarter',file:path.basename(file),bytes:size,status:meta.status,
+          symbol,timeframe:tf,view:'quarter',file:path.basename(file),bytes:size,height,status:meta.status,
           visibleBars:meta.visibleBars,logicalSlots:meta.logicalSlots,calcLastClosedUtc:meta.calcLastClosedUtc,
           supply:meta.supply,demand:meta.demand,drawn:meta.drawn,offView:meta.offView,
           regions:meta.regions,levels:meta.levels,keyLevels:meta.keyLevels
