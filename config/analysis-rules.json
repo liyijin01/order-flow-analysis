@@ -2,7 +2,7 @@
   "display": {
     "defaultTimeframe": "4h",
     "bars": {
-      "4h": 540,
+      "4h": 1200,
       "1h": 720,
       "1d": 365
     },
@@ -13,7 +13,9 @@
       "1h": 240,
       "1d": 180
     },
-    "minBarSpacingPx": 5
+    "minBarSpacingPx": 5,
+    "quarterRightPct": 0.04,
+    "quarterMinBarSpacing": 0.05
   },
   "valueAreas": {
     "visiblePadPct": 10,

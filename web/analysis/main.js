@@ -5,7 +5,7 @@
   const SYMBOLS=window.ORDER_FLOW_SYMBOLS||{};
   const $=id=>document.getElementById(id);
   const state={
-    symbol:'BTCUSDT',timeframe:'4h',snapshot:false,rules:null,bundle:null,chart:null,candles:null,volume:null,vwap:null,primitive:null,
+    symbol:'BTCUSDT',timeframe:'4h',viewMode:'quarter',snapshot:false,rules:null,bundle:null,chart:null,candles:null,volume:null,vwap:null,primitive:null,
     loadToken:0,refreshTimer:null,model:null,viewKey:null,lastDisplayCount:0,lastFullLoadAt:0,refreshWarning:null,
     inFlight:null,abortController:null,lastSuccessAt:0,defaultViewRange:null,resizeToken:0,resizeSettle:null
   };
@@ -172,12 +172,35 @@
     return{min,max,span:Math.max(1e-12,max-min)};
   }
 
+
+  function aggregateDisplay(bars,timeframe){
+    if(timeframe==='1h')return (bars||[]).slice();
+    const step=timeframe==='4h'?14400:(timeframe==='1d'?86400:3600),groups=new Map();
+    for(const b of bars||[]){
+      const key=Math.floor(Number(b.time)/step)*step;let g=groups.get(key);
+      if(!g){g={time:key,openTime:key*1000,closeTime:0,open:Number(b.open),high:Number(b.high),low:Number(b.low),close:Number(b.close),volume:0,quoteVolume:0,takerBuyBase:0,takerBuyQuote:0,trades:0,count:0};groups.set(key,g);}
+      g.high=Math.max(g.high,Number(b.high));g.low=Math.min(g.low,Number(b.low));g.close=Number(b.close);g.closeTime=Math.max(Number(g.closeTime)||0,Number(b.closeTime)||0);
+      g.volume+=Number(b.volume)||0;g.quoteVolume+=Number(b.quoteVolume)||0;g.takerBuyBase+=Number(b.takerBuyBase)||0;g.takerBuyQuote+=Number(b.takerBuyQuote)||0;g.trades+=Number(b.trades)||0;g.count++;
+    }
+    const expected=timeframe==='4h'?4:24;
+    return Array.from(groups.values()).filter(g=>g.count===expected).sort((a,b)=>a.time-b.time);
+  }
+
+  function quarterDisplay(bundle,timeframe){
+    const raw=(bundle.series[timeframe]||bundle.series.display||[]),one=bundle.series['1h']||[];
+    const last=(raw.length?raw[raw.length-1]:(one.length?one[one.length-1]:null));if(!last)return[];
+    const start=E.previousQuarterStart(last.time);
+    if(timeframe==='4h'&&one.length&&(!raw.length||Number(raw[0].time)>start+14400))return aggregateDisplay(one.filter(b=>Number(b.time)>=start),timeframe);
+    return raw.filter(b=>Number(b.time)>=start);
+  }
+
   function buildAnalysis(bundle){
     const rules=state.rules,tick=Number(symbolMeta().tickSize)||.01,counts=rules.display.bars;
-    const display=(bundle.series[state.timeframe]||bundle.series.display||[]).slice(-(Number(counts[state.timeframe])||540));
+    const source=bundle.series[state.timeframe]||bundle.series.display||[];
+    const display=state.viewMode==='quarter'?quarterDisplay(bundle,state.timeframe):source.slice(-(Number(counts[state.timeframe])||540));
     if(!display.length)throw new Error('display data missing for '+state.timeframe);
-    const visibleN=defaultWindow(display.length).visible;
-    const viewBars=display.slice(-visibleN),view=extrema(viewBars);
+    const visibleN=state.viewMode==='quarter'?display.length:defaultWindow(display.length).visible;
+    const viewBars=state.viewMode==='quarter'?display:display.slice(-visibleN),view=extrema(viewBars);
     const one=bundle.series['1h']||[],thirty=bundle.series['30m']||[],calcTf=rules.zones.calcIntervals[state.timeframe],calc=bundle.series[calcTf]||[];
     const last=display[display.length-1],current=Number(last.close),qStart=E.utcQuarterStart(last.time),pqStart=E.previousQuarterStart(last.time),areas=[],missing=[];
 
@@ -279,11 +302,17 @@
     }
   }
 
-  function defaultWindow(count){return R.defaultWindow(state.chart,state.rules,state.timeframe,count);}
+  function defaultWindow(count){
+    if(state.viewMode==='quarter'){const right=Math.ceil(Math.max(1,count)*Number(state.rules.display.quarterRightPct||.04));return{visible:count,rightOffsetBars:right,range:{from:0,to:Math.max(0,count-1)+right}};}
+    return R.defaultWindow(state.chart,state.rules,state.timeframe,count);
+  }
 
   function defaultVisibleRange(count){return defaultWindow(count).range;}
 
-  function applyDefaultView(count){return R.applyDefaultView(state.chart,state.rules,state.timeframe,count,state);}
+  function applyDefaultView(count){
+    if(state.viewMode==='quarter'){const spec=defaultWindow(count);state.chart.timeScale().applyOptions({rightOffset:spec.rightOffsetBars,minBarSpacing:Number(state.rules.display.quarterMinBarSpacing||.05)});state.chart.timeScale().setVisibleLogicalRange(spec.range);state.defaultViewRange={...spec.range};return spec;}
+    state.chart.timeScale().applyOptions({minBarSpacing:Number(state.rules.display.minBarSpacingPx||5)});return R.applyDefaultView(state.chart,state.rules,state.timeframe,count,state);
+  }
 
   const nextFrame=R.nextFrame;
 
@@ -320,7 +349,7 @@
   }
 
   function applySeries(model){
-    const key=state.symbol+'|'+state.timeframe,sameView=state.viewKey===key;
+    const key=state.symbol+'|'+state.timeframe+'|'+state.viewMode,sameView=state.viewKey===key;
     const oldRange=sameView?state.chart.timeScale().getVisibleLogicalRange():null;
     const oldWasDefault=sameView&&rangesClose(oldRange,state.defaultViewRange,.5);
     const oldCount=state.lastDisplayCount||0;
@@ -364,6 +393,7 @@
     $('boardTitle').textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe);
     document.querySelectorAll('[data-symbol]').forEach(b=>b.classList.toggle('active',b.dataset.symbol===state.symbol));
     document.querySelectorAll('[data-tf]').forEach(b=>b.classList.toggle('active',b.dataset.tf===state.timeframe));
+    document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===state.viewMode));
   }
 
   function updateHeader(model){
@@ -437,8 +467,16 @@
     updateSelectionState();
     $('infoLine').textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe)+' · 加载中…';
     $('status').textContent='Loading…';$('status').classList.remove('error');
-    const q=new URLSearchParams(location.search);q.set('symbol',state.symbol);q.set('tf',state.timeframe);if(state.snapshot)q.set('snapshot','1');
+    const q=new URLSearchParams(location.search);q.set('symbol',state.symbol);q.set('tf',state.timeframe);q.set('view',state.viewMode);if(state.snapshot)q.set('snapshot','1');
     history.replaceState(null,'',location.pathname+'?'+q.toString());refresh(true,{cancelPrevious:true});
+  }
+
+  function setViewMode(view){
+    if(!['quarter','recent'].includes(view)||view===state.viewMode)return;
+    state.viewMode=view;state.viewKey=null;state.defaultViewRange=null;updateSelectionState();
+    const q=new URLSearchParams(location.search);q.set('symbol',state.symbol);q.set('tf',state.timeframe);q.set('view',state.viewMode);if(state.snapshot)q.set('snapshot','1');
+    history.replaceState(null,'',location.pathname+'?'+q.toString());
+    if(state.bundle){let model=buildAnalysis(state.bundle);state.model=model;applySeries(model);renderTable(model);updateHeader(model);}
   }
 
   async function downloadPng(){
@@ -466,11 +504,13 @@
     const q=new URLSearchParams(location.search);
     state.symbol=SYMBOLS[q.get('symbol')]?q.get('symbol'):'BTCUSDT';
     state.timeframe=['4h','1h','1d'].includes(q.get('tf'))?q.get('tf'):'4h';
+    state.viewMode=['quarter','recent'].includes(q.get('view'))?q.get('view'):'quarter';
     state.snapshot=q.get('snapshot')==='1';
     if(state.snapshot)document.body.classList.add('snapshot');
     await loadRules();renderLegend();createChart();
     document.querySelectorAll('[data-symbol]').forEach(b=>b.addEventListener('click',()=>setSelection(b.dataset.symbol,state.timeframe)));
     document.querySelectorAll('[data-tf]').forEach(b=>b.addEventListener('click',()=>setSelection(state.symbol,b.dataset.tf)));
+    document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>setViewMode(b.dataset.view)));
     $('resetViewBtn').addEventListener('click',resetView);
     $('downloadBtn').addEventListener('click',downloadPng);
     window.__analysisDebug={
@@ -482,6 +522,7 @@
       mainPaneHeight:()=>{const p=state.chart&&state.chart.panes&&state.chart.panes()[0];return p&&typeof p.getHeight==='function'?p.getHeight():Math.round($('analysisChart').clientHeight*.82);},
       candleTimes:()=>state.model?state.model.display.map(x=>x.time):[],
       vwapTimes:()=>state.model?state.model.currentVwap.map(x=>x.time):[],
+      viewMode:()=>state.viewMode,
       legend:()=>legendEntries()
     };
     await refresh(true);
