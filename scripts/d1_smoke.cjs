@@ -77,6 +77,34 @@ async function failProfileOnce(page){
   });
 }
 
+function keyLevelFixture(symbol){
+  const base=baseMap[symbol]||100,tick=symbol==='BTCUSDT'?.1:(symbol==='ETHUSDT'?.01:.001);
+  const iso=(y,m,d)=>new Date(Date.UTC(y,m-1,d)).toISOString();
+  const row=(id,label,kind,side,price,start,definition)=>({id,label,kind,side,price,periodStart:start,periodEnd:iso(2026,1,1),definition});
+  return{
+    schema:'analysis-key-levels-v1',symbol,generatedAt:'2026-09-27T00:00:00Z',cutoffUtc:'2026-09-26T23:59:59Z',
+    levels:[
+      row('q1-vah','Q1 VAH','quarter','VAH',base,iso(2026,1,1),'Q / 1h VWAP±1σ'),
+      row('py-q4-vah','PY Q4 VAH','py-quarter','VAH',base+tick*.5,iso(2025,10,1),'Q / 1h VWAP±1σ'),
+      row('q2-val','Q2 VAL','quarter','VAL',base*.98,iso(2026,4,1),'Q / 1h VWAP±1σ'),
+      row('py-nov-val','PY Nov VAL','py-month','VAL',base*1.003,iso(2025,11,1),'M / 30m TPO'),
+      row('py-oct-vah','PY Oct VAH','py-month','VAH',base*.97,iso(2025,10,1),'M / 30m TPO'),
+      row('py-sep-val','PY Sep VAL','py-month','VAL',base*1.02,iso(2025,9,1),'M / 30m TPO'),
+      row('py-q3-val','PY Q3 VAL','py-quarter','VAL',base*.96,iso(2025,7,1),'Q / 1h VWAP±1σ'),
+      row('py-q2-vah','PY Q2 VAH','py-quarter','VAH',base*1.03,iso(2025,4,1),'Q / 1h VWAP±1σ'),
+      row('py-jan-val','PY Jan VAL','py-month','VAL',base*.95,iso(2025,1,1),'M / 30m TPO')
+    ]
+  };
+}
+
+async function routeKeyLevels(page,mode){
+  await page.route(/\/analysis\/levels\/([A-Z]+)\.json(?:\?.*)?$/,async route=>{
+    const m=route.request().url().match(/levels\/([A-Z]+)\.json/),symbol=m&&m[1]||'ETHUSDT';
+    if(mode==='404'){await route.fulfill({status:404,contentType:'text/plain',body:'synthetic levels miss'});return;}
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(keyLevelFixture(symbol))});
+  });
+}
+
 function verifyLimits(model){
   const values=model.allRegions.filter(r=>r.type==='value');
   const supply=model.allRegions.filter(r=>r.type==='supply');
@@ -413,9 +441,9 @@ function assertBoundaryStable(before,after,label){
             config:window.__analysisDebug.legend(),
             colors:window.__analysisDebug.state.rules.colors
           }));
-          const expected=['PQ 上季价值区','PM 上月价值区','PW 上周价值区','供应区','需求区','本季 VWAP ±1σ','PQ VWAP','未回补 POC'];
+          const expected=['PQ 上季价值区','PM 上月价值区','PW 上周价值区','供应区','需求区','本季 VWAP ±1σ','PQ VWAP','未回补 POC','关键价位'];
           if(JSON.stringify(legend.dom)!==JSON.stringify(expected))throw new Error('D5 page legend labels '+JSON.stringify(legend));
-          const map={pq:'pqBorder',pm:'pmBorder',pw:'pwBorder',supply:'supplyBorder',demand:'demandBorder','current-vwap':'vwap','pq-vwap':'pqVwap',npoc:'nPoc'};
+          const map={pq:'pqBorder',pm:'pmBorder',pw:'pwBorder',supply:'supplyBorder',demand:'demandBorder','current-vwap':'vwap','pq-vwap':'pqVwap',npoc:'nPoc','key-level':'keyLevel'};
           for(const e of legend.config)if(e.color!==legend.colors[map[e.key]])throw new Error('D5 legend color '+JSON.stringify({e,legend}));
           await page.evaluate(()=>{
             window.__d5ExportLegend=null;
@@ -486,6 +514,42 @@ function assertBoundaryStable(before,after,label){
     }
 
     {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
+      await routeMarket(page,requests);await routeKeyLevels(page,'fixture');
+      await page.goto(pageUrl+'?symbol=ETHUSDT&tf=1h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const result=await page.evaluate(()=>{
+        const d=window.__analysisDebug,m=d.model,E=window.OrderFlowAnalysisEngine,r=d.state.rules;
+        const keys=m.keyLevels||[],pad=Number(r.valueAreas.visiblePadPct);
+        return{
+          count:keys.length,
+          labels:keys.map(x=>x.label),
+          sourceIds:keys.map(x=>x.sourceId),
+          inside:keys.every(x=>E.inPriceView(x.price,m.viewMin,m.viewMax,pad)),
+          table:Array.from(document.querySelectorAll('#regionRows tr')).map(tr=>tr.textContent)
+        };
+      });
+      if(result.count>6||!result.inside)throw new Error('D10 selected key levels '+JSON.stringify(result));
+      if(result.labels.some(x=>x.includes('Q2 VAL')))throw new Error('D10 previous quarter duplicated '+JSON.stringify(result));
+      if(!result.labels.some(x=>x.includes('Q1 VAH')&&x.includes('PY Q4 VAH')&&x.includes(' · ')))throw new Error('D10 near-tick merge missing '+JSON.stringify(result));
+      await verifyAxis(page,'D10 fixture');
+      await page.close();
+    }
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
+      await routeMarket(page,requests);await routeKeyLevels(page,'404');
+      await page.goto(pageUrl+'?view=recent&symbol=ETHUSDT&tf=1h',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const missing=await page.evaluate(()=>({
+        levelsError:window.__analysisDebug.state.bundle.errors.levels,
+        missing:window.__analysisDebug.model.missing.some(x=>x.type==='关键价位'),
+        pq:window.__analysisDebug.model.allRegions.some(x=>x.scope==='PQ')
+      }));
+      if(!missing.levelsError||!missing.missing||!missing.pq)throw new Error('D10 levels 404 fallback '+JSON.stringify(missing));
+      await page.close();
+    }
+
+    {
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
       await page.goto(pageUrl+'?view=recent&symbol=BTCUSDT&tf=4h&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
@@ -496,6 +560,7 @@ function assertBoundaryStable(before,after,label){
       await page.close();
     }
 
+    console.log('D10 browser smoke passed: filtered merged key levels, 404 fallback and axis-label spacing.');
     console.log('D5 browser smoke passed: rotation settling, latest-price reservation, legend consistency, mobile table and snapshot cutoff.');
     console.log('D4 browser smoke passed: serialized refresh, recovery, mobile window, visibility and refresh-time labels.');
     console.log('D3 browser smoke passed: manual scale preservation, symbol/timeframe reset, price precision, volume autoscale and reset button.');

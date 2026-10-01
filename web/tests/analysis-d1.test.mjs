@@ -105,3 +105,24 @@ test('D1 nPOC is removed once later candle touches the price',()=>{
   assert.equal(E.isPocNaked(100,10,[{time:9,low:99,high:101},{time:11,low:101,high:102}]),true);
   assert.equal(E.isPocNaked(100,10,[{time:11,low:99,high:101}]),false);
 });
+
+
+test('D10 key levels exclude PQ, merge under one tick, filter to view and cap at six',()=>{
+  const pq=Date.UTC(2026,3,1)/1000,iso=s=>new Date(s*1000).toISOString();
+  const items=[
+    {id:'a',label:'Q1 VAH',kind:'quarter',price:100,periodStart:iso(Date.UTC(2026,0,1)/1000),definition:'Q'},
+    {id:'b',label:'PY Q4 VAH',kind:'py-quarter',price:100.005,periodStart:iso(Date.UTC(2025,9,1)/1000),definition:'Q'},
+    {id:'pq',label:'Q2 VAL',kind:'quarter',price:99,periodStart:iso(pq),definition:'Q'},
+    {id:'m1',label:'PY Nov VAL',kind:'py-month',price:101,periodStart:iso(Date.UTC(2025,10,1)/1000),definition:'M'},
+    {id:'m2',label:'PY Oct VAL',kind:'py-month',price:102,periodStart:iso(Date.UTC(2025,9,1)/1000),definition:'M'},
+    {id:'m3',label:'PY Sep VAL',kind:'py-month',price:103,periodStart:iso(Date.UTC(2025,8,1)/1000),definition:'M'},
+    {id:'q3',label:'PY Q3 VAL',kind:'py-quarter',price:104,periodStart:iso(Date.UTC(2025,6,1)/1000),definition:'Q'},
+    {id:'q2',label:'PY Q2 VAL',kind:'py-quarter',price:105,periodStart:iso(Date.UTC(2025,3,1)/1000),definition:'Q'},
+    {id:'far',label:'PY Jan VAL',kind:'py-month',price:140,periodStart:iso(Date.UTC(2025,0,1)/1000),definition:'M'}
+  ];
+  const got=E.selectKeyLevels(items,100,90,110,10,.01,6,pq);
+  assert.ok(got.selected.length<=6);
+  assert.equal(got.selected.some(x=>x.label.includes('Q2 VAL')&&!x.label.includes('PY')),false);
+  assert.ok(got.all.some(x=>x.label.includes('Q1 VAH')&&x.label.includes('PY Q4 VAH')&&x.label.includes(' · ')));
+  assert.equal(got.selected.every(x=>E.inPriceView(x.price,90,110,10)),true);
+});
