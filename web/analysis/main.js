@@ -292,7 +292,16 @@
     const linePad=rules.valueAreas.visiblePadPct;
     let keySelection={all:[],selected:[]};
     if(bundle.keyLevels&&Array.isArray(bundle.keyLevels.levels)){
-      keySelection=E.selectKeyLevels(bundle.keyLevels.levels,current,view.min,view.max,linePad,tick,rules.keyLevels&&rules.keyLevels.maxCount||6,pqStart);
+      const keyAsOfMs=state.snapshot&&bundle.cutoffUtc?Date.parse(bundle.cutoffUtc):Date.now();
+      const closedDisplay=D.closedBars(display,keyAsOfMs);
+      const lastClosedDisplay=closedDisplay[closedDisplay.length-1];
+      const keyPeriodCutoffMs=lastClosedDisplay&&Number.isFinite(Number(lastClosedDisplay.closeTime))
+        ?Number(lastClosedDisplay.closeTime)+1:keyAsOfMs;
+      const eligibleKeyLevels=bundle.keyLevels.levels.filter(row=>{
+        const periodEnd=Date.parse(String(row.periodEnd||''));
+        return Number.isFinite(periodEnd)&&periodEnd<=keyPeriodCutoffMs;
+      });
+      keySelection=E.selectKeyLevels(eligibleKeyLevels,current,view.min,view.max,linePad,tick,rules.keyLevels&&rules.keyLevels.maxCount||6,pqStart);
       const firstTime=Number(display[0].time);
       for(const row of keySelection.all){
         const monthly=row.keyKind==='py-month';
