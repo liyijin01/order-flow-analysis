@@ -159,7 +159,8 @@ function assertBoundaryStable(before,after,label){
       if(Math.abs(q.slots-q.count*1.04)>2)throw new Error('D9 quarter span '+tf+' '+JSON.stringify(q));
       if(!q.allBandTimes)throw new Error('D9 band introduced non-display time '+tf);
       if(tf==='1h'&&(!(q.maxRel<1e-9)||Math.abs(q.firstVwap-q.hlc3)/Math.max(1,Math.abs(q.hlc3))>=1e-9))throw new Error('D9 AVWAP parity '+JSON.stringify(q));
-      if(q.watermark!=='ETHUSDT.P, '+({'1h':'1小时','4h':'4小时','1d':'1天'})[tf]||tf)||!q.line2.includes('Anchored VWAP (hlc3, Quarter, ±1σ)'))throw new Error('D9 overlay '+tf+' '+JSON.stringify(q));
+      const expectedWatermark='ETHUSDT.P, '+(({'1h':'1小时','4h':'4小时','1d':'1天'})[tf]||tf);
+      if(q.watermark!==expectedWatermark||!q.line2.includes('Anchored VWAP (hlc3, Quarter, ±1σ)'))throw new Error('D9 overlay '+tf+' '+JSON.stringify(q));
       if(tf==='1h'){
         const target=await page.evaluate(()=>window.__analysisDebug.model.display[Math.floor(window.__analysisDebug.model.display.length*.7)]);
         const box=await page.locator('#analysisChart').boundingBox();
@@ -168,6 +169,8 @@ function assertBoundaryStable(before,after,label){
         const line=await page.evaluate(()=>window.__analysisDebug.chartInfo().line1);
         if(!line.includes('开='+Number(target.open).toLocaleString())&&!line.includes('开='))throw new Error('D9 crosshair OHLC '+line);
       }
+      await page.evaluate(()=>{window.__analysisDebug.model.last.closeTime=Date.now()+65000;});
+      await page.waitForTimeout(1100);
       const countdown=await page.evaluate(()=>window.__analysisDebug.chartInfo().countdown);
       if(!/\d{2}:\d{2}(?::\d{2})?$/.test(countdown))throw new Error('D9 live countdown '+countdown);
       await page.close();
