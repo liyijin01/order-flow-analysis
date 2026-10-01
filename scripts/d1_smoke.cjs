@@ -577,8 +577,8 @@ function assertBoundaryStable(before,after,label){
       await page.goto(pageUrl+'?symbol=ETHUSDT&tf=1h&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const q3=await page.evaluate(()=>({
-        drawn:(window.__analysisDebug.model.keyLevels||[]).some(x=>x.label.includes('Q3 ')),
-        table:Array.from(document.querySelectorAll('#regionRows tr')).some(tr=>tr.textContent.includes('Q3 '))
+        drawn:(window.__analysisDebug.model.keyLevels||[]).some(x=>x.sourceId==='q3-vah'||x.sourceId==='q3-val'),
+        table:(window.__analysisDebug.model.tableRows||[]).some(x=>String(x.type||'').startsWith('Q3 '))
       }));
       if(q3.drawn||q3.table)throw new Error('D11 snapshot rendered unfinished Q3 '+JSON.stringify(q3));
       await page.close();
