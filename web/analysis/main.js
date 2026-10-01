@@ -1,11 +1,11 @@
 (function(){
   'use strict';
 
-  const L=window.LightweightCharts,D=window.OrderFlowAnalysisData,E=window.OrderFlowAnalysisEngine,P=window.OrderFlowAnalysisPrimitive,X=window.OrderFlowAnalysisExport,R=window.OrderFlowBoardRuntime;
+  const L=window.LightweightCharts,D=window.OrderFlowAnalysisData,E=window.OrderFlowAnalysisEngine,I=window.OrderFlowIndicators,AP=window.OrderFlowAnnotationPrimitives,P=window.OrderFlowAnalysisPrimitive,X=window.OrderFlowAnalysisExport,R=window.OrderFlowBoardRuntime;
   const SYMBOLS=window.ORDER_FLOW_SYMBOLS||{};
   const $=id=>document.getElementById(id);
   const state={
-    symbol:'BTCUSDT',timeframe:'4h',viewMode:'quarter',snapshot:false,rules:null,bundle:null,chart:null,candles:null,volume:null,vwap:null,primitive:null,
+    symbol:'BTCUSDT',timeframe:'4h',viewMode:'quarter',snapshot:false,rules:null,bundle:null,chart:null,candles:null,volume:null,quarterBands:[],primitive:null,
     loadToken:0,refreshTimer:null,model:null,viewKey:null,lastDisplayCount:0,lastFullLoadAt:0,refreshWarning:null,
     inFlight:null,abortController:null,lastSuccessAt:0,defaultViewRange:null,resizeToken:0,resizeSettle:null
   };
@@ -37,7 +37,7 @@
       {key:'pw',label:'PW 上周价值区',kind:'box',color:c.pwBorder},
       {key:'supply',label:'供应区',kind:'box',color:c.supplyBorder},
       {key:'demand',label:'需求区',kind:'box',color:c.demandBorder},
-      {key:'current-vwap',label:'本季 VWAP',kind:'line',color:c.vwap},
+      {key:'current-vwap',label:'本季 VWAP ±1σ',kind:'line',color:c.vwap},
       {key:'pq-vwap',label:'PQ VWAP',kind:'line',color:c.pqVwap},
       {key:'npoc',label:'未回补 POC',kind:'dash',color:c.nPoc}
     ];
@@ -117,11 +117,11 @@
       priceFormat:{type:'price',precision:pricePrecision(),minMove:tick},lastValueVisible:true,priceLineVisible:false
     },0);
     const volume=chart.addSeries(L.HistogramSeries,{priceFormat:{type:'volume'},priceLineVisible:false,lastValueVisible:false},1);
-    const vwap=chart.addSeries(L.LineSeries,{color:'#5cb85c',lineWidth:1,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false},0);
     const primitive=new P.AnalysisBoardPrimitive({});
     candles.attachPrimitive(primitive);
     const panes=chart.panes();if(panes[1])panes[1].setHeight(Math.max(110,Math.round(container.clientHeight*.18)));
-    state.chart=chart;state.candles=candles;state.volume=volume;state.vwap=vwap;state.primitive=primitive;
+    state.chart=chart;state.candles=candles;state.volume=volume;state.primitive=primitive;
+    for(let i=0;i<2;i++){const b=new AP.band({id:'quarter-band-'+i,type:'band',points:[],label:'',color:state.rules.colors.vwap,fill:state.rules.colors.quarterBandFill});candles.attachPrimitive(b);state.quarterBands.push(b);}
     new ResizeObserver(()=>{
       const before=chart.timeScale().getVisibleLogicalRange();
       const wasDefault=rangesClose(before,state.defaultViewRange,.5);
@@ -192,6 +192,24 @@
     const start=E.previousQuarterStart(last.time);
     if(timeframe==='4h'&&one.length&&(!raw.length||Number(raw[0].time)>start+14400))return aggregateDisplay(one.filter(b=>Number(b.time)>=start),timeframe);
     return raw.filter(b=>Number(b.time)>=start);
+  }
+
+
+  function quarterVwapSegments(oneHour,display){
+    if(!oneHour.length||!display.length)return[];
+    const starts=[];let q=E.utcQuarterStart(display[0].time),end=E.utcQuarterStart(display[display.length-1].time);
+    while(q<=end){starts.push(q);const d=new Date(q*1000);q=Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+3,1)/1000;}
+    const sec=D.intervalSec(state.timeframe),segments=[];
+    for(const start of starts){
+      const d=new Date(start*1000),next=Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+3,1)/1000;
+      const calc=oneHour.filter(b=>Number(b.time)>=start&&Number(b.time)<next);if(!calc.length)continue;
+      const raw=I.anchoredVwap(calc,start,1);if(!raw.length)continue;
+      const target=display.filter(b=>Number(b.time)>=start&&Number(b.time)<next),maps={};
+      for(const key of ['vwap','upper','lower'])maps[key]=new Map(E.alignSeriesToBars(raw.map(p=>({time:p.time,value:p[key]})),target,sec).map(p=>[p.time,p.value]));
+      const points=[];for(const b of target){const t=Number(b.time);if(maps.vwap.has(t)&&maps.upper.has(t)&&maps.lower.has(t))points.push({time:t,vwap:maps.vwap.get(t),upper:maps.upper.get(t),lower:maps.lower.get(t)});}
+      if(points.length)segments.push({start,end:next,points,final:points[points.length-1]});
+    }
+    return segments;
   }
 
   function buildAnalysis(bundle){
@@ -276,12 +294,12 @@
     const levelsForTable=allLevels.map(l=>({...l,offView:!drawnLevelIds.has(l.id)}));
     const regions=allRegions.filter(r=>!r.offView),levels=levelsForTable.filter(l=>!l.offView);
 
-    const rawCurrentVwap=E.anchoredVwapSeries(one,qStart);
-    const currentVwap=E.alignSeriesToBars(rawCurrentVwap,display,D.intervalSec(state.timeframe));
+    const quarterVwaps=quarterVwapSegments(one,display);
+    const currentVwap=(quarterVwaps.find(x=>x.start===qStart)||quarterVwaps[quarterVwaps.length-1]||{points:[]}).points.map(p=>({time:p.time,value:p.vwap}));
     const lastClosed=closedCalc[closedCalc.length-1];
     const calcLastClosedUtc=lastClosed?new Date(Number(lastClosed.closeTime)+1).toISOString():null;
     return{
-      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,missing,
+      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,missing,
       allRegions,allLevels:levelsForTable,viewMin:view.min,viewMax:view.max,visibleBars:visibleN,
       cutoffUtc:bundle.cutoffUtc||null,generatedAt:bundle.generatedAt||new Date().toISOString(),
       calcTf,calcLastClosedUtc,bundleErrors:bundle.errors||{},
@@ -360,12 +378,11 @@
       const tick=Number(symbolMeta().tickSize)||.01;
       const fmt={type:'price',precision:pricePrecision(),minMove:tick};
       state.candles.applyOptions({priceFormat:fmt});
-      state.vwap.applyOptions({priceFormat:fmt});
     }
     const candleData=model.display.map(b=>({time:D.toDisplayTime(b.time),open:b.open,high:b.high,low:b.low,close:b.close}));
     const volumeData=model.display.map(b=>({time:D.toDisplayTime(b.time),value:b.volume,color:b.close>=b.open?'rgba(230,234,242,.42)':'rgba(230,234,242,.68)'}));
     state.candles.setData(candleData);state.volume.setData(volumeData);
-    state.vwap.setData(model.currentVwap.map(p=>({time:D.toDisplayTime(p.time),value:p.value})));
+    for(let i=0;i<state.quarterBands.length;i++){const seg=model.quarterVwaps[i],b=state.quarterBands[i];b.item={id:'quarter-band-'+i,type:'band',points:seg?seg.points.map(p=>[p.time,p.vwap,p.upper,p.lower]):[],label:'',color:state.rules.colors.vwap,fill:state.rules.colors.quarterBandFill};b.setContext({bars:model.display,intervalSec:D.intervalSec(state.timeframe),timeOffsetSec:9*3600,autoscale:false,priceFormatter:fmtPrice});if(b.requestUpdate)b.requestUpdate();}
     const autoscaleSpan=Math.max(1e-12,Number(model.viewMax)-Number(model.viewMin));
     const autoscalePad=autoscaleSpan*Number(state.rules.valueAreas.visiblePadPct||0)/100;
     state.primitive.setModel({
