@@ -7,7 +7,7 @@
   const state={
     symbol:'BTCUSDT',timeframe:'4h',viewMode:'quarter',snapshot:false,rules:null,bundle:null,chart:null,candles:null,volume:null,quarterBands:[],primitive:null,
     loadToken:0,refreshTimer:null,model:null,viewKey:null,lastDisplayCount:0,lastFullLoadAt:0,refreshWarning:null,
-    inFlight:null,abortController:null,lastSuccessAt:0,defaultViewRange:null,resizeToken:0,resizeSettle:null
+    inFlight:null,abortController:null,lastSuccessAt:0,defaultViewRange:null,resizeToken:0,resizeSettle:null,watermark:null,countdownTimer:null,crosshairTime:null
   };
 
   function tfLabel(tf){return({'1h':'1小时','4h':'4小时','1d':'1天'})[tf]||tf;}
@@ -121,7 +121,8 @@
     candles.attachPrimitive(primitive);
     const panes=chart.panes();if(panes[1])panes[1].setHeight(Math.max(110,Math.round(container.clientHeight*.18)));
     state.chart=chart;state.candles=candles;state.volume=volume;state.primitive=primitive;
-    for(let i=0;i<2;i++){const b=new AP.band({id:'quarter-band-'+i,type:'band',points:[],label:'',color:state.rules.colors.vwap,fill:state.rules.colors.quarterBandFill});candles.attachPrimitive(b);state.quarterBands.push(b);}
+    state.watermark=L.createTextWatermark(chart.panes()[0],{horzAlign:'center',vertAlign:'center',lines:[{text:symbolMeta().displayName+', '+tfLabel(state.timeframe),color:'rgba(255,255,255,.07)',fontSize:44,fontStyle:'bold'}]});
+    for(let i=0;i<2;i++){const b=new AP.band({id:'quarter-band-'+i,type:'band',points:[],label:'',color:state.rules.colors.vwap,fill:state.rules.colors.quarterBandFill});b.autoscaleInfo=()=>{const m=state.model;if(!m||!b.item.points||!b.item.points.length)return null;const span=Math.max(1e-12,Number(m.viewMax)-Number(m.viewMin)),pad=span*Number(state.rules.valueAreas.visiblePadPct||0)/100,lo=Number(m.viewMin)-pad,hi=Number(m.viewMax)+pad;let mn=Infinity,mx=-Infinity;for(const p of b.item.points)for(const v of p.slice(1)){const n=Math.max(lo,Math.min(hi,Number(v)));if(Number.isFinite(n)){mn=Math.min(mn,n);mx=Math.max(mx,n);}}return Number.isFinite(mn)&&Number.isFinite(mx)?{priceRange:{minValue:mn,maxValue:mx}}:null;};candles.attachPrimitive(b);state.quarterBands.push(b);}
     new ResizeObserver(()=>{
       const before=chart.timeScale().getVisibleLogicalRange();
       const wasDefault=rangesClose(before,state.defaultViewRange,.5);
@@ -226,7 +227,7 @@
     if(pqStats&&pqBars.length&&pqBars[0].time<=pqStart+3600){
       areas.push({id:'value-pq',type:'value',scope:'PQ',bottom:pqStats.lower,top:pqStats.upper,from:qStart,
         label:'上季价值区 PQ',tableType:'价值区 PQ',period:'Q / 1h',source:'exact',tested:E.wasZoneTouched(one,qStart,pqStats.lower,pqStats.upper),
-        fill:rules.colors.pqFill,border:rules.colors.pqBorder,pqVwap:pqStats.vwap});
+        fill:rules.colors.pqFill,border:rules.colors.pqBorder,borderStyle:'dashed',pqVwap:pqStats.vwap});
     }else missing.push({type:'价值区 PQ',period:'Q / 1h',source:'exact'});
 
     const pm=pmArea(one,thirty,last.time),mStart=E.utcMonthStart(last.time);
@@ -299,7 +300,7 @@
     const lastClosed=closedCalc[closedCalc.length-1];
     const calcLastClosedUtc=lastClosed?new Date(Number(lastClosed.closeTime)+1).toISOString():null;
     return{
-      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,missing,
+      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,pqStats,missing,
       allRegions,allLevels:levelsForTable,viewMin:view.min,viewMax:view.max,visibleBars:visibleN,
       cutoffUtc:bundle.cutoffUtc||null,generatedAt:bundle.generatedAt||new Date().toISOString(),
       calcTf,calcLastClosedUtc,bundleErrors:bundle.errors||{},
@@ -382,7 +383,7 @@
     const candleData=model.display.map(b=>({time:D.toDisplayTime(b.time),open:b.open,high:b.high,low:b.low,close:b.close}));
     const volumeData=model.display.map(b=>({time:D.toDisplayTime(b.time),value:b.volume,color:b.close>=b.open?'rgba(230,234,242,.42)':'rgba(230,234,242,.68)'}));
     state.candles.setData(candleData);state.volume.setData(volumeData);
-    for(let i=0;i<state.quarterBands.length;i++){const seg=model.quarterVwaps[i],b=state.quarterBands[i];b.item={id:'quarter-band-'+i,type:'band',points:seg?seg.points.map(p=>[p.time,p.vwap,p.upper,p.lower]):[],label:'',color:state.rules.colors.vwap,fill:state.rules.colors.quarterBandFill};b.setContext({bars:model.display,intervalSec:D.intervalSec(state.timeframe),timeOffsetSec:9*3600,autoscale:false,priceFormatter:fmtPrice});if(b.requestUpdate)b.requestUpdate();}
+    for(let i=0;i<state.quarterBands.length;i++){const seg=model.quarterVwaps[i],b=state.quarterBands[i];b.item={id:'quarter-band-'+i,type:'band',points:seg?seg.points.map(p=>[p.time,p.vwap,p.upper,p.lower]):[],label:'',color:state.rules.colors.vwap,fill:state.rules.colors.quarterBandFill};b.setContext({bars:model.display,intervalSec:D.intervalSec(state.timeframe),timeOffsetSec:9*3600,autoscale:true,priceFormatter:fmtPrice});if(b.requestUpdate)b.requestUpdate();}
     const autoscaleSpan=Math.max(1e-12,Number(model.viewMax)-Number(model.viewMin));
     const autoscalePad=autoscaleSpan*Number(state.rules.valueAreas.visiblePadPct||0)/100;
     state.primitive.setModel({
@@ -404,6 +405,32 @@
     }
     state.viewKey=key;state.lastDisplayCount=newCount;
     const panes=state.chart.panes();if(panes[1])panes[1].setHeight(Math.max(105,Math.round($('analysisChart').clientHeight*.18)));
+    updateChartInfo(model,state.crosshairTime);updateCountdown();
+  }
+
+  function formatVolume(v){const n=Math.abs(Number(v)||0);if(n>=1e9)return(n/1e9).toFixed(2)+'B';if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n.toFixed(2);}
+  function infoValues(model){
+    const cur=model.quarterVwaps.find(x=>x.start===E.utcQuarterStart(model.last.time))||model.quarterVwaps[model.quarterVwaps.length-1],c=cur&&cur.final||{};
+    const prevStart=E.previousQuarterStart(model.last.time),prev=model.quarterVwaps.find(x=>x.start===prevStart),p=prev&&prev.final||model.pqStats||{};
+    return{current:c,previous:{vwap:p.vwap,upper:p.upper,lower:p.lower}};
+  }
+  function updateChartInfo(model,time){
+    if(!model)return;const target=Number.isFinite(Number(time))?Number(time):Number(model.last.time);
+    const bar=model.display.find(b=>Number(b.time)===target)||model.last,chg=Number(bar.close)-Number(bar.open),pct=Number(bar.open)?chg/Number(bar.open)*100:0,cls=chg>=0?'up':'down';
+    const line1=$('chartInfo1');line1.textContent='';
+    const a=document.createElement('span');a.className='muted';a.textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe)+' · Binance  开='+fmtPrice(bar.open)+' 高='+fmtPrice(bar.high)+' 低='+fmtPrice(bar.low)+' 收='+fmtPrice(bar.close)+' ';line1.appendChild(a);
+    const b=document.createElement('span');b.className=cls;b.textContent='涨跌 '+(chg>=0?'+':'')+fmtPrice(chg)+' ('+(pct>=0?'+':'')+pct.toFixed(2)+'%)';line1.appendChild(b);
+    const c=document.createElement('span');c.className='muted';c.textContent=' 量 '+formatVolume(bar.volume);line1.appendChild(c);
+    const vals=infoValues(model),cv=vals.current,pv=vals.previous,line2=$('chartInfo2');line2.textContent='Anchored VWAP (hlc3, Quarter, ±1σ)';
+    const add=(text,klass)=>{const e=document.createElement('span');e.className=klass;e.textContent=text;line2.appendChild(e);};
+    add('  '+fmtPrice(cv.vwap),'vwap');add('  +1σ '+fmtPrice(cv.upper),'sigma');add('  −1σ '+fmtPrice(cv.lower),'sigma');add('  PQ '+fmtPrice(pv.vwap),'pqvwap');add('  +1σ '+fmtPrice(pv.upper),'sigma');add('  −1σ '+fmtPrice(pv.lower),'sigma');
+    model.infoValues={current:cv,previous:pv,barTime:Number(bar.time)};
+  }
+  function formatRemaining(ms){const sec=Math.max(0,Math.floor(ms/1000)),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return h>0?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
+  function updateCountdown(){
+    const el=$('closeCountdown');if(state.snapshot||!state.model){el.style.display='none';el.textContent='';return;}
+    const bar=state.model.last,closeMs=Number(bar.closeTime),left=closeMs-Date.now();if(!Number.isFinite(closeMs)||left<0){el.style.display='none';el.textContent='';return;}
+    el.textContent=fmtPrice(state.model.current)+' · '+formatRemaining(left);const y=state.candles.priceToCoordinate(state.model.current);if(y==null){el.style.display='none';return;}el.style.top=Math.max(2,Number(y)-10)+'px';el.style.display='block';
   }
 
   function updateSelectionState(){
@@ -411,6 +438,7 @@
     document.querySelectorAll('[data-symbol]').forEach(b=>b.classList.toggle('active',b.dataset.symbol===state.symbol));
     document.querySelectorAll('[data-tf]').forEach(b=>b.classList.toggle('active',b.dataset.tf===state.timeframe));
     document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===state.viewMode));
+    if(state.watermark)state.watermark.applyOptions({lines:[{text:symbolMeta().displayName+', '+tfLabel(state.timeframe),color:'rgba(255,255,255,.07)',fontSize:44,fontStyle:'bold'}]});
   }
 
   function updateHeader(model){
@@ -503,7 +531,7 @@
       await X.exportBoard({
         chart:state.chart,model:state.model,info:$('infoLine').textContent,rows:state.model.tableRows,
         filename:state.symbol+'-'+state.timeframe+'.png',priceFormatter:fmtPrice,
-        legend:legendEntries(),footer:$('cutoff').textContent
+        legend:legendEntries(),footer:$('cutoff').textContent,overlayLines:[$('chartInfo1').textContent,$('chartInfo2').textContent]
       });
     }finally{$('downloadBtn').disabled=false;}
   }
@@ -530,6 +558,7 @@
     document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>setViewMode(b.dataset.view)));
     $('resetViewBtn').addEventListener('click',resetView);
     $('downloadBtn').addEventListener('click',downloadPng);
+    state.chart.subscribeCrosshairMove(param=>{const t=param&&param.time!=null?Number(param.time)-9*3600:null;state.crosshairTime=Number.isFinite(t)?t:null;updateChartInfo(state.model,state.crosshairTime);});
     window.__analysisDebug={
       state,get model(){return state.model;},refresh:(forceFull)=>refresh(!!forceFull),
       axisLabels:()=>state.primitive?state.primitive.debugAxisLabels():[],
@@ -540,10 +569,12 @@
       candleTimes:()=>state.model?state.model.display.map(x=>x.time):[],
       vwapTimes:()=>state.model?state.model.currentVwap.map(x=>x.time):[],
       viewMode:()=>state.viewMode,
-      legend:()=>legendEntries()
+      legend:()=>legendEntries(),
+      chartInfo:()=>({line1:$('chartInfo1').textContent,line2:$('chartInfo2').textContent,countdown:$('closeCountdown').style.display==='none'?'':$('closeCountdown').textContent,watermark:symbolMeta().displayName+', '+tfLabel(state.timeframe)})
     };
     await refresh(true);
     if(!state.snapshot){
+      state.countdownTimer=setInterval(updateCountdown,1000);updateCountdown();
       const refreshMs=Number(state.rules.display.refreshSeconds||60)*1000;
       R.startRefreshLoop(state,refreshMs,refresh);
     }

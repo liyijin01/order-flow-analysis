@@ -101,7 +101,7 @@
         if(yt==null||yb==null)continue;if(x1==null)x1=0;
         const left=Math.max(0,Math.min(size.width,x1)),right=size.width,top=Math.min(yt,yb),bottom=Math.max(yt,yb);
         ctx.save();ctx.fillStyle=r.fill||'rgba(96,165,250,.10)';ctx.fillRect(left,top,Math.max(0,right-left),Math.max(1,bottom-top));
-        ctx.strokeStyle=r.border||'#60a5fa';ctx.lineWidth=1;this.lineStyle(ctx,r.tested?'dashed':'solid');
+        ctx.strokeStyle=r.border||'#60a5fa';ctx.lineWidth=1;this.lineStyle(ctx,r.borderStyle||(r.tested?'dashed':'solid'));
         ctx.strokeRect(left+.5,top+.5,Math.max(0,right-left-1),Math.max(1,bottom-top-1));ctx.restore();
         const outside=(bottom-top)<16,targetY=outside?top-6:top+10;
         labelTargets.push({id:r.id,text:r.label,x:right-8,targetY,color:r.border||'#e7eaf0',priority:r.type==='value'?2:3});

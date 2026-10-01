@@ -37,6 +37,7 @@
     ctx.fillStyle='#f1f5f9';ctx.font='600 18px -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif';ctx.fillText(options.info||'',18,28);
     legend(ctx,18,58,options.legend||[]);
     ctx.drawImage(shot,0,headerH,width,chartH);
+    if(options.overlayLines&&options.overlayLines.length){ctx.save();ctx.textAlign='left';ctx.textBaseline='top';ctx.shadowColor='rgba(27,33,48,.9)';ctx.shadowBlur=3;ctx.font='12px -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif';for(let i=0;i<options.overlayLines.length;i++){ctx.fillStyle=i===0?'#cbd3e1':'#aeb7c8';ctx.fillText(String(options.overlayLines[i]||''),12,headerH+10+i*18);}ctx.restore();}
 
     const tableY=headerH+chartH;
     ctx.fillStyle='#161c29';ctx.fillRect(0,tableY,width,tableH);

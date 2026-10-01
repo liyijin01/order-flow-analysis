@@ -19,7 +19,7 @@ const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
       for(const tf of tfs){
         const page=await browser.newPage({viewport:{width:1660,height:1300},deviceScaleFactor:1});
         const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
-        const url=base+'?snapshot=1&symbol='+symbol+'&tf='+tf;
+        const url=base+'?snapshot=1&view=quarter&symbol='+symbol+'&tf='+tf;
         await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
         await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
         const meta=await page.evaluate(()=>({
@@ -38,8 +38,8 @@ const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
         }));
         if(errors.length)throw new Error(symbol+' '+tf+' browser errors: '+errors.join(' | '));
         for(const a of meta.axis.filter(x=>x.visible))if(a.diff==null||a.diff>1)throw new Error(symbol+' '+tf+' axis label diff '+JSON.stringify(a));
-        if(!(Number.isFinite(meta.logicalSlots)&&meta.logicalSlots<=meta.visibleBars+rightOffset+2)){
-          throw new Error(symbol+' '+tf+' logical slots '+meta.logicalSlots+' exceed '+(meta.visibleBars+rightOffset+2));
+        if(!(Number.isFinite(meta.logicalSlots)&&Math.abs(meta.logicalSlots-meta.visibleBars*1.04)<=2)){
+          throw new Error(symbol+' '+tf+' quarter logical slots '+meta.logicalSlots+' expected '+(meta.visibleBars*1.04));
         }
         if(!meta.cutoff||!meta.calcLastClosedUtc)throw new Error(symbol+' '+tf+' missing cutoff metadata');
         const cutoffMs=Date.parse(meta.cutoff),calcMsValue=Date.parse(meta.calcLastClosedUtc);
@@ -51,7 +51,7 @@ const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
         await page.locator('#analysisCapture').screenshot({path:file});
         const size=fs.statSync(file).size;if(size<50*1024)throw new Error(file+' is only '+size+' bytes');
         manifest.push({
-          symbol,timeframe:tf,file:path.basename(file),bytes:size,status:meta.status,
+          symbol,timeframe:tf,view:'quarter',file:path.basename(file),bytes:size,status:meta.status,
           visibleBars:meta.visibleBars,logicalSlots:meta.logicalSlots,calcLastClosedUtc:meta.calcLastClosedUtc,
           supply:meta.supply,demand:meta.demand,drawn:meta.drawn,offView:meta.offView,
           regions:meta.regions,levels:meta.levels

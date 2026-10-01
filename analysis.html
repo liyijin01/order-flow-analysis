@@ -18,7 +18,7 @@ button.active{background:#34425b;border-color:#8aa4cd;color:#fff}button:disabled
 #infoLine{font-size:11px;color:#cbd3e1;font-variant-numeric:tabular-nums;margin-bottom:7px}
 .legend{display:flex;gap:14px 18px;align-items:center;flex-wrap:wrap;font-size:10px;color:#aeb7c8;margin-bottom:8px}
 .legend-item{display:flex;align-items:center;gap:6px}.legend-mark{display:inline-block;flex:none}.legend-box{width:11px;height:11px}.legend-line{width:18px;border-top:2px solid currentColor}.legend-dash{width:18px;border-top:2px dashed currentColor}
-#analysisChart{width:100%;height:680px;border:1px solid rgba(255,255,255,.09);background:#1b2130}
+#analysisChart{width:100%;height:680px;border:1px solid rgba(255,255,255,.09);background:#1b2130;position:relative}.chart-info{position:absolute;z-index:20;left:10px;top:8px;pointer-events:none;font-size:11px;line-height:1.55;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px #1b2130}.chart-info .muted{color:#aeb7c8}.chart-info .up{color:#5cb85c}.chart-info .down{color:#ef5350}.chart-info .vwap{color:#5cb85c}.chart-info .pqvwap{color:#2e7d32}.chart-info .sigma{color:#bec4d0}.close-countdown{position:absolute;z-index:21;right:72px;pointer-events:none;background:rgba(27,33,48,.88);padding:2px 5px;border-radius:3px;color:#f1f5f9;font-size:10px;font-variant-numeric:tabular-nums;display:none}
 .table-wrap{border-top:1px solid rgba(255,255,255,.09);margin-top:10px;overflow:auto}
 table{width:100%;border-collapse:collapse;font-size:10px;font-variant-numeric:tabular-nums}th,td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left;white-space:nowrap}
 th{color:#8e98aa;font-weight:600;background:#181e2b}td{color:#cdd5e3}.missing td{color:#d5a2a2}
@@ -44,7 +44,7 @@ body.snapshot #analysisCapture{border:0;padding:12px;width:1600px}body.snapshot 
   <div class="capture-title"><div id="boardTitle">BTCUSDT.P · 4小时</div><div class="capture-meta">VALUE / SUPPLY / DEMAND</div></div>
   <div id="infoLine">Loading market data…</div>
   <div class="legend" id="analysisLegend" aria-label="分析图例"></div>
-  <div id="analysisChart" aria-label="价值区、供应区、需求区成品分析图"></div>
+  <div id="analysisChart" aria-label="价值区、供应区、需求区成品分析图"><div id="chartInfo" class="chart-info"><div id="chartInfo1"></div><div id="chartInfo2"></div></div><div id="closeCountdown" class="close-countdown"></div></div>
   <div class="table-wrap"><table>
     <thead><tr><th>类型</th><th>价格区间</th><th>距现价 %</th><th>状态</th><th>计算周期</th><th>数据来源</th></tr></thead>
     <tbody id="regionRows"><tr><td colspan="6">Loading…</td></tr></tbody>

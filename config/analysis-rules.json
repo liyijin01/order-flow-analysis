@@ -2,7 +2,7 @@
   "display": {
     "defaultTimeframe": "4h",
     "bars": {
-      "4h": 1200,
+      "4h": 540,
       "1h": 720,
       "1d": 365
     },

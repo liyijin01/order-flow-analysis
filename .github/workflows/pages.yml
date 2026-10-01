@@ -72,7 +72,7 @@ jobs:
           fi
 
   chart-smoke:
-    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-'))
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-'))
     needs: test
     runs-on: ubuntu-24.04
     permissions:
@@ -92,13 +92,13 @@ jobs:
           python3 -m http.server 8000 >/tmp/order-flow-http.log 2>&1 &
           sleep 2
       - name: Render C2.1-C4 regression suite
-        if: startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-')
+        if: startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-')
         run: node scripts/c2_1_c4_smoke.cjs
       - name: Run C4.1 browser regression checks
-        if: startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-')
+        if: startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-')
         run: node scripts/c4_1_smoke.cjs
       - name: Upload C2.1-C4 screenshots
-        if: always() && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-'))
+        if: always() && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-'))
         uses: actions/upload-artifact@v7
         with:
           name: c2-1-c4-chart-screenshots
@@ -136,9 +136,11 @@ jobs:
         run: python scripts/d1_build_snapshot.py --profile-dir _d1-generated --output-dir _site/analysis/data
       - name: Prepare local D1 site
         run: |
-          mkdir -p _site/web _site/config
+          mkdir -p _site/web/chart/render/primitives _site/config
           cp analysis.html _site/
           cp -R web/analysis _site/web/
+          cp web/chart/indicators.js _site/web/chart/
+          cp web/chart/render/primitives/base.js web/chart/render/primitives/band.js _site/web/chart/render/primitives/
           cp config/symbols.js config/analysis-rules.json _site/config/
           cp _d1-generated/profiles-*.json _site/
       - name: Start local D1 site
