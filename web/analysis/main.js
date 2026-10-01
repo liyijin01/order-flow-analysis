@@ -301,7 +301,11 @@
         const periodEnd=Date.parse(String(row.periodEnd||''));
         return Number.isFinite(periodEnd)&&periodEnd<=keyPeriodCutoffMs;
       });
-      keySelection=E.selectKeyLevels(eligibleKeyLevels,current,view.min,view.max,linePad,tick,rules.keyLevels&&rules.keyLevels.maxCount||6,pqStart);
+      const keyCfg=rules.keyLevels||{};
+      keySelection=E.selectKeyLevels(
+        eligibleKeyLevels,current,view.min,view.max,linePad,tick,keyCfg.maxCount||6,pqStart,
+        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,pq?[pq.bottom,pq.top]:[]
+      );
       const firstTime=Number(display[0].time);
       for(const row of keySelection.all){
         const monthly=row.keyKind==='py-month';

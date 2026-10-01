@@ -89,6 +89,8 @@
     "keyAxis": "#eceff4"
   },
   "keyLevels": {
-    "maxCount": 6
+    "maxCount": 6,
+    "maxMonthly": 2,
+    "minGapPct": 2
   }
 }
