@@ -1,3 +1,5 @@
+项目进度、关键决定和历史任务文档见 [docs/](docs/README.md)。
+
 # Order Flow Analysis
 
 Read-only research dashboard for Binance USD-M perpetual order flow.
