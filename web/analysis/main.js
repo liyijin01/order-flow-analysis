@@ -598,7 +598,7 @@
     const all=state.rules&&state.rules.templates||{};if(!all[template]||template===state.template)return;
     state.template=template;state.viewMode='quarter';
     const cfg=templateConfig();if(!(cfg.timeframes||[]).includes(state.timeframe))state.timeframe=cfg.defaultTimeframe||(cfg.timeframes||[])[0]||state.timeframe;
-    state.viewKey=null;state.defaultViewRange=null;state.bundle=null;state.lastFullLoadAt=0;state.refreshWarning=null;updateSelectionState();
+    state.viewKey=null;state.defaultViewRange=null;state.bundle=null;state.lastFullLoadAt=0;state.refreshWarning=null;updateSelectionState();syncVolumeLayer();
     const q=new URLSearchParams(location.search);q.set('symbol',state.symbol);q.set('tf',state.timeframe);q.set('tpl',state.template);if(state.template==='combined')q.set('view',state.viewMode);else q.delete('view');if(state.snapshot)q.set('snapshot','1');
     history.replaceState(null,'',location.pathname+'?'+q.toString());refresh(true,{cancelPrevious:true});
   }
@@ -607,10 +607,12 @@
     if(!state.model)return;
     $('downloadBtn').disabled=true;
     try{
+      const cfg=templateConfig();
       await X.exportBoard({
         chart:state.chart,model:state.model,info:$('infoLine').textContent,rows:state.model.tableRows,
-        filename:state.symbol+'-'+state.timeframe+'.png',priceFormatter:fmtPrice,
-        legend:legendEntries(),footer:$('cutoff').textContent,overlayLines:[$('chartInfo1').textContent,$('chartInfo2').textContent]
+        filename:state.symbol+(state.template==='quarter'?'-quarter':'')+'-'+state.timeframe+'.png',priceFormatter:fmtPrice,
+        legend:cfg.legend===false?[]:legendEntries(),legendEnabled:cfg.legend!==false,tableEnabled:cfg.table!==false,
+        footer:$('cutoff').textContent,overlayLines:[$('chartInfo1').textContent,$('chartInfo2').textContent]
       });
     }finally{$('downloadBtn').disabled=false;}
   }

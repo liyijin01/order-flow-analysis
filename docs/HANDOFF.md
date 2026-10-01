@@ -15,7 +15,7 @@
 工作方式（每一轮都一样）：
 1. 我会发一份 .md 任务文档，严格按文档实现；文档和现有代码冲突时以文档为准，偏差写进回复。
 2. 从最新 main 切文档指定的分支，所有改动放进一个 PR。
-3. 每个 PR 都要：把本轮任务文档原样保存为 `docs/specs/{编号}.md`；在 `docs/CHANGELOG.md` 末尾追加一行；更新 `docs/ROADMAP.md` 的状态；改了定义或规则时同步更新 `docs/DECISIONS.md`。
+3. 每个 PR 都要：把本轮任务文档原样保存为 `docs/specs/{编号}.md`；在 `docs/CHANGELOG.md` 末尾追加一行（从 D12 起“提交 / PR”列只写 PR 编号，不写 squash SHA）；更新 `docs/ROADMAP.md` 的状态；改了定义或规则时同步更新 `docs/DECISIONS.md`。
 4. 每完成一项在本地跑测试并 commit；全部完成后只 push 一次，等 CI 全部跑完。只有 CI 失败时才修复并再 push 一次（每次 push 都会取消正在跑的 CI）。
 5. CI 全绿后直接 squash merge 到 main，不需要等我 review。
 6. 等 main 上的 Pages workflow 部署成功，按文档的验收项自查，按文档的回复格式给我链接。
