@@ -350,8 +350,11 @@
       const tr=document.createElement('tr');
       const range=r.missing||r.summary?'—':(r.low===r.high?fmtPrice(r.low):fmtPrice(r.low)+' – '+fmtPrice(r.high));
       const dist=r.distance==null?'—':r.distance.toFixed(2)+'%';
-      for(const value of [r.type,range,dist,r.status,r.period,r.source||'—']){
-        const td=document.createElement('td');td.textContent=value;tr.appendChild(td);
+      const values=[r.type,range,dist,r.status,r.period,r.source||'—'];
+      for(let i=0;i<values.length;i++){
+        const td=document.createElement('td');td.textContent=values[i];
+        if(r.summary&&i===0){td.style.whiteSpace='normal';td.style.overflowWrap='anywhere';}
+        tr.appendChild(td);
       }
       if(r.missing)tr.classList.add('missing');tbody.appendChild(tr);
     }
