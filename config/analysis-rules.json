@@ -13,7 +13,9 @@
       "1h": 240,
       "1d": 180
     },
-    "minBarSpacingPx": 5
+    "minBarSpacingPx": 5,
+    "quarterRightPct": 0.04,
+    "quarterMinBarSpacing": 0.05
   },
   "valueAreas": {
     "visiblePadPct": 10,
@@ -71,14 +73,16 @@
     "demandFill": "rgba(38,166,154,.20)",
     "demandBorder": "#26a69a",
     "testedAlpha": 0.08,
-    "pqFill": "rgba(96,165,250,.10)",
-    "pqBorder": "rgba(96,165,250,.6)",
+    "pqFill": "rgba(190,196,208,.08)",
+    "pqBorder": "rgba(190,196,208,.45)",
     "pmFill": "rgba(251,191,36,.10)",
     "pmBorder": "rgba(251,191,36,.6)",
     "pwFill": "rgba(167,139,250,.12)",
     "pwBorder": "rgba(167,139,250,.7)",
     "vwap": "#5cb85c",
     "pqVwap": "#2e7d32",
-    "nPoc": "#ff9800"
+    "nPoc": "#ff9800",
+    "quarterBandFill": "rgba(190,196,208,.13)",
+    "quarterBandEdge": "rgba(190,196,208,.5)"
   }
 }

@@ -3,7 +3,7 @@
 
   const intervalMsMap={'30m':1800000,'1h':3600000,'4h':14400000,'1d':86400000,'1w':604800000};
   const calcMap={'1h':'4h','4h':'1d','1d':'1w'};
-  const displayCounts={'1h':720,'4h':540,'1d':365};
+  const displayCounts={'1h':720,'4h':1200,'1d':365};
 
   function isAbort(error,signal){return !!(signal&&signal.aborted)||!!(error&&error.name==='AbortError');}
   function sleep(ms,signal){
@@ -102,7 +102,7 @@
     else if(interval==='30m')cap=3500;
     else if(interval==='1w')cap=400;
     else if(interval==='1d')cap=Math.max(430,displayCounts[timeframe]||0,400);
-    else if(interval==='4h')cap=Math.max(620,displayCounts[timeframe]||0,400);
+    else if(interval==='4h')cap=Math.max(1200,displayCounts[timeframe]||0,400);
     if(interval===timeframe)cap=Math.max(cap,displayCounts[timeframe]||0);
     if(interval===calcMap[timeframe])cap=Math.max(cap,400);
     return cap;
