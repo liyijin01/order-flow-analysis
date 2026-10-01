@@ -18,6 +18,7 @@ from scripts.c4_1_golden import load_range, weighted_stats
 SYMBOLS = ("BTCUSDT", "ETHUSDT", "SOLUSDT")
 TICK_SIZE = {"BTCUSDT": 0.1, "ETHUSDT": 0.01, "SOLUSDT": 0.001}
 MONTH_LABELS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+INTERVAL_MS = {"1h": 60 * 60 * 1000, "30m": 30 * 60 * 1000}
 
 
 def iso_z(dt: datetime) -> str:
@@ -64,17 +65,38 @@ def expected_ids(spec):
     return {f"{stem}-vah", f"{stem}-val"}
 
 
-def quarter_levels(symbol: str, spec: dict, load_fn=None):
+def period_interval(spec: dict) -> str:
+    return "1h" if spec["kind"] in ("quarter", "py-quarter") else "30m"
+
+
+def period_completeness(bars, spec: dict, interval: str):
+    step_ms = INTERVAL_MS[interval]
+    start_ms = int(spec["start"].timestamp() * 1000)
+    end_ms = int(spec["end"].timestamp() * 1000)
+    expected = (end_ms - start_ms) // step_ms
+    opens = sorted({
+        int(bar.open_time)
+        for bar in bars
+        if start_ms <= int(bar.open_time) < end_ms
+    })
+    count = len(opens)
+    missing = max(0, expected - count)
+    last_ok = bool(opens) and opens[-1] == end_ms - step_ms
+    complete = last_ok and expected > 0 and missing / expected <= 0.005
+    return count, expected, complete
+
+
+def quarter_levels(symbol: str, spec: dict, load_fn=None, bars=None):
     load_fn = load_fn or load_range
-    bars = load_fn(symbol, "um", "1h", spec["start"], spec["end"])
+    bars = bars if bars is not None else load_fn(symbol, "um", "1h", spec["start"], spec["end"])
     vwap, vah, val = weighted_stats(bars, "weighted-pop")
     definition = "Q / 1h VWAP±1σ"
     return vwap, vah, val, definition
 
 
-def monthly_tpo_levels(symbol: str, spec: dict, load_fn=None):
+def monthly_tpo_levels(symbol: str, spec: dict, load_fn=None, bars=None):
     load_fn = load_fn or load_range
-    bars = load_fn(symbol, "um", "30m", spec["start"], spec["end"])
+    bars = bars if bars is not None else load_fn(symbol, "um", "30m", spec["start"], spec["end"])
     size = TICK_SIZE[symbol] * 100
     counts = defaultdict(int)
     for bar in bars:
@@ -110,7 +132,11 @@ def load_cache(path: Path):
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
-    return {str(row.get("id")): row for row in payload.get("levels", []) if row.get("id")}
+    return {
+        str(row.get("id")): row
+        for row in payload.get("levels", [])
+        if row.get("id") and row.get("complete") is True
+    }
 
 
 def build_symbol(symbol: str, cutoff: datetime, cache_path: Path, output_path: Path, load_fn=None):
@@ -123,12 +149,26 @@ def build_symbol(symbol: str, cutoff: datetime, cache_path: Path, output_path: P
         ids = expected_ids(spec)
         if ids.issubset(levels):
             continue
+        interval = period_interval(spec)
+        bars = load_fn(symbol, "um", interval, spec["start"], spec["end"])
+        bar_count, expected_bars, complete = period_completeness(bars, spec, interval)
+        if not complete:
+            for level_id in ids:
+                levels.pop(level_id, None)
+            print(
+                f"::warning::{symbol} {spec['label']} incomplete {interval} data: "
+                f"{bar_count}/{expected_bars} bars; final bar "
+                f"{'present' if bars and int(bars[-1].open_time) == int(spec['end'].timestamp() * 1000) - INTERVAL_MS[interval] else 'missing'}",
+                flush=True,
+            )
+            continue
         if spec["kind"] in ("quarter", "py-quarter"):
-            _vwap, vah, val, definition = quarter_levels(symbol, spec, load_fn)
+            _vwap, vah, val, definition = quarter_levels(symbol, spec, load_fn, bars)
         else:
-            vah, val, definition = monthly_tpo_levels(symbol, spec, load_fn)
+            vah, val, definition = monthly_tpo_levels(symbol, spec, load_fn, bars)
         for side, price in (("VAH", vah), ("VAL", val)):
             row = make_level(spec, side, price, definition)
+            row.update({"bars": bar_count, "expectedBars": expected_bars, "complete": True})
             levels[row["id"]] = row
         computed.append(spec["label"])
 
@@ -136,9 +176,6 @@ def build_symbol(symbol: str, cutoff: datetime, cache_path: Path, output_path: P
     for spec in specs:
         expected.update(expected_ids(spec))
     rows = [levels[k] for k in sorted(expected) if k in levels]
-    if len(rows) != len(expected):
-        missing = sorted(expected - set(levels))
-        raise RuntimeError(f"{symbol} missing cached/computed levels: {missing}")
 
     generated = iso_z(datetime.now(timezone.utc))
     payload = {
