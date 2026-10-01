@@ -3,6 +3,7 @@
 
   const L=window.LightweightCharts,D=window.OrderFlowAnalysisData,E=window.OrderFlowAnalysisEngine,I=window.OrderFlowIndicators,AP=window.OrderFlowAnnotationPrimitives,P=window.OrderFlowAnalysisPrimitive,X=window.OrderFlowAnalysisExport,R=window.OrderFlowBoardRuntime;
   const SYMBOLS=window.ORDER_FLOW_SYMBOLS||{};
+  const WATERMARK_COLOR='rgba(196,140,60,.30)';
   const $=id=>document.getElementById(id);
   const state={
     symbol:'BTCUSDT',timeframe:'1h',template:'quarter',viewMode:'quarter',snapshot:false,rules:null,bundle:null,chart:null,candles:null,volume:null,quarterBands:[],primitive:null,
@@ -144,13 +145,13 @@
     });
     const tick=Number(symbolMeta().tickSize)||.01;
     const candles=chart.addSeries(L.CandlestickSeries,{
-      upColor:'rgba(0,0,0,0)',downColor:'#d9dde6',borderUpColor:'#d9dde6',borderDownColor:'#d9dde6',wickUpColor:'#d9dde6',wickDownColor:'#d9dde6',
+      upColor:'#e6e9ef',downColor:'rgba(0,0,0,0)',borderUpColor:'#e6e9ef',borderDownColor:'#e6e9ef',wickUpColor:'#e6e9ef',wickDownColor:'#e6e9ef',
       priceFormat:{type:'price',precision:pricePrecision(),minMove:tick},lastValueVisible:true,priceLineVisible:false
     },0);
     const primitive=new P.AnalysisBoardPrimitive({});
     candles.attachPrimitive(primitive);
     state.chart=chart;state.candles=candles;state.volume=null;state.primitive=primitive;syncVolumeLayer();
-    state.watermark=L.createTextWatermark(chart.panes()[0],{horzAlign:'center',vertAlign:'center',lines:[{text:symbolMeta().displayName+', '+tfLabel(state.timeframe),color:'rgba(255,255,255,.07)',fontSize:44,fontStyle:'bold'}]});
+    state.watermark=L.createTextWatermark(chart.panes()[0],{horzAlign:'center',vertAlign:'center',lines:[{text:symbolMeta().displayName+', '+tfLabel(state.timeframe),color:WATERMARK_COLOR,fontSize:44,fontStyle:'bold'}]});
     for(let i=0;i<2;i++){const b=new AP.band({id:'quarter-band-'+i,type:'band',points:[],label:'',color:state.rules.colors.vwap,fill:state.rules.colors.quarterBandFill});b.autoscaleInfo=()=>{const m=state.model;if(!m||!b.item.points||!b.item.points.length)return null;const span=Math.max(1e-12,Number(m.viewMax)-Number(m.viewMin)),pad=span*Number(state.rules.valueAreas.visiblePadPct||0)/100,lo=Number(m.viewMin)-pad,hi=Number(m.viewMax)+pad;let mn=Infinity,mx=-Infinity;for(const p of b.item.points)for(const v of p.slice(1)){const n=Math.max(lo,Math.min(hi,Number(v)));if(Number.isFinite(n)){mn=Math.min(mn,n);mx=Math.max(mx,n);}}return Number.isFinite(mn)&&Number.isFinite(mx)?{priceRange:{minValue:mn,maxValue:mx}}:null;};candles.attachPrimitive(b);state.quarterBands.push(b);}
     new ResizeObserver(()=>{
       const before=chart.timeScale().getVisibleLogicalRange();
@@ -515,7 +516,7 @@
     document.querySelectorAll('[data-tf]').forEach(b=>b.classList.toggle('active',b.dataset.tf===state.timeframe));
     document.querySelectorAll('[data-tpl]').forEach(b=>b.classList.toggle('active',b.dataset.tpl===state.template));
     applyTemplateChrome();
-    if(state.watermark)state.watermark.applyOptions({lines:[{text:symbolMeta().displayName+', '+tfLabel(state.timeframe),color:'rgba(255,255,255,.07)',fontSize:44,fontStyle:'bold'}]});
+    if(state.watermark)state.watermark.applyOptions({lines:[{text:symbolMeta().displayName+', '+tfLabel(state.timeframe),color:WATERMARK_COLOR,fontSize:44,fontStyle:'bold'}]});
   }
 
   function updateHeader(model){
@@ -654,7 +655,8 @@
       template:()=>state.template,
       windowSpec:()=>windowSpec(),
       legend:()=>legendEntries(),
-      chartInfo:()=>({line1:$('chartInfo1').textContent,line2:$('chartInfo2').textContent,countdown:$('closeCountdown').style.display==='none'?'':$('closeCountdown').textContent,watermark:symbolMeta().displayName+', '+tfLabel(state.timeframe)})
+      candleStyle:()=>state.candles?state.candles.options():null,
+      chartInfo:()=>({line1:$('chartInfo1').textContent,line2:$('chartInfo2').textContent,countdown:$('closeCountdown').style.display==='none'?'':$('closeCountdown').textContent,watermark:symbolMeta().displayName+', '+tfLabel(state.timeframe),watermarkColor:WATERMARK_COLOR})
     };
     await refresh(true);
     if(!state.snapshot){
