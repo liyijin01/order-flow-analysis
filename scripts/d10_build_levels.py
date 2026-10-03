@@ -18,7 +18,7 @@ from scripts.c4_1_golden import load_range, weighted_stats
 SYMBOLS = ("BTCUSDT", "ETHUSDT", "SOLUSDT")
 TICK_SIZE = {"BTCUSDT": 0.1, "ETHUSDT": 0.01, "SOLUSDT": 0.001}
 MONTH_LABELS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-INTERVAL_MS = {"1h": 60 * 60 * 1000, "30m": 30 * 60 * 1000}
+INTERVAL_MS = {"30m": 30 * 60 * 1000, "1h": 60 * 60 * 1000, "4h": 4 * 60 * 60 * 1000}
 
 
 def iso_z(dt: datetime) -> str:
@@ -57,16 +57,32 @@ def target_periods(cutoff: datetime):
     for month in range(1, 13):
         start, end = month_bounds(py, month)
         specs.append({"kind": "py-month", "year": py, "month": month, "start": start, "end": end, "label": f"PY {MONTH_LABELS[month - 1]}"})
+    for year in (cutoff.year - 1, cutoff.year - 2):
+        start = datetime(year, 1, 1, tzinfo=timezone.utc)
+        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+        specs.append({
+            "kind": "year", "year": year, "start": start, "end": end,
+            "label": "PY" if year == cutoff.year - 1 else str(year),
+        })
     return specs
 
 
+def level_stem(spec: dict) -> str:
+    if spec["kind"] == "year":
+        return f"year-{spec['year']}"
+    return spec["label"].replace(" ", "-").lower()
+
+
 def expected_ids(spec):
-    stem = spec["label"].replace(" ", "-").lower()
-    return {f"{stem}-vah", f"{stem}-val"}
+    stem = level_stem(spec)
+    sides = ("vwap", "vah", "val") if spec["kind"] == "year" else ("vah", "val")
+    return {f"{stem}-{side}" for side in sides}
 
 
 def period_interval(spec: dict) -> str:
-    return "1h" if spec["kind"] in ("quarter", "py-quarter") else "30m"
+    if spec["kind"] in ("quarter", "py-quarter"):
+        return "1h"
+    return "4h" if spec["kind"] == "year" else "30m"
 
 
 def period_completeness(bars, spec: dict, interval: str):
@@ -94,6 +110,13 @@ def quarter_levels(symbol: str, spec: dict, load_fn=None, bars=None):
     return vwap, vah, val, definition
 
 
+def year_levels(symbol: str, spec: dict, load_fn=None, bars=None):
+    load_fn = load_fn or load_range
+    bars = bars if bars is not None else load_fn(symbol, "um", "4h", spec["start"], spec["end"])
+    vwap, vah, val = weighted_stats(bars, "weighted-pop")
+    return vwap, vah, val, "Y / 4h VWAP±1σ (hlc3)"
+
+
 def monthly_tpo_levels(symbol: str, spec: dict, load_fn=None, bars=None):
     load_fn = load_fn or load_range
     bars = bars if bars is not None else load_fn(symbol, "um", "30m", spec["start"], spec["end"])
@@ -112,7 +135,7 @@ def monthly_tpo_levels(symbol: str, spec: dict, load_fn=None, bars=None):
 
 
 def make_level(spec: dict, side: str, price: float, definition: str):
-    stem = spec["label"].replace(" ", "-").lower()
+    stem = level_stem(spec)
     return {
         "id": f"{stem}-{side.lower()}",
         "label": f"{spec['label']} {side}",
@@ -164,9 +187,14 @@ def build_symbol(symbol: str, cutoff: datetime, cache_path: Path, output_path: P
             continue
         if spec["kind"] in ("quarter", "py-quarter"):
             _vwap, vah, val, definition = quarter_levels(symbol, spec, load_fn, bars)
+            values = (("VAH", vah), ("VAL", val))
+        elif spec["kind"] == "year":
+            vwap, vah, val, definition = year_levels(symbol, spec, load_fn, bars)
+            values = (("VWAP", vwap), ("VAH", vah), ("VAL", val))
         else:
             vah, val, definition = monthly_tpo_levels(symbol, spec, load_fn, bars)
-        for side, price in (("VAH", vah), ("VAL", val)):
+            values = (("VAH", vah), ("VAL", val))
+        for side, price in values:
             row = make_level(spec, side, price, definition)
             row.update({"bars": bar_count, "expectedBars": expected_bars, "complete": True})
             levels[row["id"]] = row
@@ -174,7 +202,20 @@ def build_symbol(symbol: str, cutoff: datetime, cache_path: Path, output_path: P
 
     expected = set()
     for spec in specs:
-        expected.update(expected_ids(spec))
+        ids = expected_ids(spec)
+        expected.update(ids)
+        if spec["kind"] == "year":
+            for side in ("VWAP", "VAH", "VAL"):
+                level_id = f"{level_stem(spec)}-{side.lower()}"
+                if level_id in levels:
+                    levels[level_id] = {
+                        **levels[level_id],
+                        "label": f"{spec['label']} {side}",
+                        "kind": "year",
+                        "side": side,
+                        "periodStart": iso_z(spec["start"]),
+                        "periodEnd": iso_z(spec["end"]),
+                    }
     rows = [levels[k] for k in sorted(expected) if k in levels]
 
     generated = iso_z(datetime.now(timezone.utc))
