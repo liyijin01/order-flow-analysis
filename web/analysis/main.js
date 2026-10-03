@@ -337,9 +337,12 @@
       });
       const keyCfg=rules.keyLevels||{},pane=state.chart&&state.chart.panes&&state.chart.panes()[0];
       const paneHeight=pane&&typeof pane.getHeight==='function'?pane.getHeight():$('analysisChart').clientHeight;
+      const scaleMargins=state.candles&&state.candles.priceScale?state.candles.priceScale().options().scaleMargins:null;
+      const usableRatio=Math.max(.1,1-Math.max(0,Number(scaleMargins&&scaleMargins.top)||0)-Math.max(0,Number(scaleMargins&&scaleMargins.bottom)||0));
+      const plotHeight=paneHeight*usableRatio;
       keySelection=E.selectKeyLevels(
         eligibleKeyLevels,current,view.min,view.max,linePad,tick,keyCfg.maxCount||6,pqStart,
-        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,pq?[pq.pqVwap,pq.bottom,pq.top]:[],keyCfg.minGapPx||0,paneHeight
+        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,pq?[pq.pqVwap,pq.bottom,pq.top]:[],keyCfg.minGapPx||0,plotHeight
       );
       const firstTime=Number(display[0].time),keyStyle=templateKeyStyle;
       for(const row of keySelection.all){
