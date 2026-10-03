@@ -47,3 +47,47 @@ test('C3 approximate VP conserves candle volume',()=>{
   const rowsTotal=p.rows.reduce((a,r)=>a+r[3],0);
   assert.ok(Math.abs(rowsTotal-21)<1e-9);
 });
+
+
+test('D13 rolling VWAP excludes the exact left boundary and matches weighted window',()=>{
+  const bars=[
+    {time:0,high:10,low:10,close:10,volume:1},
+    {time:10,high:20,low:20,close:20,volume:1},
+    {time:20,high:30,low:30,close:30,volume:2},
+  ];
+  const out=I.rollingVwap(bars,20);
+  assert.equal(out[0].value,null);
+  assert.equal(out[1].value,null);
+  assert.ok(Math.abs(out[2].value-(20*1+30*2)/3)<1e-12);
+});
+
+test('D13 rolling VWAP uses time window across gaps and returns null before full history',()=>{
+  const bars=[
+    {time:0,high:10,low:10,close:10,volume:1},
+    {time:5,high:20,low:20,close:20,volume:1},
+    {time:100,high:40,low:40,close:40,volume:1},
+    {time:105,high:50,low:50,close:50,volume:1},
+  ];
+  const out=I.rollingVwap(bars,100);
+  assert.equal(out[1].value,null);
+  assert.ok(Math.abs(out[2].value-40)<1e-12);
+  assert.ok(Math.abs(out[3].value-45)<1e-12);
+});
+
+test('D13 rolling VWAP matches anchored VWAP over the same complete window',()=>{
+  const bars=[];
+  for(let i=0;i<=10;i++)bars.push({time:i*10,high:100+i,low:98+i,close:99+i,volume:1+i});
+  const window=50,last=bars.at(-1),inside=bars.filter(b=>b.time>last.time-window&&b.time<=last.time);
+  const expected=I.anchoredVwap(inside,inside[0].time,1).at(-1).vwap;
+  const actual=I.rollingVwap(bars,window).at(-1).value;
+  assert.ok(Math.abs(actual-expected)<1e-12);
+});
+
+test('D13 rolling VWAP handles 3000 bars x four windows under 50ms',()=>{
+  const bars=[];
+  for(let i=0;i<3000;i++)bars.push({time:i*14400,high:100+i*.01,low:99+i*.01,close:99.5+i*.01,volume:100+i%17});
+  const start=process.hrtime.bigint();
+  for(const days of [30,60,90,365])I.rollingVwap(bars,days*86400);
+  const elapsed=Number(process.hrtime.bigint()-start)/1e6;
+  assert.ok(elapsed<50,'elapsed '+elapsed.toFixed(2)+'ms');
+});
