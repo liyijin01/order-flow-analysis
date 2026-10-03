@@ -206,6 +206,8 @@ function assertBoundaryStable(before,after,label){
         return rows.map((x,i)=>i?Math.abs(Number(x.y)-Number(rows[i-1].y)):Infinity);
       });
       if(gaps.some(x=>x<18))throw new Error('D12b quarter horizontal-line gap '+JSON.stringify(gaps));
+      await page.evaluate(()=>{window.__analysisDebug.model.last.closeTime=Date.now()+65000;});
+      await page.waitForTimeout(1100);
       await page.waitForFunction(()=>window.__analysisDebug.axisLabels().some(x=>x.id==='countdown'),undefined,{timeout:5000});
       const axisCheck=await page.evaluate(()=>{
         const d=window.__analysisDebug,axis=d.axisLabels(),countdown=axis.find(x=>x.id==='countdown'),currentY=d.state.candles.priceToCoordinate(d.model.current);
