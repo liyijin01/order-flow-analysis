@@ -200,6 +200,12 @@ function assertBoundaryStable(before,after,label){
       if(Math.abs(q.rightFraction-.18)>.025)throw new Error('D12 right margin '+JSON.stringify(q));
       if(q.regions.length||q.npoc||q.tableRows||q.tableDisplay!=='none'||q.legendDisplay!=='none'||!q.volumeAbsent)throw new Error('D12 disabled layers '+JSON.stringify(q));
       if(q.pq.length!==2||q.pq.some(x=>x.style!=='dashed'||x.axisLabel!==false)||q.keyCount>6||!q.keyWhiteDashed)throw new Error('D12 quarter lines '+JSON.stringify(q));
+      const gaps=await page.evaluate(()=>{
+        const d=window.__analysisDebug,m=d.model;
+        const rows=(m.levels||[]).filter(x=>x.kind==='key'||x.kind==='pq'||x.kind==='pq-bound').map(x=>({id:x.id,y:d.state.candles.priceToCoordinate(x.price)})).filter(x=>Number.isFinite(Number(x.y))).sort((a,b)=>a.y-b.y);
+        return rows.map((x,i)=>i?Math.abs(Number(x.y)-Number(rows[i-1].y)):Infinity);
+      });
+      if(gaps.some(x=>x<18))throw new Error('D12b quarter horizontal-line gap '+JSON.stringify(gaps));
       if(q.upColor!=='#e6e9ef'||q.downColor!=='rgba(0,0,0,0)'||q.watermarkColor!=='rgba(196,140,60,.30)')throw new Error('D12 global style '+JSON.stringify(q));
       await page.click('[data-tpl="combined"]');
       await page.waitForFunction(()=>window.__analysisDebug?.template()==='combined'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});

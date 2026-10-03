@@ -157,3 +157,15 @@ test('D12b combined table is capped at 16 rows with a summary row',()=>{
   assert.equal(got[15].summary,true);
   assert.equal(got[15].type,'另有 5 条');
 });
+
+
+test('D12b key-level spacing enforces pixel gap and reserves PQ VWAP',()=>{
+  const iso=(y,m,d)=>new Date(Date.UTC(y,m-1,d)).toISOString();
+  const items=[
+    {id:'near',label:'Q1 VAH',kind:'quarter',price:101,periodStart:iso(2026,1,1),definition:'Q'},
+    {id:'clear',label:'PY Q4 VAL',kind:'py-quarter',price:106,periodStart:iso(2025,10,1),definition:'Q'}
+  ];
+  const got=E.selectKeyLevels(items,100,90,110,10,.01,6,Date.UTC(2026,3,1)/1000,2,2,[100],18,100);
+  assert.equal(got.selected.some(x=>x.id==='near'),false);
+  assert.equal(got.selected.some(x=>x.id==='clear'),true);
+});

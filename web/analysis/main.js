@@ -335,10 +335,11 @@
         const periodEnd=Date.parse(String(row.periodEnd||''));
         return Number.isFinite(periodEnd)&&periodEnd<=keyPeriodCutoffMs;
       });
-      const keyCfg=rules.keyLevels||{};
+      const keyCfg=rules.keyLevels||{},pane=state.chart&&state.chart.panes&&state.chart.panes()[0];
+      const paneHeight=pane&&typeof pane.getHeight==='function'?pane.getHeight():$('analysisChart').clientHeight;
       keySelection=E.selectKeyLevels(
         eligibleKeyLevels,current,view.min,view.max,linePad,tick,keyCfg.maxCount||6,pqStart,
-        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,pq?[pq.bottom,pq.top]:[]
+        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,pq?[pq.pqVwap,pq.bottom,pq.top]:[],keyCfg.minGapPx||0,paneHeight
       );
       const firstTime=Number(display[0].time),keyStyle=templateConfig().keyLevelStyle||{};
       for(const row of keySelection.all){

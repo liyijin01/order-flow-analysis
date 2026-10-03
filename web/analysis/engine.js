@@ -315,7 +315,7 @@
     return groups.map(({_rows,...row})=>row);
   }
 
-  function selectKeyLevels(items,current,viewMin,viewMax,padPct,tick,maxCount,previousQuarter,maxMonthly,minGapPct,reservedPrices){
+  function selectKeyLevels(items,current,viewMin,viewMax,padPct,tick,maxCount,previousQuarter,maxMonthly,minGapPct,reservedPrices,minGapPx,viewHeightPx){
     const pq=Number(previousQuarter),filtered=(items||[]).filter(item=>{
       const start=Date.parse(String(item.periodStart||''))/1000;
       return !(finite(pq)&&finite(start)&&Math.abs(start-pq)<1);
@@ -325,7 +325,10 @@
     const quarters=eligible.filter(x=>x.keyKind!=='py-month').sort(byDistance);
     const monthly=eligible.filter(x=>x.keyKind==='py-month').sort(byDistance);
     const limit=Math.max(0,Number(maxCount)||0),monthLimit=Math.max(0,Number(maxMonthly)||0);
-    const span=Math.max(1e-12,Number(viewMax)-Number(viewMin)),minGap=span*Math.max(0,Number(minGapPct)||0)/100;
+    const span=Math.max(1e-12,Number(viewMax)-Number(viewMin));
+    const pctGap=span*Math.max(0,Number(minGapPct)||0)/100,pad=Math.max(0,Number(padPct)||0)/100;
+    const paddedSpan=span*(1+2*pad),height=Number(viewHeightPx),pxGap=finite(height)&&height>0?paddedSpan*Math.max(0,Number(minGapPx)||0)/height:0;
+    const minGap=Math.max(pctGap,pxGap);
     const selected=[],reserved=(reservedPrices||[]).map(Number).filter(finite);
     const canAdd=item=>{
       const p=Number(item.price);

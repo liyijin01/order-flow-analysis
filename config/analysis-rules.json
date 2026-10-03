@@ -91,7 +91,8 @@
   "keyLevels": {
     "maxCount": 6,
     "maxMonthly": 2,
-    "minGapPct": 2
+    "minGapPct": 2,
+    "minGapPx": 18
   },
   "templates": {
     "quarter": {
