@@ -65,8 +65,8 @@ test('D13 rolling VWAP uses time window across gaps and returns null before full
   const bars=[
     {time:0,high:10,low:10,close:10,volume:1},
     {time:5,high:20,low:20,close:20,volume:1},
-    {time:100,high:40,low:40,close:40,volume:1},
-    {time:105,high:50,low:50,close:50,volume:1},
+    {time:106,high:40,low:40,close:40,volume:1},
+    {time:111,high:50,low:50,close:50,volume:1},
   ];
   const out=I.rollingVwap(bars,100);
   assert.equal(out[1].value,null);
