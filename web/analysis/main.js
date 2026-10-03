@@ -491,7 +491,11 @@
   function defaultWindow(count){
     const win=windowSpec(),cfg=templateConfig(),marginPct=Number(cfg.rightMarginPct);
     if(Number.isFinite(marginPct)&&marginPct>0){
-      const visible=win.mode==='quarter'?count:Math.min(count,Number(win.visibleBars)||count),right=marginBars(visible,marginPct),from=Math.max(0,count-visible);
+      const visible=win.mode==='quarter'?count:Math.min(count,Number(win.visibleBars)||count);
+      const right=state.template==='monthly'&&visible>1
+        ?(visible-1)*(marginPct/100)/(1-marginPct/100)
+        :marginBars(visible,marginPct);
+      const from=Math.max(0,count-visible);
       return{visible,rightOffsetBars:right,range:{from,to:Math.max(0,count-1)+right}};
     }
     if(win.mode==='quarter'){const right=Math.ceil(Math.max(1,count)*Number(state.rules.display.quarterRightPct||.04));return{visible:count,rightOffsetBars:right,range:{from:0,to:Math.max(0,count-1)+right}};}
