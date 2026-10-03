@@ -122,7 +122,9 @@
         "pw": false,
         "zones": false,
         "nPoc": false,
-        "volume": false
+        "volume": false,
+        "rvwap": false,
+        "yearLevels": false
       },
       "table": false,
       "legend": false,
@@ -156,10 +158,66 @@
         "pw": true,
         "zones": true,
         "nPoc": true,
-        "volume": true
+        "volume": true,
+        "rvwap": false,
+        "yearLevels": false
       },
       "table": true,
       "legend": true
+    },
+    "rvwap": {
+      "label": "滚动 VWAP",
+      "timeframes": [
+        "4h"
+      ],
+      "defaultTimeframe": "4h",
+      "window": {
+        "4h": {
+          "mode": "recent",
+          "visibleBars": 720
+        }
+      },
+      "rightMarginPct": 18,
+      "history": {
+        "4h": 3000
+      },
+      "layers": {
+        "quarterBands": false,
+        "keyLevels": false,
+        "pqArea": false,
+        "pqBounds": false,
+        "pqVwap": false,
+        "pm": false,
+        "pw": false,
+        "zones": false,
+        "nPoc": false,
+        "volume": false,
+        "rvwap": true,
+        "yearLevels": true
+      },
+      "table": false,
+      "legend": false,
+      "keyLevelStyle": {
+        "color": "rgba(236,239,244,.75)",
+        "style": "dashed",
+        "axisLabel": true,
+        "axisColor": "#3a4152",
+        "axisTextColor": "#eceff4"
+      }
     }
+  },
+  "rvwap": {
+    "windowsDays": [
+      30,
+      60,
+      90,
+      365
+    ],
+    "color": "#4caf50",
+    "underlay": "rgba(190,196,208,.10)",
+    "labelColor": "#aeb7c8",
+    "yearVwap": "#e8d44d",
+    "yearSigma": "rgba(190,196,208,.55)",
+    "historicalVwap": "#f5a623"
   }
 }

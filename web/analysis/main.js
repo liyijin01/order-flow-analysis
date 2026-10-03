@@ -37,7 +37,7 @@
     }else if(state.volume){state.chart.removeSeries(state.volume);state.volume=null;}
   }
   function regionLayerEnabled(r){if(r.type!=='value')return layerEnabled('zones');if(r.scope==='PQ')return layerEnabled('pqArea');if(r.scope==='PM')return layerEnabled('pm');if(r.scope==='PW')return layerEnabled('pw');return true;}
-  function levelLayerEnabled(l){if(l.kind==='pq')return layerEnabled('pqVwap');if(l.kind==='pq-bound')return layerEnabled('pqBounds');if(l.kind==='npoc')return layerEnabled('nPoc');if(l.kind==='key')return layerEnabled('keyLevels');return true;}
+  function levelLayerEnabled(l){if(l.kind==='pq')return layerEnabled('pqVwap');if(l.kind==='pq-bound')return layerEnabled('pqBounds');if(l.kind==='npoc')return layerEnabled('nPoc');if(l.kind==='key')return layerEnabled('keyLevels');if(l.kind==='year')return layerEnabled('yearLevels');return true;}
   function fmtPrice(v){
     const p=pricePrecision(),tick=Number(symbolMeta().tickSize)||.01,n=E.roundToTick(Number(v),tick);
     return n.toLocaleString(undefined,{minimumFractionDigits:p,maximumFractionDigits:p});
@@ -243,6 +243,38 @@
     return segments;
   }
 
+  function yearVwapSegments(fourHour,display){
+    if(!fourHour.length||!display.length)return[];
+    const years=[];for(const b of display){const y=new Date(Number(b.time)*1000).getUTCFullYear();if(!years.includes(y))years.push(y);}
+    const out=[];
+    for(const year of years){
+      const start=Date.UTC(year,0,1)/1000,end=Date.UTC(year+1,0,1)/1000;
+      const calc=fourHour.filter(b=>Number(b.time)>=start&&Number(b.time)<end);if(!calc.length)continue;
+      const raw=I.anchoredVwap(calc,start,1),allowed=new Set(display.filter(b=>Number(b.time)>=start&&Number(b.time)<end).map(b=>Number(b.time)));
+      const points=raw.filter(p=>allowed.has(Number(p.time))).map(p=>({time:Number(p.time),vwap:p.vwap,upper:p.upper,lower:p.lower}));
+      if(points.length)out.push({year,start,end,points,final:points[points.length-1]});
+    }
+    return out;
+  }
+
+  function buildRvwapCurves(bundle,display){
+    if(!layerEnabled('rvwap')||state.timeframe!=='4h'||!display.length)return{curves:[],rolling:{},yearSegments:[]};
+    const four=bundle.series['4h']||[],cfg=state.rules.rvwap||{},allowed=new Set(display.map(b=>Number(b.time))),curves=[],rolling={};
+    for(const days of cfg.windowsDays||[30,60,90,365]){
+      const points=I.rollingVwap(four,Number(days)*86400).filter(p=>p.value!=null&&allowed.has(Number(p.time)));
+      rolling[String(days)]=points;
+      curves.push({id:'rvwap-'+days,label:String(days)+'D RVWAP',points,color:cfg.color||'#4caf50',width:1.5,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6,labelColor:cfg.labelColor||'#aeb7c8'});
+    }
+    const yearSegments=yearVwapSegments(four,display);
+    for(let i=0;i<yearSegments.length;i++){
+      const seg=yearSegments[i],last=i===yearSegments.length-1;
+      curves.push({id:'y-vwap-'+seg.year,label:last?'Y VWAP':'',points:seg.points.map(p=>({time:p.time,value:p.vwap})),color:cfg.yearVwap||'#e8d44d',width:1.5,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6,labelColor:cfg.yearVwap||'#e8d44d'});
+      curves.push({id:'y-upper-'+seg.year,label:'',points:seg.points.map(p=>({time:p.time,value:p.upper})),color:cfg.yearSigma||'rgba(190,196,208,.55)',width:1,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6});
+      curves.push({id:'y-lower-'+seg.year,label:'',points:seg.points.map(p=>({time:p.time,value:p.lower})),color:cfg.yearSigma||'rgba(190,196,208,.55)',width:1,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6});
+    }
+    return{curves,rolling,yearSegments};
+  }
+
   function buildAnalysis(bundle){
     const rules=state.rules,tick=Number(symbolMeta().tickSize)||.01,counts=rules.display.bars;
     const source=bundle.series[state.timeframe]||bundle.series.display||[],win=windowSpec();
@@ -332,8 +364,9 @@
       const keyPeriodCutoffMs=lastClosedDisplay&&Number.isFinite(Number(lastClosedDisplay.closeTime))
         ?Number(lastClosedDisplay.closeTime)+1:keyAsOfMs;
       const eligibleKeyLevels=bundle.keyLevels.levels.filter(row=>{
-        const periodEnd=Date.parse(String(row.periodEnd||''));
-        return Number.isFinite(periodEnd)&&periodEnd<=keyPeriodCutoffMs;
+        const periodEnd=Date.parse(String(row.periodEnd||'')),yearly=row.kind==='year';
+        const templateOk=state.template==='rvwap'?yearly:!yearly;
+        return templateOk&&Number.isFinite(periodEnd)&&periodEnd<=keyPeriodCutoffMs;
       });
       const keyCfg=rules.keyLevels||{},pane=state.chart&&state.chart.panes&&state.chart.panes()[0];
       const paneHeight=pane&&typeof pane.getHeight==='function'?pane.getHeight():$('analysisChart').clientHeight;
@@ -342,33 +375,34 @@
       const plotHeight=paneHeight*usableRatio;
       keySelection=E.selectKeyLevels(
         eligibleKeyLevels,current,view.min,view.max,linePad,tick,keyCfg.maxCount||6,pqStart,
-        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,pq?[pq.pqVwap,pq.bottom,pq.top]:[],keyCfg.minGapPx||0,plotHeight
+        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,(state.template==='rvwap'||!pq)?[]:[pq.pqVwap,pq.bottom,pq.top],keyCfg.minGapPx||0,plotHeight
       );
       const firstTime=Number(display[0].time),keyStyle=templateKeyStyle;
       for(const row of keySelection.all){
-        const monthly=row.keyKind==='py-month';
+        const monthly=row.keyKind==='py-month',yearly=row.kind==='year',yearVwap=yearly&&row.side==='VWAP',rvCfg=rules.rvwap||{};
         allLevels.push({
-          id:'key-'+row.id,kind:'key',price:Number(row.price),from:firstTime,label:row.label,
-          color:keyStyle.color||(monthly?rules.colors.keyMonth:rules.colors.keyLevel),axisColor:keyStyle.axisColor||rules.colors.keyAxis,axisTextColor:keyStyle.axisTextColor||'#111827',axisLabel:keyStyle.axisLabel,
-          style:keyStyle.style||(monthly?'solid':'dashed'),width:1,period:monthly?'M / 30m TPO':'Q / 1h VWAP±1σ',
-          source:'precomputed',keyKind:row.keyKind,sourceId:row.id
+          id:(yearly?'year-':'key-')+row.id,kind:yearly?'year':'key',price:Number(row.price),from:firstTime,label:row.label,
+          color:yearVwap?(rvCfg.historicalVwap||'#f5a623'):(keyStyle.color||(monthly?rules.colors.keyMonth:rules.colors.keyLevel)),
+          axisColor:yearVwap?(rvCfg.historicalVwap||'#f5a623'):(keyStyle.axisColor||rules.colors.keyAxis),axisTextColor:yearly?'#eceff4':(keyStyle.axisTextColor||'#111827'),axisLabel:true,
+          style:yearVwap?'solid':(keyStyle.style||(monthly?'solid':'dashed')),width:yearVwap?1.5:1,period:yearly?'Y / 4h VWAP±1σ':(monthly?'M / 30m TPO':'Q / 1h VWAP±1σ'),
+          source:'precomputed',keyKind:row.keyKind,sourceId:row.id,side:row.side
         });
       }
     }else missing.push({type:'关键价位',period:'Q / 1h VWAP±1σ + M / 30m TPO',source:'precomputed'});
 
-    const selectedKeyIds=new Set(keySelection.selected.map(x=>'key-'+x.id));
-    const drawnLevelIds=new Set(allLevels.filter(l=>l.kind==='key'?selectedKeyIds.has(l.id):E.inPriceView(l.price,view.min,view.max,linePad)).map(l=>l.id));
+    const selectedKeyIds=new Set(keySelection.selected.map(x=>(x.kind==='year'?'year-':'key-')+x.id));
+    const drawnLevelIds=new Set(allLevels.filter(l=>(l.kind==='key'||l.kind==='year')?selectedKeyIds.has(l.id):E.inPriceView(l.price,view.min,view.max,linePad)).map(l=>l.id));
 
     const allRegions=allAreas.concat(selectedZones).map(r=>({...r,offView:r.type==='value'?!drawnAreaIds.has(r.id):!drawnZoneIds.has(r.id)}));
     const levelsForTable=allLevels.map(l=>({...l,offView:!drawnLevelIds.has(l.id)}));
     const regions=allRegions.filter(r=>!r.offView&&regionLayerEnabled(r)),levels=levelsForTable.filter(l=>!l.offView&&levelLayerEnabled(l));
 
-    const quarterVwaps=quarterVwapSegments(one,display);
+    const quarterVwaps=quarterVwapSegments(one,display),rvwapModel=buildRvwapCurves(bundle,display);
     const currentVwap=(quarterVwaps.find(x=>x.start===qStart)||quarterVwaps[quarterVwaps.length-1]||{points:[]}).points.map(p=>({time:p.time,value:p.vwap}));
     const lastClosed=closedCalc[closedCalc.length-1];
     const calcLastClosedUtc=lastClosed?new Date(Number(lastClosed.closeTime)+1).toISOString():null;
     return{
-      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,pqStats,keyLevels:levels.filter(l=>l.kind==='key'),missing,
+      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,pqStats,keyLevels:levels.filter(l=>l.kind==='key'),yearLevels:levels.filter(l=>l.kind==='year'),curves:rvwapModel.curves,rvwap:rvwapModel,missing,
       allRegions,allLevels:levelsForTable,viewMin:view.min,viewMax:view.max,visibleBars:visibleN,
       cutoffUtc:bundle.cutoffUtc||null,generatedAt:bundle.generatedAt||new Date().toISOString(),
       calcTf,calcLastClosedUtc,bundleErrors:bundle.errors||{},
@@ -468,7 +502,7 @@
     const autoscaleSpan=Math.max(1e-12,Number(model.viewMax)-Number(model.viewMin));
     const autoscalePad=autoscaleSpan*Number(state.rules.valueAreas.visiblePadPct||0)/100;
     state.primitive.setModel({
-      regions:model.regions,levels:model.levels,bars:model.display,currentPrice:model.current,
+      regions:model.regions,levels:model.levels,curves:model.curves||[],bars:model.display,currentPrice:model.current,
       autoscaleMin:Number(model.viewMin)-autoscalePad,autoscaleMax:Number(model.viewMax)+autoscalePad,
       intervalSec:D.intervalSec(state.timeframe),timeOffsetSec:9*3600,axisMinGap:state.rules.axisLabels.minGapPx,
       textMinGap:state.rules.textLabels.minGapPx,textMaxShift:state.rules.textLabels.maxShiftPx,priceFormatter:fmtPrice
@@ -502,10 +536,24 @@
     const a=document.createElement('span');a.className='muted';a.textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe)+' · Binance  开='+fmtPrice(bar.open)+' 高='+fmtPrice(bar.high)+' 低='+fmtPrice(bar.low)+' 收='+fmtPrice(bar.close)+' ';line1.appendChild(a);
     const b=document.createElement('span');b.className=cls;b.textContent='涨跌 '+(chg>=0?'+':'')+fmtPrice(chg)+' ('+(pct>=0?'+':'')+pct.toFixed(2)+'%)';line1.appendChild(b);
     const c=document.createElement('span');c.className='muted';c.textContent=' 量 '+formatVolume(bar.volume);line1.appendChild(c);
-    const vals=infoValues(model),cv=vals.current,pv=vals.previous,line2=$('chartInfo2');line2.textContent='Anchored VWAP (hlc3, Quarter, ±1σ)';
+    const line2=$('chartInfo2');line2.textContent='';
     const add=(text,klass)=>{const e=document.createElement('span');e.className=klass;e.textContent=text;line2.appendChild(e);};
-    add('  '+fmtPrice(cv.vwap),'vwap');add('  +1σ '+fmtPrice(cv.upper),'sigma');add('  −1σ '+fmtPrice(cv.lower),'sigma');add('  PQ '+fmtPrice(pv.vwap),'pqvwap');add('  +1σ '+fmtPrice(pv.upper),'sigma');add('  −1σ '+fmtPrice(pv.lower),'sigma');
-    model.infoValues={current:cv,previous:pv,barTime:Number(bar.time)};
+    if(state.template==='rvwap'){
+      line2.appendChild(document.createTextNode('Rolling VWAP (hlc3, 4h)'));
+      const valueAt=points=>{const p=(points||[]).find(x=>Number(x.time)===Number(bar.time));return p&&Number.isFinite(Number(p.value))?Number(p.value):null;};
+      const values={};
+      for(const days of (state.rules.rvwap&&state.rules.rvwap.windowsDays)||[30,60,90,365]){
+        const v=valueAt(model.rvwap&&model.rvwap.rolling&&model.rvwap.rolling[String(days)]);values[String(days)]=v;add('  '+days+'D '+(v==null?'—':fmtPrice(v)),'vwap');
+      }
+      const seg=(model.rvwap&&model.rvwap.yearSegments||[]).find(x=>Number(bar.time)>=x.start&&Number(bar.time)<x.end);
+      const yp=seg&&(seg.points||[]).find(x=>Number(x.time)===Number(bar.time)),yv=yp&&yp.vwap,yu=yp&&yp.upper,yl=yp&&yp.lower;
+      add('  ·  Y VWAP '+(yv==null?'—':fmtPrice(yv)),'pqvwap');add('  +1σ '+(yu==null?'—':fmtPrice(yu)),'sigma');add('  −1σ '+(yl==null?'—':fmtPrice(yl)),'sigma');
+      model.infoValues={rolling:values,year:{vwap:yv,upper:yu,lower:yl},barTime:Number(bar.time)};
+    }else{
+      const vals=infoValues(model),cv=vals.current,pv=vals.previous;line2.textContent='Anchored VWAP (hlc3, Quarter, ±1σ)';
+      add('  '+fmtPrice(cv.vwap),'vwap');add('  +1σ '+fmtPrice(cv.upper),'sigma');add('  −1σ '+fmtPrice(cv.lower),'sigma');add('  PQ '+fmtPrice(pv.vwap),'pqvwap');add('  +1σ '+fmtPrice(pv.upper),'sigma');add('  −1σ '+fmtPrice(pv.lower),'sigma');
+      model.infoValues={current:cv,previous:pv,barTime:Number(bar.time)};
+    }
   }
   function formatRemaining(ms){const sec=Math.max(0,Math.floor(ms/1000)),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return h>0?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
   function updateCountdown(){
@@ -554,11 +602,11 @@
     if(full){
       const bundle=await D.loadLive(state.symbol,state.timeframe,p=>{
         if(token===state.loadToken)progress.textContent='Loading '+p.done+'/'+p.total+' · '+p.label;
-      },signal);
+      },signal,templateConfig().history||{});
       state.lastFullLoadAt=Date.now();
       return{bundle,full:true,failures:[]};
     }
-    const inc=await D.refreshLiveBundle(state.bundle,state.symbol,state.timeframe,signal);
+    const inc=await D.refreshLiveBundle(state.bundle,state.symbol,state.timeframe,signal,templateConfig().history||{});
     return{bundle:inc.bundle,full:false,failures:inc.failures||[]};
   }
 
@@ -616,7 +664,7 @@
       const cfg=templateConfig();
       await X.exportBoard({
         chart:state.chart,model:state.model,info:$('infoLine').textContent,rows:state.model.tableRows,
-        filename:state.symbol+(state.template==='quarter'?'-quarter':'')+'-'+state.timeframe+'.png',priceFormatter:fmtPrice,
+        filename:state.symbol+(state.template==='combined'?'':'-'+state.template)+'-'+state.timeframe+'.png',priceFormatter:fmtPrice,
         legend:cfg.legend===false?[]:legendEntries(),legendEnabled:cfg.legend!==false,tableEnabled:cfg.table!==false,
         footer:$('cutoff').textContent,overlayLines:[$('chartInfo1').textContent,$('chartInfo2').textContent]
       });
@@ -636,7 +684,7 @@
     const q=new URLSearchParams(location.search);
     state.symbol=SYMBOLS[q.get('symbol')]?q.get('symbol'):'BTCUSDT';
     state.viewMode=['quarter','recent'].includes(q.get('view'))?q.get('view'):'quarter';
-    state.template=['quarter','combined'].includes(q.get('tpl'))?q.get('tpl'):(q.get('view')==='recent'?'combined':'quarter');
+    state.template=['quarter','rvwap','combined'].includes(q.get('tpl'))?q.get('tpl'):(q.get('view')==='recent'?'combined':'quarter');
     state.snapshot=q.get('snapshot')==='1';
     if(state.snapshot)document.body.classList.add('snapshot');
     await loadRules();
