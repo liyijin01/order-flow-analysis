@@ -1,9 +1,9 @@
 (function(global){
   'use strict';
 
-  const intervalMsMap={'30m':1800000,'1h':3600000,'4h':14400000,'1d':86400000,'1w':604800000};
-  const calcMap={'30m':'4h','1h':'4h','4h':'1d','1d':'1w'};
-  const displayCounts={'30m':1152,'1h':720,'4h':1200,'1d':365};
+  const intervalMsMap={'30m':1800000,'1h':3600000,'4h':14400000,'1d':86400000,'1w':604800000,'1M':2678400000};
+  const calcMap={'30m':'4h','1h':'4h','4h':'1d','1d':'1w','1M':'1d'};
+  const displayCounts={'30m':1152,'1h':720,'4h':1200,'1d':365,'1M':120};
 
   function isAbort(error,signal){return !!(signal&&signal.aborted)||!!(error&&error.name==='AbortError');}
   function sleep(ms,signal){
@@ -67,7 +67,13 @@
   }
 
   async function fetchHistory(symbol,interval,maxBars,endTime,signal,market){
-    const m=market||'um',pageMax=maxLimit(m),all=[];let end=Number.isFinite(endTime)?Number(endTime):Date.now();
+    const m=market||'um',pageMax=maxLimit(m);
+    if(interval==='1M'){
+      const limit=Math.min(pageMax,Math.max(1,Number(maxBars)||120));
+      const params=new URLSearchParams({symbol,interval,limit:String(limit)});
+      return parseRows(await requestJson(endpoint(m)+'?'+params.toString(),4,signal)).slice(-limit);
+    }
+    const all=[];let end=Number.isFinite(endTime)?Number(endTime):Date.now();
     while(all.length<maxBars){
       const limit=Math.min(pageMax,maxBars-all.length);
       const params=new URLSearchParams({symbol,interval,limit:String(limit),endTime:String(Math.floor(end))});
@@ -103,6 +109,7 @@
     else if(interval==='1w')cap=400;
     else if(interval==='1d')cap=Math.max(430,displayCounts[timeframe]||0,400);
     else if(interval==='4h')cap=Math.max(1200,displayCounts[timeframe]||0,400);
+    else if(interval==='1M')cap=Math.max(120,displayCounts[timeframe]||0);
     if(interval===timeframe)cap=Math.max(cap,displayCounts[timeframe]||0);
     if(interval===calcMap[timeframe])cap=Math.max(cap,400);
     const requested=Number(history&&history[interval])||0;if(requested>0)cap=Math.max(cap,requested);
@@ -140,7 +147,9 @@
 
   async function loadLive(symbol,timeframe,onProgress,signal,history){
     const progress=typeof onProgress==='function'?onProgress:()=>{},errors={},series={};
-    const required=[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})];
+    const required=timeframe==='1M'
+      ?[timeframe,calcMap[timeframe],...Object.keys(history||{})]
+      :[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})];
     const intervals=[];for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
     let done=0;const total=intervals.length+2;
     const step=(label)=>{done++;progress({done,total,label});};
@@ -159,7 +168,9 @@
   }
 
   async function refreshLiveBundle(bundle,symbol,timeframe,signal,history){
-    const required=[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})],intervals=[];
+    const required=timeframe==='1M'
+      ?[timeframe,calcMap[timeframe],...Object.keys(history||{})]
+      :[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})],intervals=[];
     for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
     const failures=[],updates={},fullIntervals=new Set(),errors={...(bundle&&bundle.errors||{})};
     await Promise.all(intervals.map(async interval=>{

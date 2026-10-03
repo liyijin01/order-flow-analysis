@@ -38,7 +38,8 @@
       "30m": "4h",
       "1h": "4h",
       "4h": "1d",
-      "1d": "1w"
+      "1d": "1w",
+      "1M": "1d"
     },
     "calcBars": 400,
     "impulseMaxBars": 3,
@@ -242,6 +243,43 @@
       },
       "table": false,
       "legend": false
+    },
+    "monthly": {
+      "label": "月线结构",
+      "timeframes": [
+        "1M"
+      ],
+      "defaultTimeframe": "1M",
+      "window": {
+        "1M": {
+          "mode": "recent",
+          "visibleBars": 12
+        }
+      },
+      "rightMarginPct": 18,
+      "history": {
+        "1M": 120
+      },
+      "layers": {
+        "quarterBands": false,
+        "keyLevels": false,
+        "pqArea": false,
+        "pqBounds": false,
+        "pqVwap": false,
+        "pm": false,
+        "pw": false,
+        "zones": false,
+        "nPoc": false,
+        "volume": false,
+        "rvwap": false,
+        "yearLevels": false,
+        "weeklyVwap": false,
+        "weeklyProjection": false,
+        "yearOpen": false,
+        "monthlyStructure": true
+      },
+      "table": false,
+      "legend": false
     }
   },
   "rvwap": {
@@ -269,6 +307,13 @@
     "yearOpen": "#e6e9ef",
     "yearAxis": "#d9d4f0",
     "yearAxisText": "#202536",
+    "visiblePadPct": 10
+  },
+  "monthlyStructure": {
+    "line": "#26c6da",
+    "fill": "rgba(38,198,218,.18)",
+    "axis": "#26c6da",
+    "axisText": "#0b1220",
     "visiblePadPct": 10
   }
 }

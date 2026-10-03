@@ -11,7 +11,7 @@
     inFlight:null,abortController:null,lastSuccessAt:0,defaultViewRange:null,resizeToken:0,resizeSettle:null,watermark:null,countdownTimer:null,crosshairTime:null
   };
 
-  function tfLabel(tf){return({'30m':'30分钟','1h':'1小时','4h':'4小时','1d':'1天'})[tf]||tf;}
+  function tfLabel(tf){return({'30m':'30分钟','1h':'1小时','4h':'4小时','1d':'1天','1M':'1月'})[tf]||tf;}
   function symbolMeta(){return SYMBOLS[state.symbol]||{displayName:state.symbol,tickSize:'0.01',ladderBin:'0.1'};}
   function pricePrecision(){const s=String(symbolMeta().tickSize||'0.01'),i=s.indexOf('.');return i<0?0:s.length-i-1;}
   function templateConfig(){const all=state.rules&&state.rules.templates||{};return all[state.template]||all.combined||{};}
@@ -36,8 +36,8 @@
       const panes=state.chart.panes();if(state.volume&&panes[1])panes[1].setHeight(Math.max(105,Math.round($('analysisChart').clientHeight*.18)));
     }else if(state.volume){state.chart.removeSeries(state.volume);state.volume=null;}
   }
-  function regionLayerEnabled(r){if(r.scope==='WEEKLY_PROJECTION')return layerEnabled('weeklyProjection');if(r.type!=='value')return layerEnabled('zones');if(r.scope==='PQ')return layerEnabled('pqArea');if(r.scope==='PM')return layerEnabled('pm');if(r.scope==='PW')return layerEnabled('pw');return true;}
-  function levelLayerEnabled(l){if(l.kind==='pq')return layerEnabled('pqVwap');if(l.kind==='pq-bound')return layerEnabled('pqBounds');if(l.kind==='npoc')return layerEnabled('nPoc');if(l.kind==='key')return layerEnabled('keyLevels');if(l.kind==='year')return layerEnabled('yearLevels');if(l.kind==='weekly'||l.kind==='weekly-pw')return layerEnabled('weeklyVwap');if(l.kind==='year-open')return layerEnabled('yearOpen');return true;}
+  function regionLayerEnabled(r){if(r.scope==='WEEKLY_PROJECTION')return layerEnabled('weeklyProjection');if(r.scope==='MONTHLY_IMBALANCE')return layerEnabled('monthlyStructure');if(r.type!=='value')return layerEnabled('zones');if(r.scope==='PQ')return layerEnabled('pqArea');if(r.scope==='PM')return layerEnabled('pm');if(r.scope==='PW')return layerEnabled('pw');return true;}
+  function levelLayerEnabled(l){if(l.kind==='pq')return layerEnabled('pqVwap');if(l.kind==='pq-bound')return layerEnabled('pqBounds');if(l.kind==='npoc')return layerEnabled('nPoc');if(l.kind==='key')return layerEnabled('keyLevels');if(l.kind==='year')return layerEnabled('yearLevels');if(l.kind==='weekly'||l.kind==='weekly-pw')return layerEnabled('weeklyVwap');if(l.kind==='year-open')return layerEnabled('yearOpen');if(l.kind==='monthly-sr')return layerEnabled('monthlyStructure');return true;}
   function fmtPrice(v){
     const p=pricePrecision(),tick=Number(symbolMeta().tickSize)||.01,n=E.roundToTick(Number(v),tick);
     return n.toLocaleString(undefined,{minimumFractionDigits:p,maximumFractionDigits:p});
@@ -285,14 +285,14 @@
       if(Number(seg.end)<=first||Number(seg.start)>last)continue;
       segments.push(seg);
       const pts=(seg.points||[]).filter(p=>Number(p.time)>=first&&Number(p.time)<=last);
-      const mk=(id,key,color,width)=>({id:id+'-'+seg.start,label:'',weekStart:seg.start,points:pts.filter(p=>inView(p[key])).map(p=>({time:p.time,value:p[key]})),color,width,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6});
+      const mk=(id,key,color,width)=>({id:id+'-'+seg.start,label:'',weekStart:seg.start,points:pts.map(p=>({time:p.time,value:inView(p[key])?p[key]:null})),color,width,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6});
       curves.push(mk('weekly-vwap','vwap',cfg.vwap||'#f23645',1.5),mk('weekly-upper','upper',cfg.sigma||'rgba(190,196,208,.55)',1),mk('weekly-lower','lower',cfg.sigma||'rgba(190,196,208,.55)',1));
       const baseProj=projectionMap.get(Number(seg.start));if(!baseProj)continue;
       const top=Number(baseProj.pwUpper),bottom=Number(baseProj.pwLower),mid=Number(baseProj.pwVwap),to=Math.min(Number(seg.end),last),visible=top>=lo&&bottom<=hi,isCurrent=Number(seg.start)===currentStart;
       const info={...baseProj,to,complete:true};projections.push(info);
       if(!visible)continue;
       regions.push({id:'weekly-proj-'+seg.start,type:'value',scope:'WEEKLY_PROJECTION',bottom,top,from:Number(seg.start),to,label:'',fill:cfg.projectionFill||'rgba(190,196,208,.08)',border:cfg.projectionBorder||'rgba(190,196,208,.25)',axisLabel:isCurrent,axisColor:cfg.axisGray||'#3a4152',axisTextColor:cfg.axisText||'#eceff4'});
-      levels.push({id:'weekly-pw-vwap-'+seg.start,kind:'weekly-pw',price:mid,from:Number(seg.start),to,label:'',color:cfg.vwap||'#f23645',axisColor:cfg.vwap||'#f23645',axisTextColor:'#fff',axisLabel:isCurrent,style:'solid',width:1.5});
+      levels.push({id:'weekly-pw-vwap-'+seg.start,kind:'weekly-pw',price:mid,from:Number(seg.start),to,label:'',color:cfg.vwap||'#f23645',axisColor:cfg.vwap||'#f23645',axisTextColor:'#fff',axisLabel:isCurrent,style:'solid',width:1.5,pairedRegionId:'weekly-proj-'+seg.start});
     }
     const cur=byStart.get(currentStart);
     if(cur&&cur.points.length){
@@ -304,6 +304,30 @@
     const year=new Date(last*1000).getUTCFullYear(),yearStart=Date.UTC(year,0,1)/1000,day=daily.find(b=>Number(b.time)===yearStart),yearOpen=day?Number(day.open):null;
     if(Number.isFinite(yearOpen)&&inView(yearOpen))levels.push({id:'year-open-'+year,kind:'year-open',price:yearOpen,from:first,label:'Y O',color:cfg.yearOpen||'#e6e9ef',axisColor:cfg.yearAxis||'#d9d4f0',axisTextColor:cfg.yearAxisText||'#202536',axisLabel:true,style:'solid',width:1});
     return{curves,regions,levels,segments,projections,yearOpen,currentStart};
+  }
+
+  function buildMonthlyStructure(bundle,display,view){
+    if(state.template!=='monthly'||state.timeframe!=='1M'||!display.length)return{levels:[],regions:[],upper:null,lower:null,imbalance:null};
+    const cfg=state.rules.monthlyStructure||{},monthly=bundle.series['1M']||display,last=display[display.length-1],current=Number(last.close);
+    const asOfMs=state.snapshot&&bundle.cutoffUtc?Date.parse(bundle.cutoffUtc)+1000:Date.now();
+    const structure=I.monthlyStructureLevels(monthly,current,asOfMs),pad=Number(cfg.visiblePadPct)||10;
+    const span=Math.max(1e-12,Number(view.max)-Number(view.min)),lo=Number(view.min)-span*pad/100,hi=Number(view.max)+span*pad/100,inView=p=>Number(p)>=lo&&Number(p)<=hi;
+    const upper=structure.upper&&inView(structure.upper.price)?structure.upper:null,lower=structure.lower&&inView(structure.lower.price)?structure.lower:null,levels=[];
+    for(const row of [upper,lower].filter(Boolean))levels.push({
+      id:'monthly-sr-'+row.side+'-'+row.month,kind:'monthly-sr',price:Number(row.price),from:Number(row.time),label:row.label,
+      color:cfg.line||'#26c6da',axisColor:cfg.axis||'#26c6da',axisTextColor:cfg.axisText||'#0b1220',axisLabel:true,style:'solid',width:1,month:row.month,broken:!!row.broken,side:row.side
+    });
+    const imbalance=I.selectMonthlyImbalance(I.monthlyImbalances(monthly,asOfMs),current,view.min,view.max,pad),regions=[];
+    if(imbalance)regions.push({
+      id:'monthly-imbalance-'+imbalance.c1Month+'-'+imbalance.c3Month,type:'value',scope:'MONTHLY_IMBALANCE',
+      bottom:Number(imbalance.low),top:Number(imbalance.high),from:Number(imbalance.c1),label:'imbalance',
+      fill:cfg.fill||'rgba(38,198,218,.18)',border:cfg.line||'#26c6da',axisColor:cfg.axis||'#26c6da',axisTextColor:cfg.axisText||'#0b1220',axisLabel:true,
+      labelColor:'#ffffff',labelSize:13,labelWeight:700,
+      topStyle:imbalance.forming&&imbalance.formingEdge==='top'?'dashed':'solid',
+      bottomStyle:imbalance.forming&&imbalance.formingEdge==='bottom'?'dashed':'solid',
+      imbalanceType:imbalance.type,forming:!!imbalance.forming,c1Month:imbalance.c1Month,c3Month:imbalance.c3Month
+    });
+    return{levels,regions,upper,lower,imbalance,asOfMs};
   }
 
   function buildAnalysis(bundle){
@@ -368,7 +392,7 @@
 
     const drawnZoneIds=new Set(selectedZones.filter(z=>E.zoneIntersectsView(z,view.min,view.max,rules.zones.viewPadPct||50)).map(z=>z.id));
 
-    const allLevels=[],templateKeyStyle=templateConfig().keyLevelStyle||{},weeklyModel=buildWeeklyVwap(bundle,display,view);
+    const allLevels=[],templateKeyStyle=templateConfig().keyLevelStyle||{},weeklyModel=buildWeeklyVwap(bundle,display,view),monthlyModel=buildMonthlyStructure(bundle,display,view);
     const pq=areas.find(a=>a.scope==='PQ');
     if(pq&&layerEnabled('pqVwap'))allLevels.push({id:'line-pq-vwap',kind:'pq',price:pq.pqVwap,from:qStart,label:'PQ VWAP',color:rules.colors.pqVwap,axisColor:rules.colors.pqVwap,axisTextColor:'#eceff4',axisLabel:true,style:'solid',period:'Q / 1h',source:'exact'});
     if(pq&&layerEnabled('pqBounds')){
@@ -421,12 +445,17 @@
       }
     }else missing.push({type:'关键价位',period:'Q / 1h VWAP±1σ + M / 30m TPO',source:'precomputed'});
 
-    allLevels.push(...weeklyModel.levels);
+    allLevels.push(...weeklyModel.levels,...monthlyModel.levels);
     const selectedKeyIds=new Set(keySelection.selected.map(x=>(x.kind==='year'?'year-':'key-')+x.id));
-    const drawnLevelIds=new Set(allLevels.filter(l=>(l.kind==='key'||l.kind==='year')?selectedKeyIds.has(l.id):E.inPriceView(l.price,view.min,view.max,linePad)).map(l=>l.id));
+    const weeklyRegionIds=new Set(weeklyModel.regions.map(r=>r.id)),monthlyRegionIds=new Set(monthlyModel.regions.map(r=>r.id));
+    const drawnLevelIds=new Set(allLevels.filter(l=>{
+      if(l.kind==='key'||l.kind==='year')return selectedKeyIds.has(l.id);
+      if(l.kind==='monthly-sr')return true;
+      if(l.pairedRegionId)return weeklyRegionIds.has(l.pairedRegionId);
+      return E.inPriceView(l.price,view.min,view.max,linePad);
+    }).map(l=>l.id));
 
-    const weeklyRegionIds=new Set(weeklyModel.regions.map(r=>r.id));
-    const allRegions=allAreas.concat(selectedZones,weeklyModel.regions).map(r=>({...r,offView:weeklyRegionIds.has(r.id)?false:(r.type==='value'?!drawnAreaIds.has(r.id):!drawnZoneIds.has(r.id))}));
+    const allRegions=allAreas.concat(selectedZones,weeklyModel.regions,monthlyModel.regions).map(r=>({...r,offView:(weeklyRegionIds.has(r.id)||monthlyRegionIds.has(r.id))?false:(r.type==='value'?!drawnAreaIds.has(r.id):!drawnZoneIds.has(r.id))}));
     const levelsForTable=allLevels.map(l=>({...l,offView:!drawnLevelIds.has(l.id)}));
     const regions=allRegions.filter(r=>!r.offView&&regionLayerEnabled(r)),levels=levelsForTable.filter(l=>!l.offView&&levelLayerEnabled(l));
 
@@ -435,7 +464,7 @@
     const lastClosed=closedCalc[closedCalc.length-1];
     const calcLastClosedUtc=lastClosed?new Date(Number(lastClosed.closeTime)+1).toISOString():null;
     return{
-      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,pqStats,keyLevels:levels.filter(l=>l.kind==='key'),yearLevels:levels.filter(l=>l.kind==='year'),curves:(rvwapModel.curves||[]).concat(weeklyModel.curves||[]),rvwap:rvwapModel,weekly:weeklyModel,missing,
+      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,pqStats,keyLevels:levels.filter(l=>l.kind==='key'),yearLevels:levels.filter(l=>l.kind==='year'),curves:(rvwapModel.curves||[]).concat(weeklyModel.curves||[]),rvwap:rvwapModel,weekly:weeklyModel,monthly:monthlyModel,missing,
       allRegions,allLevels:levelsForTable,viewMin:view.min,viewMax:view.max,visibleBars:visibleN,
       cutoffUtc:bundle.cutoffUtc||null,generatedAt:bundle.generatedAt||new Date().toISOString(),
       calcTf,calcLastClosedUtc,bundleErrors:bundle.errors||{},
@@ -462,7 +491,11 @@
   function defaultWindow(count){
     const win=windowSpec(),cfg=templateConfig(),marginPct=Number(cfg.rightMarginPct);
     if(Number.isFinite(marginPct)&&marginPct>0){
-      const visible=win.mode==='quarter'?count:Math.min(count,Number(win.visibleBars)||count),right=marginBars(visible,marginPct),from=Math.max(0,count-visible);
+      const visible=win.mode==='quarter'?count:Math.min(count,Number(win.visibleBars)||count);
+      const right=state.template==='monthly'&&visible>1
+        ?(visible-1)*(marginPct/100)/(1-marginPct/100)
+        :marginBars(visible,marginPct);
+      const from=Math.max(0,count-visible);
       return{visible,rightOffsetBars:right,range:{from,to:Math.max(0,count-1)+right}};
     }
     if(win.mode==='quarter'){const right=Math.ceil(Math.max(1,count)*Number(state.rules.display.quarterRightPct||.04));return{visible:count,rightOffsetBars:right,range:{from:0,to:Math.max(0,count-1)+right}};}
@@ -571,7 +604,14 @@
     const c=document.createElement('span');c.className='muted';c.textContent=' 量 '+formatVolume(bar.volume);line1.appendChild(c);
     const line2=$('chartInfo2');line2.textContent='';
     const add=(text,klass)=>{const e=document.createElement('span');e.className=klass;e.textContent=text;line2.appendChild(e);};
-    if(state.template==='weekly'){
+    if(state.template==='monthly'){
+      const mm=model.monthly||{},up=mm.upper,down=mm.lower,gap=mm.imbalance;
+      line2.appendChild(document.createTextNode('Monthly structure'));
+      add('  上方 '+(up?fmtPrice(up.price)+' ('+up.label+')':'—'),'monthly');
+      add('  ·  下方 '+(down?fmtPrice(down.price)+' ('+down.label+')':'—'),'monthly');
+      add('  ·  imbalance '+(gap?fmtPrice(gap.low)+' / '+fmtPrice(gap.high):'—'),'monthly');
+      model.infoValues={upper:up||null,lower:down||null,imbalance:gap||null,barTime:Number(bar.time)};
+    }else if(state.template==='weekly'){
       line2.appendChild(document.createTextNode('Weekly VWAP (hlc3, 30m, ±1σ)'));
       const seg=(model.weekly&&model.weekly.segments||[]).find(x=>Number(bar.time)>=Number(x.start)&&Number(bar.time)<Number(x.end)),p=seg&&(seg.points||[]).find(x=>Number(x.time)===Number(bar.time));
       const proj=seg&&(model.weekly&&model.weekly.projections||[]).find(x=>Number(x.weekStart)===Number(seg.start));
@@ -597,7 +637,7 @@
       model.infoValues={current:cv,previous:pv,barTime:Number(bar.time)};
     }
   }
-  function formatRemaining(ms){const sec=Math.max(0,Math.floor(ms/1000)),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return h>0?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
+  function formatRemaining(ms){const sec=Math.max(0,Math.floor(ms/1000)),d=Math.floor(sec/86400),h=Math.floor((sec%86400)/3600),m=Math.floor((sec%3600)/60),s=sec%60;if(d>0)return d+'天 '+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');return h>0?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
   function updateCountdown(){
     const el=$('closeCountdown');el.style.display='none';el.textContent='';
     if(state.snapshot||!state.model){if(state.primitive)state.primitive.setCountdown(null);return;}
@@ -681,7 +721,7 @@
 
   function setSelection(symbol,tf){
     if(symbol&&SYMBOLS[symbol])state.symbol=symbol;
-    if(['30m','4h','1h','1d'].includes(tf))state.timeframe=tf;
+    if(['30m','4h','1h','1d','1M'].includes(tf))state.timeframe=tf;
     state.bundle=null;state.lastFullLoadAt=0;state.refreshWarning=null;
     updateSelectionState();
     $('infoLine').textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe)+' · 加载中…';
@@ -726,11 +766,11 @@
     const q=new URLSearchParams(location.search);
     state.symbol=SYMBOLS[q.get('symbol')]?q.get('symbol'):'BTCUSDT';
     state.viewMode=['quarter','recent'].includes(q.get('view'))?q.get('view'):'quarter';
-    state.template=['quarter','rvwap','weekly','combined'].includes(q.get('tpl'))?q.get('tpl'):(q.get('view')==='recent'?'combined':'quarter');
+    state.template=['quarter','rvwap','weekly','monthly','combined'].includes(q.get('tpl'))?q.get('tpl'):(q.get('view')==='recent'?'combined':'quarter');
     state.snapshot=q.get('snapshot')==='1';
     if(state.snapshot)document.body.classList.add('snapshot');
     await loadRules();
-    const cfg=templateConfig(),requestedTf=['30m','4h','1h','1d'].includes(q.get('tf'))?q.get('tf'):null;
+    const cfg=templateConfig(),requestedTf=['30m','4h','1h','1d','1M'].includes(q.get('tf'))?q.get('tf'):null;
     state.timeframe=requestedTf&&(cfg.timeframes||[]).includes(requestedTf)?requestedTf:(cfg.defaultTimeframe||(cfg.timeframes||[])[0]||'1h');
     renderLegend();createChart();applyTemplateChrome();
     document.querySelectorAll('[data-symbol]').forEach(b=>b.addEventListener('click',()=>setSelection(b.dataset.symbol,state.timeframe)));

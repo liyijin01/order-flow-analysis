@@ -1,15 +1,24 @@
 const {chromium}=require('playwright-core');
+const fs=require('fs'),path=require('path');
+const monthlyFixture=JSON.parse(fs.readFileSync(path.resolve('web/tests/fixtures/btcusdt-um-1M-2026-10-01.json'),'utf8'));
 
 const pageUrl='http://127.0.0.1:8000/analysis.html';
-const intervalSec={'30m':1800,'1h':3600,'4h':14400,'1d':86400,'1w':604800};
+const intervalSec={'30m':1800,'1h':3600,'4h':14400,'1d':86400,'1w':604800,'1M':2678400};
 const baseMap={BTCUSDT:82000,ETHUSDT:2700,SOLUSDT:120};
-const displayCount={'4h':540,'1h':720,'1d':365};
+const displayCount={'4h':540,'1h':720,'1d':365,'1M':120};
 const expectedVisible={'4h':180,'1h':240,'1d':180};
 const cache=new Map();
 
 function rows(symbol,interval){
   const key=symbol+'|'+interval;if(cache.has(key))return cache.get(key);
   const sec=intervalSec[interval],base=baseMap[symbol]||100;
+  if(interval==='1M'){
+    const scale=base/(baseMap.BTCUSDT||82000),out=monthlyFixture.bars.map(b=>{
+      const open=Number(b.open)*scale,high=Number(b.high)*scale,low=Number(b.low)*scale,close=Number(b.close)*scale,vol=Number(b.volume)||1000,buy=Number(b.takerBuyBase)||vol*.5;
+      return[Number(b.openTime),open.toFixed(8),high.toFixed(8),low.toFixed(8),close.toFixed(8),vol.toFixed(4),Number(b.closeTime),(vol*close).toFixed(4),100,buy.toFixed(4),(buy*close).toFixed(4),'0'];
+    });
+    cache.set(key,out);return out;
+  }
   const end=interval==='1w'
     ?Math.floor(Date.UTC(2026,8,21,0,0,0)/1000) // Monday anchor
     :Math.floor(Date.UTC(2026,8,27,0,0,0)/1000);
@@ -719,6 +728,40 @@ function assertBoundaryStable(before,after,label){
       await page.close();
     }
 
+
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
+      await routeMarket(page,requests);await routeKeyLevels(page,'fixture');
+      await page.goto(pageUrl+'?tpl=monthly&symbol=BTCUSDT',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const m=await page.evaluate(()=>{
+        const d=window.__analysisDebug,model=d.model,r=d.view().range,span=Number(r.to)-Number(r.from),right=Math.max(0,Number(r.to)-(model.display.length-1)),mm=model.monthly||{};
+        const tfButtons=Array.from(document.querySelectorAll('[data-tf]')).map(b=>({tf:b.dataset.tf,display:getComputedStyle(b).display,disabled:b.disabled}));
+        return{template:d.template(),tf:d.state.timeframe,display:model.display.length,rightFraction:span>0?right/span:0,upper:mm.upper,lower:mm.lower,imbalance:mm.imbalance,
+          regions:model.regions.map(x=>({scope:x.scope,bottom:x.bottom,top:x.top,label:x.label})),levels:model.levels.map(x=>({kind:x.kind,label:x.label,month:x.month,price:x.price})),
+          curves:(model.curves||[]).length,table:getComputedStyle(document.querySelector('.table-wrap')).display,legend:getComputedStyle(document.getElementById('analysisLegend')).display,
+          volume:!!d.state.volume,quarterBands:d.state.quarterBands.reduce((n,x)=>n+(x.item&&x.item.points&&x.item.points.length?1:0),0),tfButtons,line2:d.chartInfo().line2,watermark:d.chartInfo().watermark};
+      });
+      if(m.template!=='monthly'||m.tf!=='1M'||m.display!==12)throw new Error('D15 monthly window '+JSON.stringify(m));
+      if(Math.abs(m.rightFraction-.18)>.025)throw new Error('D15 monthly right margin '+JSON.stringify(m));
+      if(m.levels.length>2||m.levels.some(x=>x.kind!=='monthly-sr'||!(x.label==='S/R'||/^[A-Z][a-z]{2} \d{4} [HL]$/.test(x.label))))throw new Error('D15 monthly S/R '+JSON.stringify(m));
+      if(m.regions.length>1||m.regions.some(x=>x.scope!=='MONTHLY_IMBALANCE'||x.label!=='imbalance'))throw new Error('D15 monthly imbalance '+JSON.stringify(m));
+      if(m.curves||m.table!=='none'||m.legend!=='none'||m.volume||m.quarterBands)throw new Error('D15 disabled layers '+JSON.stringify(m));
+      if(!m.upper||m.upper.month!=='2026-01'||!m.lower||m.lower.month!=='2026-05'||!m.imbalance||m.imbalance.c1Month!=='2026-08'||m.imbalance.c3Month!=='2026-10')throw new Error('D15 fixture selection '+JSON.stringify(m));
+      if(!m.tfButtons.find(x=>x.tf==='1M'||false)||m.tfButtons.find(x=>x.tf==='1M').display==='none'||m.tfButtons.some(x=>x.tf!=='1M'&&x.display!=='none')||!m.line2.includes('Monthly structure')||!m.watermark.includes('1月'))throw new Error('D15 chrome/info '+JSON.stringify(m));
+      for(const symbol of ['ETHUSDT','SOLUSDT','BTCUSDT']){
+        await page.click('[data-symbol="'+symbol+'"]');await page.waitForFunction(s=>window.__analysisDebug?.state.symbol===s&&window.__analysisDebug?.state.timeframe==='1M'&&document.getElementById('status')?.textContent.startsWith('Loaded '),symbol,{timeout:60000});
+        const ok=await page.evaluate(()=>window.__analysisDebug?.template()==='monthly'&&window.__analysisDebug?.model?.display?.length===12);
+        if(!ok)throw new Error('D15 monthly symbol switch '+symbol);
+      }
+      for(const tpl of ['quarter','rvwap','weekly','combined']){
+        await page.click('[data-tpl="'+tpl+'"]');await page.waitForFunction(t=>window.__analysisDebug?.template()===t&&document.getElementById('status')?.textContent.startsWith('Loaded '),tpl,{timeout:60000});
+        const visible1M=await page.evaluate(()=>getComputedStyle(document.querySelector('[data-tf="1M"]')).display!=='none');
+        if(visible1M)throw new Error('D15 1M visible outside monthly '+tpl);
+      }
+      await page.close();
+    }
+
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
       await routeMarket(page,requests);await routeKeyLevels(page,'fixture');await routeSnapshotThrough(page,'2026-10-02T00:00:00Z');
@@ -729,6 +772,7 @@ function assertBoundaryStable(before,after,label){
       await page.close();
     }
 
+    console.log('D15 browser smoke passed: 1M monthly structure, S/R, imbalance, 12-bar window and template gating.');
     console.log('D14 browser smoke passed: 30m weekly VWAP, complete prior-week projections, 24-day window, layer gating and template restore.');
     console.log('D13 browser smoke passed: 120-day RVWAP template, complete rolling windows, yearly VWAP parity, layer gating and template restore.');
     console.log('D12b daily PNG regression passed: new-quarter combined table is capped at 16 rows.');

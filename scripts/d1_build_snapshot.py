@@ -18,7 +18,7 @@ INCEPTION={
     "ETHUSDT":datetime(2019,11,1,tzinfo=timezone.utc),
     "SOLUSDT":datetime(2020,9,1,tzinfo=timezone.utc),
 }
-INTERVAL_MS={"30m":1_800_000,"1h":3_600_000,"4h":14_400_000,"1d":86_400_000,"1w":604_800_000}
+INTERVAL_MS={"30m":1_800_000,"1h":3_600_000,"4h":14_400_000,"1d":86_400_000,"1w":604_800_000,"1M":2_678_400_000}
 
 
 def quarter_start(dt: datetime) -> datetime:
@@ -54,10 +54,52 @@ def pack(bar: Bar, interval: str):
     ]
 
 
+def pack_monthly(bar: Bar):
+    t=bar.open_time
+    quote=bar.volume*bar.typical
+    return [
+        t,
+        f"{bar.open:.10f}",f"{bar.high:.10f}",f"{bar.low:.10f}",f"{bar.close:.10f}",
+        f"{bar.volume:.10f}",next_month_start_ms(t)-1,f"{quote:.10f}",0,
+        f"{bar.taker_buy_base:.10f}",f"{bar.taker_buy_base*bar.typical:.10f}","0",
+    ]
+
+
 def week_start_ms(open_time_ms: int) -> int:
     dt=datetime.fromtimestamp(open_time_ms/1000,tz=timezone.utc)
     monday=dt-timedelta(days=dt.weekday(),hours=dt.hour,minutes=dt.minute,seconds=dt.second,microseconds=dt.microsecond)
     return int(monday.timestamp()*1000)
+
+
+def month_start_ms(open_time_ms: int) -> int:
+    dt=datetime.fromtimestamp(open_time_ms/1000,tz=timezone.utc)
+    return int(datetime(dt.year,dt.month,1,tzinfo=timezone.utc).timestamp()*1000)
+
+
+def next_month_start_ms(open_time_ms: int) -> int:
+    dt=datetime.fromtimestamp(open_time_ms/1000,tz=timezone.utc)
+    year=dt.year+(1 if dt.month==12 else 0)
+    month=1 if dt.month==12 else dt.month+1
+    return int(datetime(year,month,1,tzinfo=timezone.utc).timestamp()*1000)
+
+
+def aggregate_monthly(daily_bars: list[Bar]) -> list[Bar]:
+    groups: dict[int,list[Bar]]={}
+    for bar in sorted(daily_bars,key=lambda b:b.open_time):
+        groups.setdefault(month_start_ms(bar.open_time),[]).append(bar)
+    out=[]
+    for start,rows in sorted(groups.items()):
+        rows=sorted(rows,key=lambda b:b.open_time)
+        out.append(Bar(
+            open_time=start,
+            open=rows[0].open,
+            high=max(b.high for b in rows),
+            low=min(b.low for b in rows),
+            close=rows[-1].close,
+            volume=sum(b.volume for b in rows),
+            taker_buy_base=sum(b.taker_buy_base for b in rows),
+        ))
+    return out
 
 
 def aggregate_weekly(daily_bars: list[Bar]) -> list[Bar]:
@@ -168,12 +210,15 @@ def main(argv=None):
         four=crop_complete(raw[symbol]["4h"],"4h",actual_exclusive)
         daily_all=crop_complete(raw[symbol]["1d"],"1d",actual_exclusive)
         weekly=aggregate_weekly(daily_all)
+        monthly=aggregate_monthly(daily_all)
         series_by_symbol[symbol]["1h"]=[pack(b,"1h") for b in one]
         series_by_symbol[symbol]["30m"]=[pack(b,"30m") for b in thirty]
         series_by_symbol[symbol]["4h"]=[pack(b,"4h") for b in four[-3000:]]
         series_by_symbol[symbol]["1d"]=[pack(b,"1d") for b in daily_all[-430:]]
         series_by_symbol[symbol]["1w"]=[pack(b,"1w") for b in weekly[-400:]]
+        series_by_symbol[symbol]["1M"]=[pack_monthly(b) for b in monthly[-120:]]
         print(f"{symbol}|1w: {len(weekly[-400:])} weeks aggregated from 1d",flush=True)
+        print(f"{symbol}|1M: {len(monthly[-120:])} months aggregated from 1d (current partial month retained)",flush=True)
 
     out_dir=args.output_dir
     out_dir.mkdir(parents=True,exist_ok=True)
@@ -196,7 +241,7 @@ def main(argv=None):
             "generatedAt":generated,
             "cutoffUtc":inclusive_cutoff,
             "targetCutoffUtc":target.isoformat().replace("+00:00","Z"),
-            "source":"Binance Vision USD-M archived klines; 1w aggregated from complete 1d weeks; exact weekly aggTrades profile",
+            "source":"Binance Vision USD-M archived klines; 1w aggregated from complete 1d weeks; 1M aggregated from 1d natural months including current partial month; exact weekly aggTrades profile",
             "series":series_by_symbol[symbol],
             "profile":profile,
             "errors":errors,
