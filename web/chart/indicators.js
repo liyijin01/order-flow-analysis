@@ -147,6 +147,23 @@
     return out;
   }
 
+  function weeklyVwapStats(bars,intervalSec){
+    const step=Number(intervalSec)||1800,src=(bars||[]).slice().sort((a,b)=>Number(a.time)-Number(b.time)),groups=new Map();
+    for(const b of src){
+      const bounds=periodBounds(b.time,'week');let g=groups.get(bounds.start);
+      if(!g){g={start:bounds.start,end:bounds.end,bars:[]};groups.set(bounds.start,g);}
+      g.bars.push(b);
+    }
+    const out=[];
+    for(const g of Array.from(groups.values()).sort((a,b)=>a.start-b.start)){
+      const points=anchoredVwap(g.bars,g.start,1);if(!points.length)continue;
+      const expected=Math.round((g.end-g.start)/step),first=g.bars[0],last=g.bars[g.bars.length-1],missing=Math.max(0,expected-g.bars.length);
+      const complete=Number(first.time)===g.start&&Number(last.time)===g.end-step&&missing<=Math.floor(expected*.005);
+      out.push({start:g.start,end:g.end,bars:g.bars.length,expectedBars:expected,missing,complete,points,final:points[points.length-1]});
+    }
+    return out;
+  }
+
   function singlePrintRanges(rows,binSize,minBins){
     const size=Number(binSize)||1,sorted=rows.slice().sort((a,b)=>a[0]-b[0]);
     let start=0,end=sorted.length-1;
@@ -225,7 +242,7 @@
   }
 
   global.OrderFlowIndicators={
-    valueArea,anchoredVwap,rollingVwap,anchoredPeriodStats,tpoProfiles,singlePrintRanges,approxVolumeProfile,
+    valueArea,anchoredVwap,rollingVwap,anchoredPeriodStats,weeklyVwapStats,tpoProfiles,singlePrintRanges,approxVolumeProfile,
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,periodKey,periodBounds,
     exactProfileToVp,roundToTick,tickPrecision
   };
