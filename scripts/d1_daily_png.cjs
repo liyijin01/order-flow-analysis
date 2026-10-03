@@ -7,7 +7,7 @@ const latestPath=path.resolve(process.env.ANALYSIS_LATEST||'_site/analysis/lates
 fs.mkdirSync(outDir,{recursive:true});
 fs.mkdirSync(path.dirname(latestPath),{recursive:true});
 
-const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],combinedTfs=['4h','1h','1d'],quarterTfs=['1h','4h'],rvwapTfs=['4h'],weeklyTfs=['30m'];
+const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],combinedTfs=['4h','1h','1d'],quarterTfs=['1h','4h'],rvwapTfs=['4h'],weeklyTfs=['30m'],monthlyTfs=['1M'];
 const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'1M':86400_000};
 
 (async()=>{
@@ -44,6 +44,9 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
         const m=window.__analysisDebug.model,last=Number(m.last.time),seg=(m.weekly&&m.weekly.segments||[]).find(x=>last>=Number(x.start)&&last<Number(x.end));
         const p=seg&&(seg.points||[]).find(x=>Number(x.time)===last),proj=seg&&(m.weekly&&m.weekly.projections||[]).find(x=>Number(x.weekStart)===Number(seg.start));
         return{weekStart:seg&&seg.start,vwap:p&&p.vwap,upper:p&&p.upper,lower:p&&p.lower,pwVwap:proj&&proj.pwVwap,pwUpper:proj&&proj.pwUpper,pwLower:proj&&proj.pwLower,yearOpen:m.weekly&&m.weekly.yearOpen};
+      })():template==='monthly'?(()=>{
+        const mm=window.__analysisDebug.model?.monthly||{},line=x=>x?{price:x.price,label:x.label,month:x.month}:null,g=mm.imbalance;
+        return{upper:line(mm.upper),lower:line(mm.lower),imbalance:g?{low:g.low,high:g.high,c1:g.c1Month,c3:g.c3Month,forming:!!g.forming}:null};
       })():null),
       reference:(template==='rvwap'&&symbol==='BTCUSDT'?(()=>{
         const d=window.__analysisDebug,m=d.model,target=Date.UTC(2026,8,30,16,0,0)/1000,curves=m.curves||[];
@@ -90,8 +93,9 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
     for(const symbol of symbols)for(const tf of quarterTfs)await capture(symbol,tf,'quarter');
     for(const symbol of symbols)for(const tf of rvwapTfs)await capture(symbol,tf,'rvwap');
     for(const symbol of symbols)for(const tf of weeklyTfs)await capture(symbol,tf,'weekly');
+    for(const symbol of symbols)for(const tf of monthlyTfs)await capture(symbol,tf,'monthly');
   } finally {await browser.close();}
-  const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap','weekly'],files:manifest};
+  const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap','weekly','monthly'],files:manifest};
   fs.writeFileSync(latestPath,JSON.stringify(latest,null,2));
   fs.writeFileSync(path.join(outDir,'manifest.json'),JSON.stringify(manifest,null,2));
   const reference=manifest.find(x=>x.symbol==='BTCUSDT'&&x.template==='rvwap')?.reference;

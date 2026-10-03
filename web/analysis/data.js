@@ -147,7 +147,9 @@
 
   async function loadLive(symbol,timeframe,onProgress,signal,history){
     const progress=typeof onProgress==='function'?onProgress:()=>{},errors={},series={};
-    const required=[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})];
+    const required=timeframe==='1M'
+      ?[timeframe,calcMap[timeframe],...Object.keys(history||{})]
+      :[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})];
     const intervals=[];for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
     let done=0;const total=intervals.length+2;
     const step=(label)=>{done++;progress({done,total,label});};
@@ -166,7 +168,9 @@
   }
 
   async function refreshLiveBundle(bundle,symbol,timeframe,signal,history){
-    const required=[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})],intervals=[];
+    const required=timeframe==='1M'
+      ?[timeframe,calcMap[timeframe],...Object.keys(history||{})]
+      :[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})],intervals=[];
     for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
     const failures=[],updates={},fullIntervals=new Set(),errors={...(bundle&&bundle.errors||{})};
     await Promise.all(intervals.map(async interval=>{

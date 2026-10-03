@@ -32,7 +32,7 @@ test('D15 forming month cannot confirm a turning point or break S/R',()=>{
 
 test('D15 monthly imbalance gold selects Aug-Oct bullish gap',()=>{
   const gaps=I.monthlyImbalances(bars,asOf);
-  const recent=bars.slice(-12),viewMin=Math.min(...recent.map(x=>x.low)),viewMax=Math.max(...recent.map(x=>x.high));
+  const recent=bars.slice(-12);let viewMin=Infinity,viewMax=-Infinity;for(const x of recent){if(Number(x.low)<viewMin)viewMin=Number(x.low);if(Number(x.high)>viewMax)viewMax=Number(x.high);}
   const got=I.selectMonthlyImbalance(gaps,current,viewMin,viewMax,10);
   assert.ok(got);
   assert.equal(got.type,'bullish');
