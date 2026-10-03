@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.c4_1_golden import Bar, load_range
+from scripts.c4_1_golden import Bar, load_range, weighted_stats
 from scripts.d10_build_levels import (
     build_symbol,
     expected_ids,
@@ -193,6 +193,31 @@ class D10LevelTests(unittest.TestCase):
             values = {"VWAP": vwap, "VAH": vah, "VAL": val}
             for side, (reference, tolerance) in checks.items():
                 self.assertLessEqual(abs(values[side] - reference) / reference, tolerance)
+
+
+    def test_d14_btc_weekly_vwap_and_year_open_reference(self):
+        prev_start = datetime(2026, 9, 21, tzinfo=timezone.utc)
+        prev_end = datetime(2026, 9, 28, tzinfo=timezone.utc)
+        prev = load_range("BTCUSDT", "um", "30m", prev_start, prev_end)
+        pv, pu, pl = weighted_stats(prev)
+        checks = [
+            ("PW VWAP", pv, 84703.2, 0.001),
+            ("PW +1sigma", pu, 85933.1, 0.001),
+            ("PW -1sigma", pl, 83473.4, 0.001),
+        ]
+        cur_start = datetime(2026, 9, 28, tzinfo=timezone.utc)
+        cur_end = datetime(2026, 10, 1, 5, 30, tzinfo=timezone.utc)
+        cur = load_range("BTCUSDT", "um", "30m", cur_start, cur_end)
+        cv, cu, cl = weighted_stats(cur)
+        checks.append(("CW VWAP", cv, 83726.2, 0.002))
+        day = load_range("BTCUSDT", "um", "1d", datetime(2026, 1, 1, tzinfo=timezone.utc), datetime(2026, 1, 2, tzinfo=timezone.utc))
+        self.assertTrue(day)
+        year_open = day[0].open
+        checks.append(("Y O", year_open, 87610.2, 0.0005))
+        print(f"D14 weekly gold PW={pv:.4f}/{pu:.4f}/{pl:.4f} CW={cv:.4f}/{cu:.4f}/{cl:.4f} YO={year_open:.4f}")
+        for name, actual, expected, tolerance in checks:
+            self.assertLessEqual(abs(actual - expected) / expected, tolerance, f"{name}: {actual} vs {expected}")
+
 
 
 if __name__ == "__main__":

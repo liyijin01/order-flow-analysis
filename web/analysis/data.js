@@ -2,8 +2,8 @@
   'use strict';
 
   const intervalMsMap={'30m':1800000,'1h':3600000,'4h':14400000,'1d':86400000,'1w':604800000};
-  const calcMap={'1h':'4h','4h':'1d','1d':'1w'};
-  const displayCounts={'1h':720,'4h':1200,'1d':365};
+  const calcMap={'30m':'4h','1h':'4h','4h':'1d','1d':'1w'};
+  const displayCounts={'30m':1152,'1h':720,'4h':1200,'1d':365};
 
   function isAbort(error,signal){return !!(signal&&signal.aborted)||!!(error&&error.name==='AbortError');}
   function sleep(ms,signal){
@@ -140,7 +140,7 @@
 
   async function loadLive(symbol,timeframe,onProgress,signal,history){
     const progress=typeof onProgress==='function'?onProgress:()=>{},errors={},series={};
-    const required=[timeframe,'1h','30m',calcMap[timeframe]];
+    const required=[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})];
     const intervals=[];for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
     let done=0;const total=intervals.length+2;
     const step=(label)=>{done++;progress({done,total,label});};
@@ -159,7 +159,7 @@
   }
 
   async function refreshLiveBundle(bundle,symbol,timeframe,signal,history){
-    const required=[timeframe,'1h','30m',calcMap[timeframe]],intervals=[];
+    const required=[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})],intervals=[];
     for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
     const failures=[],updates={},fullIntervals=new Set(),errors={...(bundle&&bundle.errors||{})};
     await Promise.all(intervals.map(async interval=>{

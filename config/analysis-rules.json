@@ -35,6 +35,7 @@
   },
   "zones": {
     "calcIntervals": {
+      "30m": "4h",
       "1h": "4h",
       "4h": "1d",
       "1d": "1w"
@@ -204,6 +205,43 @@
         "axisColor": "#3a4152",
         "axisTextColor": "#eceff4"
       }
+    },
+    "weekly": {
+      "label": "周度 VWAP",
+      "timeframes": [
+        "30m"
+      ],
+      "defaultTimeframe": "30m",
+      "window": {
+        "30m": {
+          "mode": "recent",
+          "visibleBars": 1152
+        }
+      },
+      "rightMarginPct": 18,
+      "history": {
+        "30m": 2000,
+        "1d": 400
+      },
+      "layers": {
+        "quarterBands": false,
+        "keyLevels": false,
+        "pqArea": false,
+        "pqBounds": false,
+        "pqVwap": false,
+        "pm": false,
+        "pw": false,
+        "zones": false,
+        "nPoc": false,
+        "volume": false,
+        "rvwap": false,
+        "yearLevels": false,
+        "weeklyVwap": true,
+        "weeklyProjection": true,
+        "yearOpen": true
+      },
+      "table": false,
+      "legend": false
     }
   },
   "rvwap": {
@@ -219,5 +257,18 @@
     "yearVwap": "#e8d44d",
     "yearSigma": "rgba(190,196,208,.55)",
     "historicalVwap": "#f5a623"
+  },
+  "weeklyVwap": {
+    "vwap": "#f23645",
+    "sigma": "rgba(190,196,208,.55)",
+    "underlay": "rgba(190,196,208,.10)",
+    "projectionFill": "rgba(190,196,208,.08)",
+    "projectionBorder": "rgba(190,196,208,.25)",
+    "axisGray": "#3a4152",
+    "axisText": "#eceff4",
+    "yearOpen": "#e6e9ef",
+    "yearAxis": "#d9d4f0",
+    "yearAxisText": "#202536",
+    "visiblePadPct": 10
   }
 }

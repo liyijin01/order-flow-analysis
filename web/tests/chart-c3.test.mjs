@@ -91,3 +91,37 @@ test('D13 rolling VWAP handles 3000 bars x four windows under 50ms',()=>{
   const elapsed=Number(process.hrtime.bigint()-start)/1e6;
   assert.ok(elapsed<50,'elapsed '+elapsed.toFixed(2)+'ms');
 });
+
+
+test('D14 weekly VWAP segments reset on Monday and mark complete weeks',()=>{
+  const start=Date.UTC(2026,8,21)/1000,bars=[];
+  for(let i=0;i<336;i++)bars.push({time:start+i*1800,high:100+i*.01,low:99+i*.01,close:99.5+i*.01,volume:10+i%5});
+  for(let i=0;i<20;i++)bars.push({time:start+7*86400+i*1800,high:110+i*.01,low:109+i*.01,close:109.5+i*.01,volume:10});
+  const weeks=I.weeklyVwapStats(bars,1800);
+  assert.equal(weeks.length,2);
+  assert.equal(weeks[0].start,start);assert.equal(weeks[0].complete,true);assert.equal(weeks[0].bars,336);
+  assert.equal(weeks[1].start,start+7*86400);assert.equal(weeks[1].complete,false);
+  assert.ok(Math.abs(weeks[0].final.vwap-I.anchoredVwap(bars.slice(0,336),start,1).at(-1).vwap)<1e-12);
+});
+
+test('D14 previous-week completeness rejects missing final bar but allows one middle gap',()=>{
+  const start=Date.UTC(2026,8,21)/1000,make=missing=>{
+    const bars=[];for(let i=0;i<336;i++)if(i!==missing)bars.push({time:start+i*1800,high:101,low:99,close:100,volume:1});return bars;
+  };
+  assert.equal(I.weeklyVwapStats(make(335),1800)[0].complete,false);
+  assert.equal(I.weeklyVwapStats(make(120),1800)[0].complete,true);
+});
+
+
+test('D14 weekly projections only use complete previous weeks',()=>{
+  const s=Date.UTC(2026,8,14)/1000;
+  const stats=[
+    {start:s,end:s+7*86400,complete:false,final:{vwap:1,upper:2,lower:0}},
+    {start:s+7*86400,end:s+14*86400,complete:true,final:{vwap:3,upper:4,lower:2}},
+    {start:s+14*86400,end:s+21*86400,complete:true,final:{vwap:5,upper:6,lower:4}}
+  ];
+  const p=I.weeklyProjectionStats(stats);
+  assert.equal(p.length,1);
+  assert.equal(p[0].weekStart,s+14*86400);
+  assert.equal(p[0].pwVwap,3);
+});
