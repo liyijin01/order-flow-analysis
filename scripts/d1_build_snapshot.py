@@ -132,7 +132,7 @@ def main(argv=None):
     starts={
         "1h":pq_start,
         "30m":pm_start,
-        "4h":target-timedelta(hours=4*620),
+        "4h":target-timedelta(hours=4*3000),
     }
 
     raw={s:{} for s in SYMBOLS}
@@ -170,7 +170,7 @@ def main(argv=None):
         weekly=aggregate_weekly(daily_all)
         series_by_symbol[symbol]["1h"]=[pack(b,"1h") for b in one]
         series_by_symbol[symbol]["30m"]=[pack(b,"30m") for b in thirty]
-        series_by_symbol[symbol]["4h"]=[pack(b,"4h") for b in four[-620:]]
+        series_by_symbol[symbol]["4h"]=[pack(b,"4h") for b in four[-3000:]]
         series_by_symbol[symbol]["1d"]=[pack(b,"1d") for b in daily_all[-430:]]
         series_by_symbol[symbol]["1w"]=[pack(b,"1w") for b in weekly[-400:]]
         print(f"{symbol}|1w: {len(weekly[-400:])} weeks aggregated from 1d",flush=True)

@@ -14,6 +14,7 @@ from scripts.d10_build_levels import (
     monthly_tpo_levels,
     quarter_levels,
     target_periods,
+    year_levels,
 )
 
 
@@ -44,7 +45,8 @@ class D10LevelTests(unittest.TestCase):
         cutoff = datetime(2026, 10, 1, tzinfo=timezone.utc)
         rows = []
         for spec in target_periods(cutoff):
-            for side in ("VAH", "VAL"):
+            sides = ("VWAP", "VAH", "VAL") if spec["kind"] == "year" else ("VAH", "VAL")
+            for side in sides:
                 level_id = next(x for x in expected_ids(spec) if x.endswith(side.lower()))
                 rows.append({
                     "id": level_id,
@@ -75,7 +77,8 @@ class D10LevelTests(unittest.TestCase):
         for spec in target_periods(cutoff):
             if spec["label"] == skip_label:
                 continue
-            for side in ("VAH", "VAL"):
+            sides = ("VWAP", "VAH", "VAL") if spec["kind"] == "year" else ("VAH", "VAL")
+            for side in sides:
                 level_id = next(x for x in expected_ids(spec) if x.endswith(side.lower()))
                 row = {
                     "id": level_id,
@@ -94,7 +97,7 @@ class D10LevelTests(unittest.TestCase):
 
     @staticmethod
     def _bars(spec, interval, missing_indexes=()):
-        step_ms = 3600_000 if interval == "1h" else 1800_000
+        step_ms = {"30m": 1800_000, "1h": 3600_000, "4h": 14_400_000}[interval]
         start_ms = int(spec["start"].timestamp() * 1000)
         end_ms = int(spec["end"].timestamp() * 1000)
         count = (end_ms - start_ms) // step_ms
@@ -169,6 +172,27 @@ class D10LevelTests(unittest.TestCase):
             q3_rows = [row for row in payload["levels"] if row["id"] in expected_ids(q3)]
             self.assertEqual(len(q3_rows), 2)
             self.assertTrue(all(row.get("complete") is True for row in q3_rows))
+
+
+    def test_btc_year_levels_match_reference(self):
+        refs = {
+            2024: {"VWAP": (64960.2, 0.002)},
+            2025: {"VAL": (87280.0, 0.003)},
+        }
+        for year, checks in refs.items():
+            spec = {
+                "kind": "year",
+                "year": year,
+                "label": "PY" if year == 2025 else str(year),
+                "start": datetime(year, 1, 1, tzinfo=timezone.utc),
+                "end": datetime(year + 1, 1, 1, tzinfo=timezone.utc),
+            }
+            vwap, vah, val, definition = year_levels("BTCUSDT", spec, load_range)
+            print(f"D13 yearly gold {year}: VWAP={vwap:.4f} VAH={vah:.4f} VAL={val:.4f}")
+            self.assertEqual(definition, "Y / 4h VWAP±1σ (hlc3)")
+            values = {"VWAP": vwap, "VAH": vah, "VAL": val}
+            for side, (reference, tolerance) in checks.items():
+                self.assertLessEqual(abs(values[side] - reference) / reference, tolerance)
 
 
 if __name__ == "__main__":

@@ -96,7 +96,7 @@
     return out.slice(-Math.max(1,Number(maxBars)||out.length));
   }
 
-  function capFor(interval,timeframe){
+  function capFor(interval,timeframe,history){
     let cap=500;
     if(interval==='1h')cap=5000;
     else if(interval==='30m')cap=3500;
@@ -105,6 +105,7 @@
     else if(interval==='4h')cap=Math.max(1200,displayCounts[timeframe]||0,400);
     if(interval===timeframe)cap=Math.max(cap,displayCounts[timeframe]||0);
     if(interval===calcMap[timeframe])cap=Math.max(cap,400);
+    const requested=Number(history&&history[interval])||0;if(requested>0)cap=Math.max(cap,requested);
     return cap;
   }
 
@@ -137,14 +138,14 @@
     return{schema:payload.schema||'analysis-snapshot-v1',symbol,generatedAt:payload.generatedAt,cutoffUtc:payload.cutoffUtc,series,profile:payload.profile||null,keyLevels,errors};
   }
 
-  async function loadLive(symbol,timeframe,onProgress,signal){
+  async function loadLive(symbol,timeframe,onProgress,signal,history){
     const progress=typeof onProgress==='function'?onProgress:()=>{},errors={},series={};
     const required=[timeframe,'1h','30m',calcMap[timeframe]];
     const intervals=[];for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
     let done=0;const total=intervals.length+2;
     const step=(label)=>{done++;progress({done,total,label});};
     await Promise.all(intervals.map(interval=>
-      fetchHistory(symbol,interval,capFor(interval,timeframe),undefined,signal)
+      fetchHistory(symbol,interval,capFor(interval,timeframe,history),undefined,signal)
         .then(v=>{series[interval]=v;step(interval);})
         .catch(e=>{if(isAbort(e,signal))throw e;errors[interval]=String(e.message||e);step(interval+' failed');})
     ));
@@ -157,12 +158,12 @@
     return{schema:'analysis-live-v2',symbol,generatedAt,cutoffUtc:null,series,profile,keyLevels,errors};
   }
 
-  async function refreshLiveBundle(bundle,symbol,timeframe,signal){
+  async function refreshLiveBundle(bundle,symbol,timeframe,signal,history){
     const required=[timeframe,'1h','30m',calcMap[timeframe]],intervals=[];
     for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
     const failures=[],updates={},fullIntervals=new Set(),errors={...(bundle&&bundle.errors||{})};
     await Promise.all(intervals.map(async interval=>{
-      const cap=capFor(interval,timeframe),existing=(bundle&&bundle.series&&bundle.series[interval])||[];
+      const cap=capFor(interval,timeframe,history),existing=(bundle&&bundle.series&&bundle.series[interval])||[];
       const needsFull=!!errors[interval]||existing.length<cap*.5;
       try{
         updates[interval]=needsFull
@@ -179,7 +180,7 @@
       if(!updates[interval])continue;
       series[interval]=fullIntervals.has(interval)
         ?updates[interval]
-        :mergeBars(series[interval]||[],updates[interval],capFor(interval,timeframe));
+        :mergeBars(series[interval]||[],updates[interval],capFor(interval,timeframe,history));
     }
     let profile=bundle&&bundle.profile||null;
     if(!profile||errors.profile){

@@ -85,6 +85,7 @@
       const vals=[];
       for(const r of this.model.regions||[])vals.push(Number(r.bottom),Number(r.top));
       for(const l of this.model.levels||[])vals.push(Number(l.price));
+      for(const c of this.model.curves||[])for(const p of c.points||[])vals.push(Number(p.value));
       const lo=Number(this.model.autoscaleMin),hi=Number(this.model.autoscaleMax);
       let min=Infinity,max=-Infinity;
       for(const raw of vals){
@@ -104,9 +105,24 @@
       ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillStyle=color||'#e7eaf0';
       ctx.shadowColor='rgba(27,33,48,.95)';ctx.shadowBlur=4;ctx.fillText(String(text),x,y);ctx.restore();
     }
+    curveLabel(ctx,text,x,y,color){
+      if(!text)return;ctx.save();ctx.font='11px ui-monospace,SFMono-Regular,Menlo,monospace';ctx.textAlign='left';ctx.textBaseline='middle';
+      ctx.fillStyle=color||'#aeb7c8';ctx.shadowColor='rgba(27,33,48,.95)';ctx.shadowBlur=4;ctx.fillText(String(text),x,y);ctx.restore();
+    }
+    curvePath(ctx,points,size){
+      let started=false;
+      for(const p of points||[]){const x=this.x(p.time,size.width),y=this.y(p.value);if(x==null||y==null)continue;if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);}
+      return started;
+    }
 
     draw(ctx,size){
-      const regions=this.model.regions||[],levels=this.model.levels||[],labelTargets=[];
+      const regions=this.model.regions||[],levels=this.model.levels||[],curves=this.model.curves||[],labelTargets=[];
+      for(const c of curves){
+        const points=(c.points||[]).filter(p=>Number.isFinite(Number(p.value)));if(!points.length)continue;
+        if(c.underlay&&Number(c.underlayWidth)>0){ctx.save();ctx.strokeStyle=c.underlay;ctx.lineWidth=Number(c.underlayWidth);ctx.lineJoin='round';ctx.lineCap='round';ctx.beginPath();if(this.curvePath(ctx,points,size))ctx.stroke();ctx.restore();}
+        ctx.save();ctx.strokeStyle=c.color||'#4caf50';ctx.lineWidth=Number(c.width)||1.5;ctx.lineJoin='round';ctx.lineCap='round';ctx.beginPath();if(this.curvePath(ctx,points,size))ctx.stroke();ctx.restore();
+        if(c.label){const last=points[points.length-1],x=this.x(last.time,size.width),y=this.y(last.value);if(x!=null&&y!=null)labelTargets.push({id:c.id,text:c.label,x:x+8,targetY:y,color:c.labelColor||c.color||'#aeb7c8',priority:2,curve:true});}
+      }
       for(const r of regions){
         let x1=this.x(r.from,size.width),yt=this.y(r.top),yb=this.y(r.bottom);
         if(yt==null||yb==null)continue;if(x1==null)x1=0;
@@ -124,7 +140,7 @@
         labelTargets.push({id:l.id,text:l.label,x:size.width-8,targetY:y-8,color:l.color||'#e7eaf0',priority:1});
       }
       const layout=E.regionLabelLayout(labelTargets,Number(this.model.textMinGap)||14,Number(this.model.textMaxShift)||24,size.height);
-      for(const row of layout)if(row.visible)this.label(ctx,row.text,row.x,row.y,row.color);
+      for(const row of layout)if(row.visible){if(row.curve)this.curveLabel(ctx,row.text,row.x,row.y,row.color);else this.label(ctx,row.text,row.x,row.y,row.color);}
     }
 
     debugAxisLabels(){

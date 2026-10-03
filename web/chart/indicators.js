@@ -99,6 +99,25 @@
     return points;
   }
 
+  function rollingVwap(bars,windowSec){
+    const src=(bars||[]).slice().sort((a,b)=>Number(a.time)-Number(b.time)),window=Number(windowSec);
+    if(!src.length||!(window>0))return src.map(b=>({time:Number(b.time),value:null}));
+    const n=src.length,pv=new Array(n+1).fill(0),vv=new Array(n+1).fill(0),out=new Array(n);
+    for(let i=0;i<n;i++){
+      const b=src[i],v=Math.max(0,Number(b.volume)||0),tp=(Number(b.high)+Number(b.low)+Number(b.close))/3;
+      vv[i+1]=vv[i]+v;pv[i+1]=pv[i]+(Number.isFinite(tp)?tp*v:0);
+    }
+    let left=0;
+    for(let i=0;i<n;i++){
+      const t=Number(src[i].time),cut=t-window;
+      while(left<=i&&Number(src[left].time)<=cut)left++;
+      const full=Number(src[0].time)<=cut;
+      const vol=vv[i+1]-vv[left],value=full&&vol>0?(pv[i+1]-pv[left])/vol:null;
+      out[i]={time:t,value:Number.isFinite(value)?value:null};
+    }
+    return out;
+  }
+
   function anchoredPeriodStats(bars,group,intervalSec){
     const all=(bars||[]).slice().sort((a,b)=>a.time-b.time);
     if(!all.length)return[];
@@ -206,7 +225,7 @@
   }
 
   global.OrderFlowIndicators={
-    valueArea,anchoredVwap,anchoredPeriodStats,tpoProfiles,singlePrintRanges,approxVolumeProfile,
+    valueArea,anchoredVwap,rollingVwap,anchoredPeriodStats,tpoProfiles,singlePrintRanges,approxVolumeProfile,
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,periodKey,periodBounds,
     exactProfileToVp,roundToTick,tickPrecision
   };
