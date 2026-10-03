@@ -277,7 +277,7 @@
 
   function buildWeeklyVwap(bundle,display,view){
     if(state.template!=='weekly'||state.timeframe!=='30m'||!display.length)return{curves:[],regions:[],levels:[],segments:[],projections:[],yearOpen:null};
-    const cfg=state.rules.weeklyVwap||{},thirty=bundle.series['30m']||[],daily=bundle.series['1d']||[],stats=I.weeklyVwapStats(thirty,1800);
+    const cfg=state.rules.weeklyVwap||{},thirty=bundle.series['30m']||[],daily=bundle.series['1d']||[],stats=I.weeklyVwapStats(thirty,1800),projectionMap=new Map(I.weeklyProjectionStats(stats).map(x=>[Number(x.weekStart),x]));
     const first=Number(display[0].time),last=Number(display[display.length-1].time),currentStart=E.utcWeekStart(last),byStart=new Map(stats.map(x=>[Number(x.start),x]));
     const span=Math.max(1e-12,Number(view.max)-Number(view.min)),pad=span*Math.max(0,Number(cfg.visiblePadPct)||10)/100,lo=Number(view.min)-pad,hi=Number(view.max)+pad;
     const inView=v=>Number(v)>=lo&&Number(v)<=hi,curves=[],regions=[],levels=[],segments=[],projections=[];
@@ -287,9 +287,9 @@
       const pts=(seg.points||[]).filter(p=>Number(p.time)>=first&&Number(p.time)<=last);
       const mk=(id,key,color,width)=>({id:id+'-'+seg.start,label:'',weekStart:seg.start,points:pts.filter(p=>inView(p[key])).map(p=>({time:p.time,value:p[key]})),color,width,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6});
       curves.push(mk('weekly-vwap','vwap',cfg.vwap||'#f23645',1.5),mk('weekly-upper','upper',cfg.sigma||'rgba(190,196,208,.55)',1),mk('weekly-lower','lower',cfg.sigma||'rgba(190,196,208,.55)',1));
-      const prev=byStart.get(Number(seg.start)-7*86400);if(!prev||!prev.complete)continue;
-      const top=Number(prev.final.upper),bottom=Number(prev.final.lower),mid=Number(prev.final.vwap),to=Math.min(Number(seg.end),last),visible=top>=lo&&bottom<=hi,isCurrent=Number(seg.start)===currentStart;
-      const info={weekStart:Number(seg.start),to,pwVwap:mid,pwUpper:top,pwLower:bottom,complete:true};projections.push(info);
+      const baseProj=projectionMap.get(Number(seg.start));if(!baseProj)continue;
+      const top=Number(baseProj.pwUpper),bottom=Number(baseProj.pwLower),mid=Number(baseProj.pwVwap),to=Math.min(Number(seg.end),last),visible=top>=lo&&bottom<=hi,isCurrent=Number(seg.start)===currentStart;
+      const info={...baseProj,to,complete:true};projections.push(info);
       if(!visible)continue;
       regions.push({id:'weekly-proj-'+seg.start,type:'value',scope:'WEEKLY_PROJECTION',bottom,top,from:Number(seg.start),to,label:'',fill:cfg.projectionFill||'rgba(190,196,208,.08)',border:cfg.projectionBorder||'rgba(190,196,208,.25)',axisLabel:isCurrent,axisColor:cfg.axisGray||'#3a4152',axisTextColor:cfg.axisText||'#eceff4'});
       levels.push({id:'weekly-pw-vwap-'+seg.start,kind:'weekly-pw',price:mid,from:Number(seg.start),to,label:'',color:cfg.vwap||'#f23645',axisColor:cfg.vwap||'#f23645',axisTextColor:'#fff',axisLabel:isCurrent,style:'solid',width:1.5});
@@ -589,7 +589,7 @@
       }
       const seg=(model.rvwap&&model.rvwap.yearSegments||[]).find(x=>Number(bar.time)>=x.start&&Number(bar.time)<x.end);
       const yp=seg&&(seg.points||[]).find(x=>Number(x.time)===Number(bar.time)),yv=yp&&yp.vwap,yu=yp&&yp.upper,yl=yp&&yp.lower;
-      add('  ·  Y VWAP '+(yv==null?'—':fmtPrice(yv)),'pqvwap');add('  +1σ '+(yu==null?'—':fmtPrice(yu)),'sigma');add('  −1σ '+(yl==null?'—':fmtPrice(yl)),'sigma');
+      add('  ·  Y VWAP '+(yv==null?'—':fmtPrice(yv)),'yvwap');add('  +1σ '+(yu==null?'—':fmtPrice(yu)),'sigma');add('  −1σ '+(yl==null?'—':fmtPrice(yl)),'sigma');
       model.infoValues={rolling:values,year:{vwap:yv,upper:yu,lower:yl},barTime:Number(bar.time)};
     }else{
       const vals=infoValues(model),cv=vals.current,pv=vals.previous;line2.textContent='Anchored VWAP (hlc3, Quarter, ±1σ)';

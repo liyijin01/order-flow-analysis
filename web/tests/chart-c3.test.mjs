@@ -111,3 +111,17 @@ test('D14 previous-week completeness rejects missing final bar but allows one mi
   assert.equal(I.weeklyVwapStats(make(335),1800)[0].complete,false);
   assert.equal(I.weeklyVwapStats(make(120),1800)[0].complete,true);
 });
+
+
+test('D14 weekly projections only use complete previous weeks',()=>{
+  const s=Date.UTC(2026,8,14)/1000;
+  const stats=[
+    {start:s,end:s+7*86400,complete:false,final:{vwap:1,upper:2,lower:0}},
+    {start:s+7*86400,end:s+14*86400,complete:true,final:{vwap:3,upper:4,lower:2}},
+    {start:s+14*86400,end:s+21*86400,complete:true,final:{vwap:5,upper:6,lower:4}}
+  ];
+  const p=I.weeklyProjectionStats(stats);
+  assert.equal(p.length,1);
+  assert.equal(p[0].weekStart,s+14*86400);
+  assert.equal(p[0].pwVwap,3);
+});

@@ -7,7 +7,7 @@ const latestPath=path.resolve(process.env.ANALYSIS_LATEST||'_site/analysis/lates
 fs.mkdirSync(outDir,{recursive:true});
 fs.mkdirSync(path.dirname(latestPath),{recursive:true});
 
-const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],combinedTfs=['4h','1h','1d'],quarterTfs=['1h','4h'],rvwapTfs=['4h'];
+const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],combinedTfs=['4h','1h','1d'],quarterTfs=['1h','4h'],rvwapTfs=['4h'],weeklyTfs=['30m'];
 const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
 
 (async()=>{
@@ -72,7 +72,7 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
     manifest.push({
       symbol,timeframe:tf,template,view:meta.windowMode,file:path.basename(file),bytes:size,height,status:meta.status,
       visibleBars:meta.visibleBars,logicalSlots:meta.logicalSlots,calcLastClosedUtc:meta.calcLastClosedUtc,
-      supply:meta.supply,demand:meta.demand,drawn:meta.drawn,offView:meta.offView,regions:meta.regions,levels:meta.levels,keyLevels:meta.keyLevels,reference:meta.reference
+      supply:meta.supply,demand:meta.demand,drawn:meta.drawn,offView:meta.offView,regions:meta.regions,levels:meta.levels,keyLevels:meta.keyLevels,values:meta.values,reference:meta.reference
     });
     await page.close();
   }
@@ -80,8 +80,9 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
     for(const symbol of symbols)for(const tf of combinedTfs)await capture(symbol,tf,'combined');
     for(const symbol of symbols)for(const tf of quarterTfs)await capture(symbol,tf,'quarter');
     for(const symbol of symbols)for(const tf of rvwapTfs)await capture(symbol,tf,'rvwap');
+    for(const symbol of symbols)for(const tf of weeklyTfs)await capture(symbol,tf,'weekly');
   } finally {await browser.close();}
-  const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap'],files:manifest};
+  const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap','weekly'],files:manifest};
   fs.writeFileSync(latestPath,JSON.stringify(latest,null,2));
   fs.writeFileSync(path.join(outDir,'manifest.json'),JSON.stringify(manifest,null,2));
   const reference=manifest.find(x=>x.symbol==='BTCUSDT'&&x.template==='rvwap')?.reference;

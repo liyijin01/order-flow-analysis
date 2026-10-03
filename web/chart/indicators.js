@@ -164,6 +164,15 @@
     return out;
   }
 
+  function weeklyProjectionStats(stats){
+    const src=(stats||[]).slice().sort((a,b)=>Number(a.start)-Number(b.start)),byStart=new Map(src.map(x=>[Number(x.start),x])),out=[];
+    for(const cur of src){
+      const prev=byStart.get(Number(cur.start)-7*86400);if(!prev||!prev.complete||!prev.final)continue;
+      out.push({weekStart:Number(cur.start),weekEnd:Number(cur.end),pwVwap:Number(prev.final.vwap),pwUpper:Number(prev.final.upper),pwLower:Number(prev.final.lower),sourceStart:Number(prev.start)});
+    }
+    return out;
+  }
+
   function singlePrintRanges(rows,binSize,minBins){
     const size=Number(binSize)||1,sorted=rows.slice().sort((a,b)=>a[0]-b[0]);
     let start=0,end=sorted.length-1;
@@ -242,7 +251,7 @@
   }
 
   global.OrderFlowIndicators={
-    valueArea,anchoredVwap,rollingVwap,anchoredPeriodStats,weeklyVwapStats,tpoProfiles,singlePrintRanges,approxVolumeProfile,
+    valueArea,anchoredVwap,rollingVwap,anchoredPeriodStats,weeklyVwapStats,weeklyProjectionStats,tpoProfiles,singlePrintRanges,approxVolumeProfile,
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,periodKey,periodBounds,
     exactProfileToVp,roundToTick,tickPrecision
   };
