@@ -19,7 +19,7 @@ const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
     const url=base+'?snapshot=1&tpl='+template+(template==='combined'?'&view=quarter':'')+'&symbol='+symbol+'&tf='+tf;
     await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
     await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
-    const meta=await page.evaluate(()=>({
+    const meta=await page.evaluate(({template,symbol})=>({
       status:document.getElementById('status').textContent,
       cutoff:window.__analysisDebug.model?.cutoffUtc,
       template:window.__analysisDebug.template(),
@@ -47,7 +47,7 @@ const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
         const l=(m.yearLevels||[]).find(x=>x.label==='2024 VAH');
         return{targetUtc:new Date(target*1000).toISOString(),yVwap:yp&&yp.vwap,yUpper:yp&&yp.upper,yLower:yp&&yp.lower,rvwap30:cv('rvwap-30'),rvwap60:cv('rvwap-60'),rvwap90:cv('rvwap-90'),rvwap365:cv('rvwap-365'),y2024Vah:l&&l.price};
       })():null)
-    }));
+    }),{template,symbol});
     if(errors.length)throw new Error(symbol+' '+tf+' '+template+' browser errors: '+errors.join(' | '));
     if(meta.template!==template)throw new Error(symbol+' '+tf+' template mismatch '+JSON.stringify(meta));
     for(const a of meta.axis.filter(x=>x.visible))if(a.diff==null||a.diff>1)throw new Error(symbol+' '+tf+' '+template+' axis label diff '+JSON.stringify(a));
