@@ -123,7 +123,7 @@
       const ap=a.high==null?-Infinity:a.high,bp=b.high==null?-Infinity:b.high;
       return bp-ap||String(a.type).localeCompare(String(b.type));
     });
-    return out;
+    return E.capTableRows(out,16);
   }
 
   async function loadRules(){

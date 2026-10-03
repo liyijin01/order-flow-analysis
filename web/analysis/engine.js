@@ -345,6 +345,14 @@
     return{all:merged.map(x=>({...x,offView:!ids.has(x.id)})),selected:selected.map(x=>({...x,offView:false}))};
   }
 
+  function capTableRows(rows,maxRows){
+    const src=(rows||[]).slice(),limit=Math.max(1,Number(maxRows)||16);
+    if(src.length<=limit)return src;
+    const kept=src.slice(0,limit-1),hidden=src.length-kept.length;
+    kept.push({type:'另有 '+hidden+' 条',low:null,high:null,distance:null,status:'省略',period:'',source:'',missing:false,summary:true});
+    return kept;
+  }
+
   function axisLabelSelection(candidates,coordinateFn,minGap,reserved){
     const gap=Number(minGap||14);
     const blocked=(reserved||[]).map(Number).filter(finite);
@@ -379,6 +387,6 @@
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,utcWeekStart,
     weightedStats,anchoredVwapSeries,alignSeriesToBars,valueArea,approxVolumeProfile,tpoProfile,exactProfile,profileIsFresh,
     atr14,detectZones,markZoneTouches,mergeZones,zoneState,selectZones,rangeOverlapRatio,suppressValueAreas,filterValueAreas,inPriceView,zoneIntersectsView,
-    wasZoneTouched,isPocNaked,selectNakedPocs,mergeKeyLevels,selectKeyLevels,axisLabelSelection,regionLabelLayout,roundToTick
+    wasZoneTouched,isPocNaked,selectNakedPocs,mergeKeyLevels,selectKeyLevels,capTableRows,axisLabelSelection,regionLabelLayout,roundToTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);

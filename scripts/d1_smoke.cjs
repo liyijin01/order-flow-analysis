@@ -623,6 +623,17 @@ function assertBoundaryStable(before,after,label){
       await page.close();
     }
 
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
+      await routeMarket(page,requests);await routeKeyLevels(page,'fixture');await routeSnapshotThrough(page,'2026-10-02T00:00:00Z');
+      await page.goto(pageUrl+'?tpl=combined&symbol=ETHUSDT&tf=1h&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const rows=await page.evaluate(()=>window.__analysisDebug.model.tableRows.length);
+      if(rows>16)throw new Error('D12b new-quarter table exceeded 16 rows: '+rows);
+      await page.close();
+    }
+
+    console.log('D12b daily PNG regression passed: new-quarter combined table is capped at 16 rows.');
     console.log('D12 browser smoke passed: default quarter template, 30-day 1h window, 18% margin, layer gating, PQ lines, global style and combined restore.');
     console.log('D10 browser smoke passed: filtered merged key levels, 404 fallback and axis-label spacing.');
     console.log('D5 browser smoke passed: rotation settling, latest-price reservation, legend consistency, mobile table and snapshot cutoff.');

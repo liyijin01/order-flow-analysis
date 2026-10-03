@@ -148,3 +148,12 @@ test('D11 key levels prefer quarters, cap monthly lines and enforce price-span g
   assert.ok(got.selected.filter(x=>x.keyKind!=='py-month').length>=4);
 });
 
+
+
+test('D12b combined table is capped at 16 rows with a summary row',()=>{
+  const rows=Array.from({length:20},(_,i)=>({type:'row '+i,high:200-i}));
+  const got=E.capTableRows(rows,16);
+  assert.equal(got.length,16);
+  assert.equal(got[15].summary,true);
+  assert.equal(got[15].type,'另有 5 条');
+});
