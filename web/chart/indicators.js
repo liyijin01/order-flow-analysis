@@ -173,6 +173,42 @@
     return out;
   }
 
+  const MONTH_SHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function monthlyBarClosed(bar,asOfMs){
+    const close=Number(bar&&bar.closeTime),cut=Number(asOfMs);
+    if(Number.isFinite(close)&&Number.isFinite(cut))return close<cut;
+    return !!(bar&&bar.complete);
+  }
+  function monthlyLabel(bar,side){
+    const d=new Date(Number(bar.time)*1000);
+    return MONTH_SHORT[d.getUTCMonth()]+' '+d.getUTCFullYear()+' '+(side==='high'?'H':'L');
+  }
+  function monthlyStructureLevels(bars,currentPrice,asOfMs){
+    const src=(bars||[]).slice().sort((a,b)=>Number(a.time)-Number(b.time)),current=Number(currentPrice),pivots=[];
+    for(let i=1;i<src.length-1;i++){
+      const prev=src[i-1],bar=src[i],next=src[i+1];
+      if(!monthlyBarClosed(next,asOfMs))continue;
+      for(const side of ['high','low']){
+        const price=Number(bar[side]),turn=side==='high'
+          ? price>Number(prev.high)&&price>Number(next.high)
+          : price<Number(prev.low)&&price<Number(next.low);
+        if(!turn)continue;
+        let broken=false;
+        for(let j=i+1;j<src.length;j++){
+          const later=src[j];if(!monthlyBarClosed(later,asOfMs))continue;
+          const close=Number(later.close);
+          if((side==='high'&&close>price)||(side==='low'&&close<price)){broken=true;break;}
+        }
+        const d=new Date(Number(bar.time)*1000),month=d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0');
+        pivots.push({index:i,time:Number(bar.time),month,side,price,broken,label:broken?'S/R':monthlyLabel(bar,side)});
+      }
+    }
+    const nearest=(rows)=>rows.sort((a,b)=>Math.abs(a.price-current)-Math.abs(b.price-current))[0]||null;
+    const upper=nearest(pivots.filter(x=>x.price>current&&(x.broken||x.side==='high')));
+    const lower=nearest(pivots.filter(x=>x.price<current&&(x.broken||x.side==='low')));
+    return{upper,lower,pivots};
+  }
+
   function singlePrintRanges(rows,binSize,minBins){
     const size=Number(binSize)||1,sorted=rows.slice().sort((a,b)=>a[0]-b[0]);
     let start=0,end=sorted.length-1;
@@ -251,7 +287,7 @@
   }
 
   global.OrderFlowIndicators={
-    valueArea,anchoredVwap,rollingVwap,anchoredPeriodStats,weeklyVwapStats,weeklyProjectionStats,tpoProfiles,singlePrintRanges,approxVolumeProfile,
+    valueArea,anchoredVwap,rollingVwap,anchoredPeriodStats,weeklyVwapStats,weeklyProjectionStats,monthlyBarClosed,monthlyStructureLevels,tpoProfiles,singlePrintRanges,approxVolumeProfile,
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,periodKey,periodBounds,
     exactProfileToVp,roundToTick,tickPrecision
   };
