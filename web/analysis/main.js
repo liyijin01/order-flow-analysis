@@ -11,7 +11,7 @@
     inFlight:null,abortController:null,lastSuccessAt:0,defaultViewRange:null,resizeToken:0,resizeSettle:null,watermark:null,countdownTimer:null,crosshairTime:null
   };
 
-  function tfLabel(tf){return({'1h':'1小时','4h':'4小时','1d':'1天'})[tf]||tf;}
+  function tfLabel(tf){return({'30m':'30分钟','1h':'1小时','4h':'4小时','1d':'1天'})[tf]||tf;}
   function symbolMeta(){return SYMBOLS[state.symbol]||{displayName:state.symbol,tickSize:'0.01',ladderBin:'0.1'};}
   function pricePrecision(){const s=String(symbolMeta().tickSize||'0.01'),i=s.indexOf('.');return i<0?0:s.length-i-1;}
   function templateConfig(){const all=state.rules&&state.rules.templates||{};return all[state.template]||all.combined||{};}

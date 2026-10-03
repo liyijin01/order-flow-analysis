@@ -35,6 +35,7 @@
   },
   "zones": {
     "calcIntervals": {
+      "30m": "4h",
       "1h": "4h",
       "4h": "1d",
       "1d": "1w"

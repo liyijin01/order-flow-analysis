@@ -8,7 +8,7 @@ fs.mkdirSync(outDir,{recursive:true});
 fs.mkdirSync(path.dirname(latestPath),{recursive:true});
 
 const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],combinedTfs=['4h','1h','1d'],quarterTfs=['1h','4h'],rvwapTfs=['4h'];
-const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
+const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
 
 (async()=>{
   const browser=await chromium.launch({channel:'chrome',headless:true});

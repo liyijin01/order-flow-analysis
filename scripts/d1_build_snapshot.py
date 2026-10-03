@@ -131,7 +131,7 @@ def main(argv=None):
     daily_start={s:max(INCEPTION[s],target-timedelta(weeks=420)) for s in SYMBOLS}
     starts={
         "1h":pq_start,
-        "30m":pm_start,
+        "30m":min(pm_start,target-timedelta(days=42)),
         "4h":target-timedelta(hours=4*3000),
     }
 
