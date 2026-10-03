@@ -188,6 +188,7 @@ class D10LevelTests(unittest.TestCase):
                 "end": datetime(year + 1, 1, 1, tzinfo=timezone.utc),
             }
             vwap, vah, val, definition = year_levels("BTCUSDT", spec, load_range)
+            print(f"D13 yearly gold {year}: VWAP={vwap:.4f} VAH={vah:.4f} VAL={val:.4f}")
             self.assertEqual(definition, "Y / 4h VWAP±1σ (hlc3)")
             values = {"VWAP": vwap, "VAH": vah, "VAL": val}
             for side, (reference, tolerance) in checks.items():

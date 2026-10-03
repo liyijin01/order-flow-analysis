@@ -7,7 +7,7 @@ const latestPath=path.resolve(process.env.ANALYSIS_LATEST||'_site/analysis/lates
 fs.mkdirSync(outDir,{recursive:true});
 fs.mkdirSync(path.dirname(latestPath),{recursive:true});
 
-const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],combinedTfs=['4h','1h','1d'],quarterTfs=['1h','4h'];
+const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],combinedTfs=['4h','1h','1d'],quarterTfs=['1h','4h'],rvwapTfs=['4h'];
 const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
 
 (async()=>{
@@ -39,7 +39,14 @@ const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
       tableVisible:getComputedStyle(document.querySelector('.table-wrap')).display!=='none',
       legendVisible:getComputedStyle(document.getElementById('analysisLegend')).display!=='none',
       axis:window.__analysisDebug.axisLabels(),
-      tableRows:window.__analysisDebug.model?.tableRows?.length||0
+      tableRows:window.__analysisDebug.model?.tableRows?.length||0,
+      reference:(template==='rvwap'&&symbol==='BTCUSDT'?(()=>{
+        const d=window.__analysisDebug,m=d.model,target=Date.UTC(2026,8,30,16,0,0)/1000,curves=m.curves||[];
+        const cv=id=>{const c=curves.find(x=>x.id===id),p=c&&c.points.find(x=>Number(x.time)===target);return p&&p.value;};
+        const ys=(m.rvwap&&m.rvwap.yearSegments||[]).find(x=>target>=x.start&&target<x.end),yp=ys&&ys.points.find(x=>Number(x.time)===target);
+        const l=(m.yearLevels||[]).find(x=>x.label==='2024 VAH');
+        return{targetUtc:new Date(target*1000).toISOString(),yVwap:yp&&yp.vwap,yUpper:yp&&yp.upper,yLower:yp&&yp.lower,rvwap30:cv('rvwap-30'),rvwap60:cv('rvwap-60'),rvwap90:cv('rvwap-90'),rvwap365:cv('rvwap-365'),y2024Vah:l&&l.price};
+      })():null)
     }));
     if(errors.length)throw new Error(symbol+' '+tf+' '+template+' browser errors: '+errors.join(' | '));
     if(meta.template!==template)throw new Error(symbol+' '+tf+' template mismatch '+JSON.stringify(meta));
@@ -55,26 +62,29 @@ const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
     const cutoffMs=Date.parse(meta.cutoff),calcMsValue=Date.parse(meta.calcLastClosedUtc),earliest=cutoffMs-(calcMs[tf]+86400_000);
     if(calcMsValue<earliest)throw new Error(symbol+' '+tf+' '+template+' calcLastClosedUtc too stale: '+meta.calcLastClosedUtc+' cutoff '+meta.cutoff);
     cutoff=cutoff||meta.cutoff;if(cutoff!==meta.cutoff)throw new Error('snapshot cutoffs disagree: '+cutoff+' vs '+meta.cutoff);
-    const fileName=template==='quarter'?symbol+'-quarter-'+tf+'.png':symbol+'-'+tf+'.png',file=path.join(outDir,fileName);
+    const fileName=template==='combined'?symbol+'-'+tf+'.png':symbol+'-'+template+'-'+tf+'.png',file=path.join(outDir,fileName);
     await page.locator('#analysisCapture').screenshot({path:file});
     const size=fs.statSync(file).size;if(size<50*1024)throw new Error(file+' is only '+size+' bytes');
     const png=fs.readFileSync(file),height=png.readUInt32BE(20);
     const combinedMaxHeight=140+760+34+Math.max(1,meta.tableRows)*24+36+20;
-    const maxHeight=template==='quarter'?900:combinedMaxHeight;
+    const maxHeight=template==='combined'?combinedMaxHeight:900;
     if(height>maxHeight)throw new Error(file+' height '+height+' exceeds '+maxHeight+'px for '+meta.tableRows+' table rows');
     manifest.push({
       symbol,timeframe:tf,template,view:meta.windowMode,file:path.basename(file),bytes:size,height,status:meta.status,
       visibleBars:meta.visibleBars,logicalSlots:meta.logicalSlots,calcLastClosedUtc:meta.calcLastClosedUtc,
-      supply:meta.supply,demand:meta.demand,drawn:meta.drawn,offView:meta.offView,regions:meta.regions,levels:meta.levels,keyLevels:meta.keyLevels
+      supply:meta.supply,demand:meta.demand,drawn:meta.drawn,offView:meta.offView,regions:meta.regions,levels:meta.levels,keyLevels:meta.keyLevels,reference:meta.reference
     });
     await page.close();
   }
   try{
     for(const symbol of symbols)for(const tf of combinedTfs)await capture(symbol,tf,'combined');
     for(const symbol of symbols)for(const tf of quarterTfs)await capture(symbol,tf,'quarter');
+    for(const symbol of symbols)for(const tf of rvwapTfs)await capture(symbol,tf,'rvwap');
   } finally {await browser.close();}
-  const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter'],files:manifest};
+  const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap'],files:manifest};
   fs.writeFileSync(latestPath,JSON.stringify(latest,null,2));
   fs.writeFileSync(path.join(outDir,'manifest.json'),JSON.stringify(manifest,null,2));
+  const reference=manifest.find(x=>x.symbol==='BTCUSDT'&&x.template==='rvwap')?.reference;
+  if(reference)console.log('D13 BTC reference '+JSON.stringify(reference));
   console.log('Generated '+manifest.length+' analysis PNGs; cutoff '+cutoff);
 })().catch(e=>{console.error(e);process.exit(1);});
