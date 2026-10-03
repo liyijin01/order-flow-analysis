@@ -40,6 +40,11 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
       legendVisible:getComputedStyle(document.getElementById('analysisLegend')).display!=='none',
       axis:window.__analysisDebug.axisLabels(),
       tableRows:window.__analysisDebug.model?.tableRows?.length||0,
+      values:(template==='weekly'?(()=>{
+        const m=window.__analysisDebug.model,last=Number(m.last.time),seg=(m.weekly&&m.weekly.segments||[]).find(x=>last>=Number(x.start)&&last<Number(x.end));
+        const p=seg&&(seg.points||[]).find(x=>Number(x.time)===last),proj=seg&&(m.weekly&&m.weekly.projections||[]).find(x=>Number(x.weekStart)===Number(seg.start));
+        return{weekStart:seg&&seg.start,vwap:p&&p.vwap,upper:p&&p.upper,lower:p&&p.lower,pwVwap:proj&&proj.pwVwap,pwUpper:proj&&proj.pwUpper,pwLower:proj&&proj.pwLower,yearOpen:m.weekly&&m.weekly.yearOpen};
+      })():null),
       reference:(template==='rvwap'&&symbol==='BTCUSDT'?(()=>{
         const d=window.__analysisDebug,m=d.model,target=Date.UTC(2026,8,30,16,0,0)/1000,curves=m.curves||[];
         const cv=id=>{const c=curves.find(x=>x.id===id),p=c&&c.points.find(x=>Number(x.time)===target);return p&&p.value;};
@@ -57,6 +62,10 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
       if(meta.tableVisible||meta.legendVisible)throw new Error(symbol+' '+tf+' quarter template chrome visible '+JSON.stringify(meta));
       const r=meta.range||{},right=Math.max(0,Number(r.to)-(meta.displayBars-1)),span=Number(r.to)-Number(r.from),fraction=span>0?right/span:0;
       if(Math.abs(fraction-.18)>.025)throw new Error(symbol+' '+tf+' quarter right margin '+fraction);
+    }
+    if(template==='weekly'){
+      const v=meta.values||{},keys=['weekStart','vwap','upper','lower','pwVwap','pwUpper','pwLower','yearOpen'];
+      if(keys.some(k=>!Number.isFinite(Number(v[k]))))throw new Error(symbol+' '+tf+' weekly values incomplete '+JSON.stringify(v));
     }
     if(!meta.cutoff||!meta.calcLastClosedUtc)throw new Error(symbol+' '+tf+' '+template+' missing cutoff metadata');
     const cutoffMs=Date.parse(meta.cutoff),calcMsValue=Date.parse(meta.calcLastClosedUtc),earliest=cutoffMs-(calcMs[tf]+86400_000);
