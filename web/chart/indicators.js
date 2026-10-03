@@ -209,6 +209,47 @@
     return{upper,lower,pivots};
   }
 
+  function monthlyImbalances(bars,asOfMs){
+    const src=(bars||[]).slice().sort((a,b)=>Number(a.time)-Number(b.time)),out=[];
+    for(let i=0;i<src.length-2;i++){
+      const c1=src[i],c2=src[i+1],c3=src[i+2];
+      if(!monthlyBarClosed(c1,asOfMs)||!monthlyBarClosed(c2,asOfMs))continue;
+      let type=null,low=null,high=null;
+      if(Number(c3.low)>Number(c1.high)){type='bullish';low=Number(c1.high);high=Number(c3.low);}
+      else if(Number(c3.high)<Number(c1.low)){type='bearish';low=Number(c3.high);high=Number(c1.low);}
+      if(!type)continue;
+      let filled=false;
+      for(let j=i+3;j<src.length;j++){
+        const later=src[j];
+        if(type==='bullish'){
+          const touch=Number(later.low);
+          if(touch<=low){filled=true;break;}
+          if(touch<high)high=touch;
+        }else{
+          const touch=Number(later.high);
+          if(touch>=high){filled=true;break;}
+          if(touch>low)low=touch;
+        }
+      }
+      if(filled||!(high>low))continue;
+      const d1=new Date(Number(c1.time)*1000),d3=new Date(Number(c3.time)*1000);
+      out.push({
+        type,low,high,c1:Number(c1.time),c3:Number(c3.time),
+        c1Month:d1.getUTCFullYear()+'-'+String(d1.getUTCMonth()+1).padStart(2,'0'),
+        c3Month:d3.getUTCFullYear()+'-'+String(d3.getUTCMonth()+1).padStart(2,'0'),
+        forming:!monthlyBarClosed(c3,asOfMs),formingEdge:type==='bullish'?'top':'bottom'
+      });
+    }
+    return out;
+  }
+  function selectMonthlyImbalance(zones,currentPrice,viewMin,viewMax,padPct){
+    const current=Number(currentPrice),lo=Number(viewMin),hi=Number(viewMax),span=Math.max(1e-12,hi-lo),pad=span*Math.max(0,Number(padPct)||0)/100;
+    const visible=(zones||[]).filter(z=>Number(z.high)>=lo-pad&&Number(z.low)<=hi+pad);
+    const distance=z=>current<Number(z.low)?Number(z.low)-current:(current>Number(z.high)?current-Number(z.high):0);
+    visible.sort((a,b)=>distance(a)-distance(b));
+    return visible[0]||null;
+  }
+
   function singlePrintRanges(rows,binSize,minBins){
     const size=Number(binSize)||1,sorted=rows.slice().sort((a,b)=>a[0]-b[0]);
     let start=0,end=sorted.length-1;
@@ -287,7 +328,7 @@
   }
 
   global.OrderFlowIndicators={
-    valueArea,anchoredVwap,rollingVwap,anchoredPeriodStats,weeklyVwapStats,weeklyProjectionStats,monthlyBarClosed,monthlyStructureLevels,tpoProfiles,singlePrintRanges,approxVolumeProfile,
+    valueArea,anchoredVwap,rollingVwap,anchoredPeriodStats,weeklyVwapStats,weeklyProjectionStats,monthlyBarClosed,monthlyStructureLevels,monthlyImbalances,selectMonthlyImbalance,tpoProfiles,singlePrintRanges,approxVolumeProfile,
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,periodKey,periodBounds,
     exactProfileToVp,roundToTick,tickPrecision
   };

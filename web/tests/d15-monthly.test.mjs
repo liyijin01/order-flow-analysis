@@ -28,3 +28,33 @@ test('D15 forming month cannot confirm a turning point or break S/R',()=>{
   const got=I.monthlyStructureLevels(tiny,15,3000);
   assert.equal(got.pivots.length,0);
 });
+
+
+test('D15 monthly imbalance gold selects Aug-Oct bullish gap',()=>{
+  const gaps=I.monthlyImbalances(bars,asOf);
+  const recent=bars.slice(-12),viewMin=Math.min(...recent.map(x=>x.low)),viewMax=Math.max(...recent.map(x=>x.high));
+  const got=I.selectMonthlyImbalance(gaps,current,viewMin,viewMax,10);
+  assert.ok(got);
+  assert.equal(got.type,'bullish');
+  assert.equal(got.c1Month,'2026-08');
+  assert.equal(got.c3Month,'2026-10');
+  assert.equal(got.forming,true);
+  assert.equal(got.formingEdge,'top');
+  assert.ok(rel(got.low,81478.87)<=0.003,'imbalance low '+got.low);
+  assert.ok(rel(got.high,83410.39)<=0.005,'imbalance high '+got.high);
+});
+
+test('D15 bullish imbalance shrinks and disappears when fully filled',()=>{
+  const t=i=>Date.UTC(2026,i,1)/1000,ct=i=>Date.UTC(2026,i+1,1)-1,cut=Date.UTC(2026,5,15);
+  const base=[
+    {time:t(0),high:100,low:80,close:90,closeTime:ct(0)},
+    {time:t(1),high:120,low:90,close:110,closeTime:ct(1)},
+    {time:t(2),high:150,low:130,close:140,closeTime:ct(2)},
+    {time:t(3),high:145,low:115,close:120,closeTime:ct(3)}
+  ];
+  let gaps=I.monthlyImbalances(base,cut);
+  assert.equal(gaps.length,1);assert.equal(gaps[0].low,100);assert.equal(gaps[0].high,115);
+  const filled=base.concat([{time:t(4),high:120,low:95,close:100,closeTime:Date.UTC(2026,6,1)-1}]);
+  gaps=I.monthlyImbalances(filled,Date.UTC(2026,6,15));
+  assert.equal(gaps.length,0);
+});
