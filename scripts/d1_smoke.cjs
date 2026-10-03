@@ -586,13 +586,14 @@ function assertBoundaryStable(before,after,label){
           count:keys.length,
           labels:keys.map(x=>x.label),
           sourceIds:keys.map(x=>x.sourceId),
+          merged:(m.allLevels||[]).some(x=>x.kind==='key'&&x.label.includes('Q1 VAH')&&x.label.includes('PY Q4 VAH')&&x.label.includes(' · ')),
           inside:keys.every(x=>E.inPriceView(x.price,m.viewMin,m.viewMax,pad)),
           table:Array.from(document.querySelectorAll('#regionRows tr')).map(tr=>tr.textContent)
         };
       });
       if(result.count>6||!result.inside)throw new Error('D10 selected key levels '+JSON.stringify(result));
       if(result.labels.some(x=>x.includes('Q2 VAL')))throw new Error('D10 previous quarter duplicated '+JSON.stringify(result));
-      if(!result.labels.some(x=>x.includes('Q1 VAH')&&x.includes('PY Q4 VAH')&&x.includes(' · ')))throw new Error('D10 near-tick merge missing '+JSON.stringify(result));
+      if(!result.merged)throw new Error('D10 near-tick merge missing '+JSON.stringify(result));
       const tableCheck=await page.evaluate(()=>{
         const rows=window.__analysisDebug.model.tableRows,keyRows=rows.filter(x=>x.source==='precomputed'&&!x.summary),summary=rows.find(x=>x.summary);
         return{keyCount:keyRows.length,drawn:(window.__analysisDebug.model.keyLevels||[]).length,summary:summary&&summary.type,offView:keyRows.some(x=>String(x.status).includes('图外'))};
