@@ -11,7 +11,7 @@
     inFlight:null,abortController:null,lastSuccessAt:0,defaultViewRange:null,resizeToken:0,resizeSettle:null,watermark:null,countdownTimer:null,crosshairTime:null
   };
 
-  function tfLabel(tf){return({'30m':'30分钟','1h':'1小时','4h':'4小时','1d':'1天'})[tf]||tf;}
+  function tfLabel(tf){return({'30m':'30分钟','1h':'1小时','4h':'4小时','1d':'1天','1M':'1月'})[tf]||tf;}
   function symbolMeta(){return SYMBOLS[state.symbol]||{displayName:state.symbol,tickSize:'0.01',ladderBin:'0.1'};}
   function pricePrecision(){const s=String(symbolMeta().tickSize||'0.01'),i=s.indexOf('.');return i<0?0:s.length-i-1;}
   function templateConfig(){const all=state.rules&&state.rules.templates||{};return all[state.template]||all.combined||{};}
@@ -597,7 +597,7 @@
       model.infoValues={current:cv,previous:pv,barTime:Number(bar.time)};
     }
   }
-  function formatRemaining(ms){const sec=Math.max(0,Math.floor(ms/1000)),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return h>0?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
+  function formatRemaining(ms){const sec=Math.max(0,Math.floor(ms/1000)),d=Math.floor(sec/86400),h=Math.floor((sec%86400)/3600),m=Math.floor((sec%3600)/60),s=sec%60;if(d>0)return d+'天 '+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');return h>0?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
   function updateCountdown(){
     const el=$('closeCountdown');el.style.display='none';el.textContent='';
     if(state.snapshot||!state.model){if(state.primitive)state.primitive.setCountdown(null);return;}
@@ -681,7 +681,7 @@
 
   function setSelection(symbol,tf){
     if(symbol&&SYMBOLS[symbol])state.symbol=symbol;
-    if(['30m','4h','1h','1d'].includes(tf))state.timeframe=tf;
+    if(['30m','4h','1h','1d','1M'].includes(tf))state.timeframe=tf;
     state.bundle=null;state.lastFullLoadAt=0;state.refreshWarning=null;
     updateSelectionState();
     $('infoLine').textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe)+' · 加载中…';
@@ -730,7 +730,7 @@
     state.snapshot=q.get('snapshot')==='1';
     if(state.snapshot)document.body.classList.add('snapshot');
     await loadRules();
-    const cfg=templateConfig(),requestedTf=['30m','4h','1h','1d'].includes(q.get('tf'))?q.get('tf'):null;
+    const cfg=templateConfig(),requestedTf=['30m','4h','1h','1d','1M'].includes(q.get('tf'))?q.get('tf'):null;
     state.timeframe=requestedTf&&(cfg.timeframes||[]).includes(requestedTf)?requestedTf:(cfg.defaultTimeframe||(cfg.timeframes||[])[0]||'1h');
     renderLegend();createChart();applyTemplateChrome();
     document.querySelectorAll('[data-symbol]').forEach(b=>b.addEventListener('click',()=>setSelection(b.dataset.symbol,state.timeframe)));

@@ -38,7 +38,8 @@
       "30m": "4h",
       "1h": "4h",
       "4h": "1d",
-      "1d": "1w"
+      "1d": "1w",
+      "1M": "1d"
     },
     "calcBars": 400,
     "impulseMaxBars": 3,
