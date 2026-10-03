@@ -129,7 +129,9 @@
       "keyLevelStyle": {
         "color": "rgba(236,239,244,.75)",
         "style": "dashed",
-        "axisLabel": false
+        "axisLabel": true,
+        "axisColor": "#3a4152",
+        "axisTextColor": "#eceff4"
       }
     },
     "combined": {

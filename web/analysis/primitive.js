@@ -6,15 +6,16 @@
   class AxisLabelView{
     constructor(owner,candidate){this.owner=owner;this.candidate=candidate;}
     coordinate(){
+      if(Number.isFinite(Number(this.candidate.coordinate)))return Number(this.candidate.coordinate);
       if(!this.owner.series)return-1000;
       const y=this.owner.series.priceToCoordinate(Number(this.candidate.price));
       return y==null?-1000:Number(y);
     }
-    text(){return this.owner.formatPrice(this.candidate.price);}
-    textColor(){return'#111827';}
+    text(){return this.candidate.text!=null?String(this.candidate.text):this.owner.formatPrice(this.candidate.price);}
+    textColor(){return this.candidate.textColor||'#111827';}
     backColor(){return this.candidate.color||'#e5e7eb';}
-    visible(){return this.owner.axisVisible(this.candidate.id);}
-    tickVisible(){return true;}
+    visible(){return this.candidate.forceVisible===true?true:this.owner.axisVisible(this.candidate.id);}
+    tickVisible(){return this.candidate.tickVisible!==false;}
   }
 
   class AnalysisBoardPrimitive{
@@ -27,6 +28,7 @@
     paneViews(){return[this._view];}
     updateAllViews(){}
     setModel(model){this.model=model||{};if(this.requestUpdate)this.requestUpdate();}
+    setCountdown(countdown){this.model={...this.model,countdown:countdown||null};if(this.requestUpdate)this.requestUpdate();}
     formatPrice(price){
       return this.model.priceFormatter?this.model.priceFormatter(Number(price)):Number(price).toLocaleString();
     }
@@ -58,17 +60,26 @@
           out.push({id:r.id+':near',price:r.top,priority:3,color,currentPrice:current});
         }
       }
-      for(const l of this.model.levels||[])if(l.axisLabel!==false)out.push({id:l.id+':price',price:l.price,priority:1,color:l.axisColor||l.color||'#e5e7eb',currentPrice:current});
+      for(const l of this.model.levels||[])if(l.axisLabel!==false)out.push({id:l.id+':price',price:l.price,priority:1,color:l.axisColor||l.color||'#e5e7eb',textColor:l.axisTextColor||'#111827',currentPrice:current});
       return out;
+    }
+    countdownCandidate(){
+      const c=this.model.countdown;if(!c||!c.text||!this.series)return null;
+      const currentY=this.series.priceToCoordinate(Number(this.model.currentPrice));if(currentY==null)return null;
+      const gap=Number(this.model.axisMinGap)||18,offset=Math.max(gap,Number(c.offsetPx)||gap);
+      return{id:'countdown',coordinate:Number(currentY)+offset,text:String(c.text),color:c.color||'#e6e9ef',textColor:c.textColor||'#111827',tickVisible:false,forceVisible:true,countdown:true};
     }
     axisLayout(){
       if(!this.series)return[];
-      const currentY=this.series.priceToCoordinate(Number(this.model.currentPrice));
-      const reserved=currentY==null?[]:[Number(currentY)];
+      const currentY=this.series.priceToCoordinate(Number(this.model.currentPrice)),countdown=this.countdownCandidate();
+      const reserved=currentY==null?[]:[Number(currentY)];if(countdown)reserved.push(Number(countdown.coordinate));
       return E.axisLabelSelection(this.axisCandidates(),p=>this.series.priceToCoordinate(Number(p)),Number(this.model.axisMinGap)||14,reserved);
     }
     axisVisible(id){const row=this.axisLayout().find(x=>x.id===id);return!!(row&&row.visible);}
-    priceAxisViews(){return this.axisCandidates().map(c=>new AxisLabelView(this,c));}
+    priceAxisViews(){
+      const out=this.axisCandidates().map(c=>new AxisLabelView(this,c)),countdown=this.countdownCandidate();
+      if(countdown)out.push(new AxisLabelView(this,countdown));return out;
+    }
 
     autoscaleInfo(){
       const vals=[];
@@ -117,10 +128,12 @@
     }
 
     debugAxisLabels(){
-      return this.axisLayout().map(x=>{
+      const out=this.axisLayout().map(x=>{
         const actual=this.series?this.series.priceToCoordinate(Number(x.price)):null;
-        return{id:x.id,price:x.price,visible:x.visible,coordinate:x.y,priceCoordinate:actual,diff:actual==null?null:Math.abs(Number(actual)-Number(x.y)),priority:x.priority};
+        return{id:x.id,price:x.price,visible:x.visible,coordinate:x.y,priceCoordinate:actual,diff:actual==null?null:Math.abs(Number(actual)-Number(x.y)),priority:x.priority,color:x.color,textColor:x.textColor};
       });
+      const countdown=this.countdownCandidate();if(countdown)out.push({id:countdown.id,text:countdown.text,visible:true,coordinate:countdown.coordinate,priceCoordinate:null,diff:null,priority:99,color:countdown.color,textColor:countdown.textColor,countdown:true});
+      return out;
     }
   }
 
