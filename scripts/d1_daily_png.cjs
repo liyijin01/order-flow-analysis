@@ -38,7 +38,8 @@ const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
       keyLevels:window.__analysisDebug.model?.keyLevels?.length||0,
       tableVisible:getComputedStyle(document.querySelector('.table-wrap')).display!=='none',
       legendVisible:getComputedStyle(document.getElementById('analysisLegend')).display!=='none',
-      axis:window.__analysisDebug.axisLabels()
+      axis:window.__analysisDebug.axisLabels(),
+      tableRows:window.__analysisDebug.model?.tableRows?.length||0
     }));
     if(errors.length)throw new Error(symbol+' '+tf+' '+template+' browser errors: '+errors.join(' | '));
     if(meta.template!==template)throw new Error(symbol+' '+tf+' template mismatch '+JSON.stringify(meta));
@@ -57,8 +58,10 @@ const calcMs={'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000};
     const fileName=template==='quarter'?symbol+'-quarter-'+tf+'.png':symbol+'-'+tf+'.png',file=path.join(outDir,fileName);
     await page.locator('#analysisCapture').screenshot({path:file});
     const size=fs.statSync(file).size;if(size<50*1024)throw new Error(file+' is only '+size+' bytes');
-    const png=fs.readFileSync(file),height=png.readUInt32BE(20),maxHeight=template==='quarter'?900:1300;
-    if(height>maxHeight)throw new Error(file+' height '+height+' exceeds '+maxHeight+'px');
+    const png=fs.readFileSync(file),height=png.readUInt32BE(20);
+    const combinedMaxHeight=140+760+34+Math.max(1,meta.tableRows)*24+36+20;
+    const maxHeight=template==='quarter'?900:combinedMaxHeight;
+    if(height>maxHeight)throw new Error(file+' height '+height+' exceeds '+maxHeight+'px for '+meta.tableRows+' table rows');
     manifest.push({
       symbol,timeframe:tf,template,view:meta.windowMode,file:path.basename(file),bytes:size,height,status:meta.status,
       visibleBars:meta.visibleBars,logicalSlots:meta.logicalSlots,calcLastClosedUtc:meta.calcLastClosedUtc,

@@ -199,7 +199,25 @@ function assertBoundaryStable(before,after,label){
       if(q.display!==720||q.days<29||q.days>31)throw new Error('D12 1h 30-day window '+JSON.stringify(q));
       if(Math.abs(q.rightFraction-.18)>.025)throw new Error('D12 right margin '+JSON.stringify(q));
       if(q.regions.length||q.npoc||q.tableRows||q.tableDisplay!=='none'||q.legendDisplay!=='none'||!q.volumeAbsent)throw new Error('D12 disabled layers '+JSON.stringify(q));
-      if(q.pq.length!==2||q.pq.some(x=>x.style!=='dashed'||x.axisLabel!==false)||q.keyCount>6||!q.keyWhiteDashed)throw new Error('D12 quarter lines '+JSON.stringify(q));
+      if(q.pq.length!==2||q.pq.some(x=>x.style!=='dashed'||x.axisLabel!==true)||q.keyCount>6||!q.keyWhiteDashed)throw new Error('D12 quarter lines '+JSON.stringify(q));
+      const gaps=await page.evaluate(()=>{
+        const d=window.__analysisDebug,m=d.model;
+        const rows=(m.levels||[]).filter(x=>x.kind==='key'||x.kind==='pq'||x.kind==='pq-bound').map(x=>({id:x.id,y:d.state.candles.priceToCoordinate(x.price)})).filter(x=>Number.isFinite(Number(x.y))).sort((a,b)=>a.y-b.y);
+        return rows.map((x,i)=>i?Math.abs(Number(x.y)-Number(rows[i-1].y)):Infinity);
+      });
+      if(gaps.some(x=>x<18))throw new Error('D12b quarter horizontal-line gap '+JSON.stringify(gaps));
+      await page.evaluate(()=>{window.__analysisDebug.model.last.closeTime=Date.now()+65000;});
+      await page.waitForTimeout(1100);
+      await page.waitForFunction(()=>window.__analysisDebug.axisLabels().some(x=>x.id==='countdown'),undefined,{timeout:5000});
+      const axisCheck=await page.evaluate(()=>{
+        const d=window.__analysisDebug,axis=d.axisLabels(),countdown=axis.find(x=>x.id==='countdown'),currentY=d.state.candles.priceToCoordinate(d.model.current);
+        const others=axis.filter(x=>x.visible&&x.id!=='countdown'),key=others.find(x=>String(x.id).startsWith('key-'));
+        return{countdown,currentY,others,key,domText:document.getElementById('closeCountdown').textContent,domDisplay:getComputedStyle(document.getElementById('closeCountdown')).display};
+      });
+      if(!axisCheck.countdown||!(Number(axisCheck.countdown.coordinate)>Number(axisCheck.currentY)))throw new Error('D12b countdown axis position '+JSON.stringify(axisCheck));
+      if(axisCheck.others.some(x=>Math.abs(Number(x.coordinate)-Number(axisCheck.countdown.coordinate))<14))throw new Error('D12b countdown axis collision '+JSON.stringify(axisCheck));
+      if(axisCheck.domText||axisCheck.domDisplay!=='none')throw new Error('D12b DOM countdown still visible '+JSON.stringify(axisCheck));
+      if(!axisCheck.key||axisCheck.key.color!=='#3a4152'||axisCheck.key.textColor!=='#eceff4')throw new Error('D12b key price-axis style '+JSON.stringify(axisCheck));
       if(q.upColor!=='#e6e9ef'||q.downColor!=='rgba(0,0,0,0)'||q.watermarkColor!=='rgba(196,140,60,.30)')throw new Error('D12 global style '+JSON.stringify(q));
       await page.click('[data-tpl="combined"]');
       await page.waitForFunction(()=>window.__analysisDebug?.template()==='combined'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
@@ -568,13 +586,14 @@ function assertBoundaryStable(before,after,label){
           count:keys.length,
           labels:keys.map(x=>x.label),
           sourceIds:keys.map(x=>x.sourceId),
+          merged:(m.allLevels||[]).some(x=>x.kind==='key'&&x.label.includes('Q1 VAH')&&x.label.includes('PY Q4 VAH')&&x.label.includes(' · ')),
           inside:keys.every(x=>E.inPriceView(x.price,m.viewMin,m.viewMax,pad)),
           table:Array.from(document.querySelectorAll('#regionRows tr')).map(tr=>tr.textContent)
         };
       });
       if(result.count>6||!result.inside)throw new Error('D10 selected key levels '+JSON.stringify(result));
       if(result.labels.some(x=>x.includes('Q2 VAL')))throw new Error('D10 previous quarter duplicated '+JSON.stringify(result));
-      if(!result.labels.some(x=>x.includes('Q1 VAH')&&x.includes('PY Q4 VAH')&&x.includes(' · ')))throw new Error('D10 near-tick merge missing '+JSON.stringify(result));
+      if(!result.merged)throw new Error('D10 near-tick merge missing '+JSON.stringify(result));
       const tableCheck=await page.evaluate(()=>{
         const rows=window.__analysisDebug.model.tableRows,keyRows=rows.filter(x=>x.source==='precomputed'&&!x.summary),summary=rows.find(x=>x.summary);
         return{keyCount:keyRows.length,drawn:(window.__analysisDebug.model.keyLevels||[]).length,summary:summary&&summary.type,offView:keyRows.some(x=>String(x.status).includes('图外'))};
@@ -623,6 +642,17 @@ function assertBoundaryStable(before,after,label){
       await page.close();
     }
 
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
+      await routeMarket(page,requests);await routeKeyLevels(page,'fixture');await routeSnapshotThrough(page,'2026-10-02T00:00:00Z');
+      await page.goto(pageUrl+'?tpl=combined&symbol=ETHUSDT&tf=1h&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const rows=await page.evaluate(()=>window.__analysisDebug.model.tableRows.length);
+      if(rows>16)throw new Error('D12b new-quarter table exceeded 16 rows: '+rows);
+      await page.close();
+    }
+
+    console.log('D12b daily PNG regression passed: new-quarter combined table is capped at 16 rows.');
     console.log('D12 browser smoke passed: default quarter template, 30-day 1h window, 18% margin, layer gating, PQ lines, global style and combined restore.');
     console.log('D10 browser smoke passed: filtered merged key levels, 404 fallback and axis-label spacing.');
     console.log('D5 browser smoke passed: rotation settling, latest-price reservation, legend consistency, mobile table and snapshot cutoff.');

@@ -123,7 +123,7 @@
       const ap=a.high==null?-Infinity:a.high,bp=b.high==null?-Infinity:b.high;
       return bp-ap||String(a.type).localeCompare(String(b.type));
     });
-    return out;
+    return E.capTableRows(out,16);
   }
 
   async function loadRules(){
@@ -305,12 +305,12 @@
 
     const drawnZoneIds=new Set(selectedZones.filter(z=>E.zoneIntersectsView(z,view.min,view.max,rules.zones.viewPadPct||50)).map(z=>z.id));
 
-    const allLevels=[];
+    const allLevels=[],templateKeyStyle=templateConfig().keyLevelStyle||{};
     const pq=areas.find(a=>a.scope==='PQ');
-    if(pq&&layerEnabled('pqVwap'))allLevels.push({id:'line-pq-vwap',kind:'pq',price:pq.pqVwap,from:qStart,label:'PQ VWAP',color:rules.colors.pqVwap,style:'solid',period:'Q / 1h',source:'exact'});
+    if(pq&&layerEnabled('pqVwap'))allLevels.push({id:'line-pq-vwap',kind:'pq',price:pq.pqVwap,from:qStart,label:'PQ VWAP',color:rules.colors.pqVwap,axisColor:rules.colors.pqVwap,axisTextColor:'#eceff4',axisLabel:true,style:'solid',period:'Q / 1h',source:'exact'});
     if(pq&&layerEnabled('pqBounds')){
-      allLevels.push({id:'line-pq-vah',kind:'pq-bound',price:pq.top,from:qStart,label:'PQ VAH',color:rules.colors.keyLevel,axisColor:rules.colors.keyAxis,axisLabel:false,style:'dashed',width:1,period:'Q / 1h VWAP±1σ',source:'exact'});
-      allLevels.push({id:'line-pq-val',kind:'pq-bound',price:pq.bottom,from:qStart,label:'PQ VAL',color:rules.colors.keyLevel,axisColor:rules.colors.keyAxis,axisLabel:false,style:'dashed',width:1,period:'Q / 1h VWAP±1σ',source:'exact'});
+      allLevels.push({id:'line-pq-vah',kind:'pq-bound',price:pq.top,from:qStart,label:'PQ VAH',color:rules.colors.keyLevel,axisColor:templateKeyStyle.axisColor||rules.colors.keyAxis,axisTextColor:templateKeyStyle.axisTextColor||'#111827',axisLabel:templateKeyStyle.axisLabel!==false,style:'dashed',width:1,period:'Q / 1h VWAP±1σ',source:'exact'});
+      allLevels.push({id:'line-pq-val',kind:'pq-bound',price:pq.bottom,from:qStart,label:'PQ VAL',color:rules.colors.keyLevel,axisColor:templateKeyStyle.axisColor||rules.colors.keyAxis,axisTextColor:templateKeyStyle.axisTextColor||'#111827',axisLabel:templateKeyStyle.axisLabel!==false,style:'dashed',width:1,period:'Q / 1h VWAP±1σ',source:'exact'});
     }
 
     const pocCandidates=[];
@@ -335,17 +335,21 @@
         const periodEnd=Date.parse(String(row.periodEnd||''));
         return Number.isFinite(periodEnd)&&periodEnd<=keyPeriodCutoffMs;
       });
-      const keyCfg=rules.keyLevels||{};
+      const keyCfg=rules.keyLevels||{},pane=state.chart&&state.chart.panes&&state.chart.panes()[0];
+      const paneHeight=pane&&typeof pane.getHeight==='function'?pane.getHeight():$('analysisChart').clientHeight;
+      const scaleMargins=state.candles&&state.candles.priceScale?state.candles.priceScale().options().scaleMargins:null;
+      const usableRatio=Math.max(.1,1-Math.max(0,Number(scaleMargins&&scaleMargins.top)||0)-Math.max(0,Number(scaleMargins&&scaleMargins.bottom)||0));
+      const plotHeight=paneHeight*usableRatio;
       keySelection=E.selectKeyLevels(
         eligibleKeyLevels,current,view.min,view.max,linePad,tick,keyCfg.maxCount||6,pqStart,
-        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,pq?[pq.bottom,pq.top]:[]
+        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,pq?[pq.pqVwap,pq.bottom,pq.top]:[],keyCfg.minGapPx||0,plotHeight
       );
-      const firstTime=Number(display[0].time),keyStyle=templateConfig().keyLevelStyle||{};
+      const firstTime=Number(display[0].time),keyStyle=templateKeyStyle;
       for(const row of keySelection.all){
         const monthly=row.keyKind==='py-month';
         allLevels.push({
           id:'key-'+row.id,kind:'key',price:Number(row.price),from:firstTime,label:row.label,
-          color:keyStyle.color||(monthly?rules.colors.keyMonth:rules.colors.keyLevel),axisColor:rules.colors.keyAxis,axisLabel:keyStyle.axisLabel,
+          color:keyStyle.color||(monthly?rules.colors.keyMonth:rules.colors.keyLevel),axisColor:keyStyle.axisColor||rules.colors.keyAxis,axisTextColor:keyStyle.axisTextColor||'#111827',axisLabel:keyStyle.axisLabel,
           style:keyStyle.style||(monthly?'solid':'dashed'),width:1,period:monthly?'M / 30m TPO':'Q / 1h VWAP±1σ',
           source:'precomputed',keyKind:row.keyKind,sourceId:row.id
         });
@@ -505,9 +509,11 @@
   }
   function formatRemaining(ms){const sec=Math.max(0,Math.floor(ms/1000)),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return h>0?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
   function updateCountdown(){
-    const el=$('closeCountdown');if(state.snapshot||!state.model){el.style.display='none';el.textContent='';return;}
-    const bar=state.model.last,closeMs=Number(bar.closeTime),left=closeMs-Date.now();if(!Number.isFinite(closeMs)||left<0){el.style.display='none';el.textContent='';return;}
-    el.textContent=fmtPrice(state.model.current)+' · '+formatRemaining(left);const y=state.candles.priceToCoordinate(state.model.current);if(y==null){el.style.display='none';return;}el.style.top=Math.max(2,Number(y)-10)+'px';el.style.display='block';
+    const el=$('closeCountdown');el.style.display='none';el.textContent='';
+    if(state.snapshot||!state.model){if(state.primitive)state.primitive.setCountdown(null);return;}
+    const bar=state.model.last,closeMs=Number(bar.closeTime),left=closeMs-Date.now();
+    if(!Number.isFinite(closeMs)||left<0){if(state.primitive)state.primitive.setCountdown(null);return;}
+    if(state.primitive)state.primitive.setCountdown({text:formatRemaining(left),offsetPx:Number(state.rules.axisLabels.minGapPx)||18,color:'#e6e9ef',textColor:'#111827'});
   }
 
   function updateSelectionState(){
@@ -658,7 +664,7 @@
       windowSpec:()=>windowSpec(),
       legend:()=>legendEntries(),
       candleStyle:()=>state.candles?state.candles.options():null,
-      chartInfo:()=>({line1:$('chartInfo1').textContent,line2:$('chartInfo2').textContent,countdown:$('closeCountdown').style.display==='none'?'':$('closeCountdown').textContent,watermark:symbolMeta().displayName+', '+tfLabel(state.timeframe),watermarkColor:WATERMARK_COLOR})
+      chartInfo:()=>({line1:$('chartInfo1').textContent,line2:$('chartInfo2').textContent,countdown:state.primitive&&state.primitive.model&&state.primitive.model.countdown?state.primitive.model.countdown.text:'',watermark:symbolMeta().displayName+', '+tfLabel(state.timeframe),watermarkColor:WATERMARK_COLOR})
     };
     await refresh(true);
     if(!state.snapshot){

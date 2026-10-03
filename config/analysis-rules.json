@@ -91,7 +91,8 @@
   "keyLevels": {
     "maxCount": 6,
     "maxMonthly": 2,
-    "minGapPct": 2
+    "minGapPct": 2,
+    "minGapPx": 18
   },
   "templates": {
     "quarter": {
@@ -128,7 +129,9 @@
       "keyLevelStyle": {
         "color": "rgba(236,239,244,.75)",
         "style": "dashed",
-        "axisLabel": false
+        "axisLabel": true,
+        "axisColor": "#3a4152",
+        "axisTextColor": "#eceff4"
       }
     },
     "combined": {
