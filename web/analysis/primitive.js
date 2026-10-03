@@ -50,10 +50,11 @@
     axisCandidates(){
       const out=[],current=Number(this.model.currentPrice)||0;
       for(const r of this.model.regions||[]){
-        const color=r.border||'#e5e7eb';
+        if(r.axisLabel===false)continue;
+        const color=r.axisColor||r.border||'#e5e7eb',textColor=r.axisTextColor||'#111827';
         if(r.type==='value'){
-          out.push({id:r.id+':top',price:r.top,priority:2,color,currentPrice:current});
-          out.push({id:r.id+':bottom',price:r.bottom,priority:2,color,currentPrice:current});
+          out.push({id:r.id+':top',price:r.top,priority:2,color,textColor,currentPrice:current});
+          out.push({id:r.id+':bottom',price:r.bottom,priority:2,color,textColor,currentPrice:current});
         }else if(r.type==='supply'){
           out.push({id:r.id+':near',price:r.bottom,priority:3,color,currentPrice:current});
         }else if(r.type==='demand'){
@@ -124,20 +125,20 @@
         if(c.label){const last=points[points.length-1],x=this.x(last.time,size.width),y=this.y(last.value);if(x!=null&&y!=null)labelTargets.push({id:c.id,text:c.label,x:x+8,targetY:y,color:c.labelColor||c.color||'#aeb7c8',priority:2,curve:true});}
       }
       for(const r of regions){
-        let x1=this.x(r.from,size.width),yt=this.y(r.top),yb=this.y(r.bottom);
-        if(yt==null||yb==null)continue;if(x1==null)x1=0;
-        const left=Math.max(0,Math.min(size.width,x1)),right=size.width,top=Math.min(yt,yb),bottom=Math.max(yt,yb);
+        let x1=this.x(r.from,size.width),x2=r.to==null?size.width:this.x(r.to,size.width),yt=this.y(r.top),yb=this.y(r.bottom);
+        if(yt==null||yb==null)continue;if(x1==null)x1=0;if(x2==null)x2=size.width;
+        const left=Math.max(0,Math.min(size.width,x1)),right=Math.max(left,Math.min(size.width,x2)),top=Math.min(yt,yb),bottom=Math.max(yt,yb);
         ctx.save();ctx.fillStyle=r.fill||'rgba(96,165,250,.10)';ctx.fillRect(left,top,Math.max(0,right-left),Math.max(1,bottom-top));
         ctx.strokeStyle=r.border||'#60a5fa';ctx.lineWidth=1;this.lineStyle(ctx,r.borderStyle||(r.tested?'dashed':'solid'));
         ctx.strokeRect(left+.5,top+.5,Math.max(0,right-left-1),Math.max(1,bottom-top-1));ctx.restore();
         const outside=(bottom-top)<16,targetY=outside?top-6:top+10;
-        labelTargets.push({id:r.id,text:r.label,x:right-8,targetY,color:r.border||'#e7eaf0',priority:r.type==='value'?2:3});
+        if(r.label)labelTargets.push({id:r.id,text:r.label,x:right-8,targetY,color:r.border||'#e7eaf0',priority:r.type==='value'?2:3});
       }
       for(const l of levels){
-        let x1=this.x(l.from,size.width),y=this.y(l.price);if(y==null)continue;if(x1==null)x1=0;
-        ctx.save();ctx.strokeStyle=l.color||'#e7eaf0';ctx.lineWidth=l.width||1.3;this.lineStyle(ctx,l.style||'solid');
-        ctx.beginPath();ctx.moveTo(Math.max(0,x1),y);ctx.lineTo(size.width,y);ctx.stroke();ctx.restore();
-        labelTargets.push({id:l.id,text:l.label,x:size.width-8,targetY:y-8,color:l.color||'#e7eaf0',priority:1});
+        let x1=this.x(l.from,size.width),x2=l.to==null?size.width:this.x(l.to,size.width),y=this.y(l.price);if(y==null)continue;if(x1==null)x1=0;if(x2==null)x2=size.width;
+        if(l.draw!==false){ctx.save();ctx.strokeStyle=l.color||'#e7eaf0';ctx.lineWidth=l.width||1.3;this.lineStyle(ctx,l.style||'solid');
+        ctx.beginPath();ctx.moveTo(Math.max(0,x1),y);ctx.lineTo(Math.max(0,Math.min(size.width,x2)),y);ctx.stroke();ctx.restore();}
+        if(l.label)labelTargets.push({id:l.id,text:l.label,x:Math.max(0,Math.min(size.width,x2))-8,targetY:y-8,color:l.color||'#e7eaf0',priority:1});
       }
       const layout=E.regionLabelLayout(labelTargets,Number(this.model.textMinGap)||14,Number(this.model.textMaxShift)||24,size.height);
       for(const row of layout)if(row.visible){if(row.curve)this.curveLabel(ctx,row.text,row.x,row.y,row.color);else this.label(ctx,row.text,row.x,row.y,row.color);}
