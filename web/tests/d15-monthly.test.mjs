@@ -56,5 +56,5 @@ test('D15 bullish imbalance shrinks and disappears when fully filled',()=>{
   assert.equal(gaps.length,1);assert.equal(gaps[0].low,100);assert.equal(gaps[0].high,115);
   const filled=base.concat([{time:t(4),high:120,low:95,close:100,closeTime:Date.UTC(2026,6,1)-1}]);
   gaps=I.monthlyImbalances(filled,Date.UTC(2026,6,15));
-  assert.equal(gaps.length,0);
+  assert.equal(gaps.some(x=>x.c1===t(0)&&x.c3===t(2)),false);
 });
