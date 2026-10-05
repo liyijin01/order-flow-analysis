@@ -284,41 +284,6 @@
     return{...row,startSec:Date.parse(String(row.start||''))/1000,endSec:Date.parse(String(row.end||''))/1000,
       rows:(row.rows||[]).map(r=>[Number(r[0]),Number(r[1])]),rowSize:Number(row.rowSize),poc:Number(row.poc),vah:Number(row.vah),val:Number(row.val),high:Number(row.high),low:Number(row.low)};
   }
-  function buildMonthlyProfile(bundle,display,view){
-    if(state.template!=='mprofile'||state.timeframe!=='1d'||!display.length)return{profiles:[],levels:[],regions:[],current:null,box:null,naked:[],priceWindow:null};
-    const cfg=state.rules.mprofile||{},colors=cfg.colors||{},pre=((bundle.tpo&&bundle.tpo.monthly)||[]).filter(x=>x.complete===true).map(normalizeTpoPeriod).sort((a,b)=>a.startSec-b.startSec);
-    const last=display[display.length-1],currentPrice=Number(last.close),mStart=E.utcMonthStart(last.time),mEnd=nextMonthStartSec(mStart),rowSize=(Number(symbolMeta().tickSize)||.01)*Number(cfg.rowTicks||100);
-    const monthBars=(bundle.series['30m']||[]).filter(b=>Number(b.time)>=mStart&&Number(b.time)<mEnd),cp=monthBars.length?E.tpoProfile(monthBars,rowSize):null;
-    const ex=monthBars.length?extrema(monthBars):null,current=cp&&Number.isFinite(Number(cp.poc))?{startSec:mStart,endSec:mEnd,complete:false,forming:true,bars:monthBars.length,expectedBars:null,rowSize,poc:Number(cp.poc),vah:Number(cp.vah),val:Number(cp.val),high:ex.max,low:ex.min,rows:cp.rows}:null;
-    const priceWindow=E.profilePriceWindow(currentPrice,cfg.priceWindowPct,current),inPrice=p=>priceWindow&&Number(p)>=priceWindow.min&&Number(p)<=priceWindow.max;
-    const intersects=(bottom,top)=>priceWindow&&Number(top)>=priceWindow.min&&Number(bottom)<=priceWindow.max;
-    const ended=pre.slice(-11),profileColors={value:colors.value||'rgba(64,160,190,.85)',outside:colors.outside||'rgba(150,150,150,.6)',poc:colors.poc||'#ffeb3b'};
-    const profiles=ended.map(p=>({...p,start:p.startSec,end:p.endSec,colors:profileColors,forming:false}));
-    if(current)profiles.push({...current,start:current.startSec,end:current.endSec,colors:profileColors});
-    const visibleStarts=new Set(ended.map(p=>p.startSec)),extensions=E.profileExtensions(pre,['vah','val','poc']).filter(x=>visibleStarts.has(x.from));
-    const touched=E.selectRecentTouched(extensions.filter(x=>!x.naked),cfg.maxTouched||8),nakedExtensions=extensions.filter(x=>x.naked),chosen=touched.concat(nakedExtensions),levels=[];
-    for(const x of chosen){
-      const d=new Date(x.from*1000),mon=MONTH_SHORT[d.getUTCMonth()],poc=x.side==='poc',base=poc?(colors.pocLine||'#e6d600'):(colors.valueLine||'#40a0be'),faded=poc?'rgba(230,214,0,.45)':'rgba(64,160,190,.45)',touchedThisPeriod=E.profileTouchedThisPeriod(x,current);
-      levels.push({id:'mprofile-'+x.from+'-'+x.side,kind:'mprofile',price:x.price,from:x.from,to:x.to,label:x.naked?mon+' '+x.side.toUpperCase():'',
-        color:x.naked?base:faded,axisColor:touchedThisPeriod?colorAlpha(base,.5):base,axisTextColor:'#0b1220',axisLabel:x.naked,style:touchedThisPeriod?'dashed':'solid',width:1,labelSize:11,labelWeight:600,naked:x.naked,touchedThisPeriod,month:mon,side:x.side});
-    }
-    if(current&&inPrice(current.poc)){
-      const d=new Date(mStart*1000),mon=MONTH_SHORT[d.getUTCMonth()];
-      levels.push({id:'mprofile-current-poc',kind:'mprofile',price:current.poc,from:mStart,label:mon+' POC',color:colors.pocLine||'#e6d600',axisColor:colors.pocLine||'#e6d600',axisTextColor:'#0b1220',axisLabel:true,style:'dashed',width:1,labelSize:11,labelWeight:600,current:true,side:'poc'});
-    }
-    const box=E.selectProfileValueBox(ended,currentPrice),regions=[];
-    if(box){
-      const year=new Date(mStart*1000).getUTCFullYear(),label=monthLabelFromStart(box.startSec,year)+' VA';
-      regions.push({id:'mprofile-box-'+box.startSec,type:'value',scope:'MPROFILE_BOX',bottom:box.val,top:box.vah,from:box.startSec,label,
-        fill:colors.boxFill||'rgba(255,255,255,.03)',border:colors.boxBorder||'#ffffff',axisLabel:false,labelColor:'#ffffff',labelSize:11,labelWeight:600});
-    }
-    const allSinglePrints=E.remainingSinglePrints(pre,currentPrice,rowSize,Number.MAX_SAFE_INTEGER),maxSingle=Math.max(0,Number(cfg.maxSinglePrints)||6);
-    const visibleSinglePrints=allSinglePrints.filter(sp=>intersects(sp.bottom,sp.top)).slice(0,maxSingle),visibleSpKeys=new Set(visibleSinglePrints.map(sp=>sp.from+'|'+sp.bottom+'|'+sp.top));
-    const singlePrints=allSinglePrints.filter(sp=>!intersects(sp.bottom,sp.top)||visibleSpKeys.has(sp.from+'|'+sp.bottom+'|'+sp.top));
-    for(const sp of singlePrints)regions.push({id:'mprofile-sp-'+sp.from+'-'+sp.bottom,type:'value',scope:'SINGLE_PRINT',bottom:sp.bottom,top:sp.top,from:sp.from,label:'',fill:'rgba(168,162,58,.10)',border:'#a8a23a',axisColor:'#a8a23a',axisTextColor:'#0b1220',axisLabel:true});
-    return{profiles,levels,regions,current,box,naked:levels.filter(x=>x.naked&&inPrice(x.price)),extensions,singlePrints:visibleSinglePrints,allSinglePrints:singlePrints,priceWindow};
-  }
-
   function weekLabel(start){
     const d=new Date(Number(start)*1000),mon=MONTH_SHORT[d.getUTCMonth()],first=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1));
     const firstMonday=1+((8-first.getUTCDay())%7),week=Math.floor((d.getUTCDate()-firstMonday)/7)+1;
@@ -434,7 +399,14 @@
     const allLevels=[],templateKeyStyle=templateConfig().keyLevelStyle||{};
     const weeklyModel=buildTemplate('weekly',bundle,display,view,{curves:[],regions:[],levels:[],segments:[],projections:[],yearOpen:null});
     const monthlyModel=buildTemplate('monthly',bundle,display,view,{levels:[],regions:[],upper:null,lower:null,imbalance:null});
-    const mprofileModel=buildMonthlyProfile(bundle,display,view),wprofileModel=buildWeeklyProfile(bundle,display,view);
+    const mprofileModel=buildTemplate(
+      'mprofile',
+      bundle,
+      display,
+      view,
+      {profiles:[],levels:[],regions:[],current:null,box:null,naked:[],priceWindow:null}
+    );
+    const wprofileModel=buildWeeklyProfile(bundle,display,view);
     const pq=areas.find(a=>a.scope==='PQ');
     if(pq&&layerEnabled('pqVwap'))allLevels.push({id:'line-pq-vwap',kind:'pq',price:pq.pqVwap,from:qStart,label:'PQ VWAP',color:rules.colors.pqVwap,axisColor:rules.colors.pqVwap,axisTextColor:'#eceff4',axisLabel:true,style:'solid',period:'Q / 1h',source:'exact'});
     if(pq&&layerEnabled('pqBounds')){
@@ -664,15 +636,6 @@
       add('  ·  naked '+String((wp.naked||[]).length)+' ('+touchedNow+' this period)','tpo');
       add('  ·  SP '+String((wp.singlePrints||[]).length),'tpo');
       model.infoValues={currentPoc:cur&&cur.poc,reference:ref?{week:new Date(rs*1000).toISOString().slice(0,10),high:Number(ref.high),low:Number(ref.low),manual:!!ref.manual}:null,naked:(wp.naked||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side,price:x.price,touchedThisPeriod:!!x.touchedThisPeriod})),singlePrints:(wp.singlePrints||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),bottom:x.bottom,top:x.top})),barTime:Number(bar.time)};
-    }else if(state.template==='mprofile'){
-      const mp=model.mprofile||{},cur=mp.current,box=mp.box;
-      line2.appendChild(document.createTextNode('Monthly TPO (30m, 70%)'));
-      add('  '+(cur?'POC '+fmtPrice(cur.poc)+'  VAH '+fmtPrice(cur.vah)+'  VAL '+fmtPrice(cur.val):'POC —  VAH —  VAL —'),'tpo');
-      add('  ·  Box '+(box?monthLabelFromStart(box.startSec,new Date(model.last.time*1000).getUTCFullYear())+' VA '+fmtPrice(box.vah)+' / '+fmtPrice(box.val):'—'),'muted');
-      const touchedNow=(mp.naked||[]).filter(x=>x.touchedThisPeriod).length;
-      add('  ·  naked '+String((mp.naked||[]).length)+' ('+touchedNow+' this period)','tpo');
-      add('  ·  SP '+String((mp.singlePrints||[]).length),'tpo');
-      model.infoValues={currentPoc:cur&&cur.poc,box:box?{month:new Date(box.startSec*1000).toISOString().slice(0,7),vah:box.vah,val:box.val}:null,naked:(mp.naked||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),side:x.side,price:x.price,touchedThisPeriod:!!x.touchedThisPeriod})),singlePrints:(mp.singlePrints||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),bottom:x.bottom,top:x.top})),barTime:Number(bar.time)};
     }else{
       const handler=T[state.template];
       if(handler&&typeof handler.infoLine==='function'){
