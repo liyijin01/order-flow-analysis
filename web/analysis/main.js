@@ -357,8 +357,9 @@
     const ended=pre.slice(-11),profileColors={value:colors.value||'rgba(64,160,190,.85)',outside:colors.outside||'rgba(150,150,150,.6)',poc:colors.poc||'#ffeb3b'};
     const profiles=ended.map(p=>({...p,start:p.startSec,end:p.endSec,colors:profileColors,forming:false}));
     if(current)profiles.push({...current,start:current.startSec,end:current.endSec,colors:profileColors});
-    const visibleStarts=new Set(ended.map(p=>p.startSec)),extensions=E.profileExtensions(pre,['vah','val','poc']).filter(x=>visibleStarts.has(x.from)),levels=[];
-    for(const x of extensions){
+    const visibleStarts=new Set(ended.map(p=>p.startSec)),extensions=E.profileExtensions(pre,['vah','val','poc']).filter(x=>visibleStarts.has(x.from));
+    const touched=E.selectRecentTouched(extensions.filter(x=>!x.naked),cfg.maxTouched||8),nakedExtensions=extensions.filter(x=>x.naked),chosen=touched.concat(nakedExtensions),levels=[];
+    for(const x of chosen){
       const d=new Date(x.from*1000),mon=MONTH_SHORT[d.getUTCMonth()],poc=x.side==='poc',base=poc?(colors.pocLine||'#e6d600'):(colors.valueLine||'#40a0be'),faded=poc?'rgba(230,214,0,.45)':'rgba(64,160,190,.45)';
       levels.push({id:'mprofile-'+x.from+'-'+x.side,kind:'mprofile',price:x.price,from:x.from,to:x.to,label:x.naked?mon+' '+x.side.toUpperCase():'',
         color:x.naked?base:faded,axisColor:base,axisTextColor:'#0b1220',axisLabel:x.naked,style:'solid',width:1,labelSize:11,labelWeight:600,naked:x.naked,month:mon,side:x.side});
@@ -395,7 +396,7 @@
     const intersects=(bottom,top)=>priceWindow&&Number(top)>=priceWindow.min&&Number(bottom)<=priceWindow.max;
     const ended=pre.slice(-25),profileColors={value:colors.value||'rgba(255,152,0,.9)',outside:colors.outside||'rgba(150,150,150,.6)',poc:colors.poc||'#ffeb3b'},profiles=ended.filter(p=>Array.isArray(p.rows)).map(p=>({...p,start:p.startSec,end:p.endSec,colors:profileColors,forming:false}));
     if(current)profiles.push({...current,start:current.startSec,end:current.endSec,colors:profileColors});
-    const ext=E.profileExtensions(pre,['vah','val','poc']),visibleStarts=new Set(ended.map(p=>p.startSec)),touched=ext.filter(x=>!x.naked&&visibleStarts.has(x.from));
+    const ext=E.profileExtensions(pre,['vah','val','poc']),visibleStarts=new Set(ended.map(p=>p.startSec)),touched=E.selectRecentTouched(ext.filter(x=>!x.naked&&visibleStarts.has(x.from)),cfg.maxTouched||8);
     const distance=x=>Math.abs(Number(x.price)-currentPrice),nakedAll=ext.filter(x=>x.naked),naked=nakedAll.filter(x=>inPrice(x.price)).sort((a,b)=>{
       const da=distance(a),db=distance(b),pa=a.side==='poc'?0:1,pb=b.side==='poc'?0:1;return da-db||pa-pb;
     }).slice(0,Number(cfg.maxNaked)||16),nakedKeys=new Set(naked.map(x=>x.from+'|'+x.side));

@@ -358,6 +358,14 @@
     return{min,max};
   }
 
+  function selectRecentTouched(items,maxCount){
+    const limit=Math.max(0,Number(maxCount)||0);
+    return(items||[]).filter(x=>x&&!x.naked&&x.touchedBy).slice().sort((a,b)=>{
+      const at=Date.parse(String(a.touchedBy.start||'')),bt=Date.parse(String(b.touchedBy.start||''));
+      return bt-at||Number(b.from)-Number(a.from)||String(a.side||'').localeCompare(String(b.side||''));
+    }).slice(0,limit);
+  }
+
   function profileExtensions(periods,sides){
     const src=(periods||[]).filter(x=>x&&x.complete===true).map(x=>({...x,_start:Date.parse(String(x.start||''))/1000})).filter(x=>finite(x._start)).sort((a,b)=>a._start-b._start),out=[];
     for(let i=0;i<src.length;i++){
@@ -458,6 +466,6 @@
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,utcWeekStart,
     weightedStats,anchoredVwapSeries,alignSeriesToBars,valueArea,approxVolumeProfile,tpoProfile,exactProfile,profileIsFresh,
     atr14,detectZones,markZoneTouches,mergeZones,zoneState,selectZones,rangeOverlapRatio,suppressValueAreas,filterValueAreas,inPriceView,zoneIntersectsView,
-    wasZoneTouched,isPocNaked,selectNakedPocs,mergeKeyLevels,selectKeyLevels,profilePriceWindow,profileExtensions,selectProfileValueBox,selectReferenceWeek,remainingSinglePrints,capTableRows,axisLabelSelection,regionLabelLayout,roundToTick
+    wasZoneTouched,isPocNaked,selectNakedPocs,mergeKeyLevels,selectKeyLevels,profilePriceWindow,selectRecentTouched,profileExtensions,selectProfileValueBox,selectReferenceWeek,remainingSinglePrints,capTableRows,axisLabelSelection,regionLabelLayout,roundToTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);

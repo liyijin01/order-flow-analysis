@@ -402,6 +402,7 @@
       "below": 18,
       "above": 25
     },
+    "maxTouched": 8,
     "colors": {
       "value": "rgba(64,160,190,.85)",
       "outside": "rgba(150,150,150,.6)",
@@ -420,6 +421,7 @@
       "below": 10,
       "above": 12
     },
+    "maxTouched": 8,
     "maxNaked": 16,
     "referenceWeek": {
       "BTCUSDT": null,
