@@ -272,37 +272,6 @@
     return out;
   }
 
-  function buildWeeklyVwap(bundle,display,view){
-    if(state.template!=='weekly'||state.timeframe!=='30m'||!display.length)return{curves:[],regions:[],levels:[],segments:[],projections:[],yearOpen:null};
-    const cfg=state.rules.weeklyVwap||{},thirty=bundle.series['30m']||[],daily=bundle.series['1d']||[],stats=I.weeklyVwapStats(thirty,1800),projectionMap=new Map(I.weeklyProjectionStats(stats).map(x=>[Number(x.weekStart),x]));
-    const first=Number(display[0].time),last=Number(display[display.length-1].time),currentStart=E.utcWeekStart(last),byStart=new Map(stats.map(x=>[Number(x.start),x]));
-    const span=Math.max(1e-12,Number(view.max)-Number(view.min)),pad=span*Math.max(0,Number(cfg.visiblePadPct)||10)/100,lo=Number(view.min)-pad,hi=Number(view.max)+pad;
-    const inView=v=>Number(v)>=lo&&Number(v)<=hi,curves=[],regions=[],levels=[],segments=[],projections=[];
-    for(const seg of stats){
-      if(Number(seg.end)<=first||Number(seg.start)>last)continue;
-      segments.push(seg);
-      const pts=(seg.points||[]).filter(p=>Number(p.time)>=first&&Number(p.time)<=last);
-      const mk=(id,key,color,width)=>({id:id+'-'+seg.start,label:'',weekStart:seg.start,points:pts.map(p=>({time:p.time,value:inView(p[key])?p[key]:null})),color,width,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6});
-      curves.push(mk('weekly-vwap','vwap',cfg.vwap||'#f23645',1.5),mk('weekly-upper','upper',cfg.sigma||'rgba(190,196,208,.55)',1),mk('weekly-lower','lower',cfg.sigma||'rgba(190,196,208,.55)',1));
-      const baseProj=projectionMap.get(Number(seg.start));if(!baseProj)continue;
-      const top=Number(baseProj.pwUpper),bottom=Number(baseProj.pwLower),mid=Number(baseProj.pwVwap),to=Math.min(Number(seg.end),last),visible=top>=lo&&bottom<=hi,isCurrent=Number(seg.start)===currentStart;
-      const info={...baseProj,to,complete:true};projections.push(info);
-      if(!visible)continue;
-      regions.push({id:'weekly-proj-'+seg.start,type:'value',scope:'WEEKLY_PROJECTION',bottom,top,from:Number(seg.start),to,label:'',fill:cfg.projectionFill||'rgba(190,196,208,.08)',border:cfg.projectionBorder||'rgba(190,196,208,.25)',axisLabel:isCurrent,axisColor:cfg.axisGray||'#3a4152',axisTextColor:cfg.axisText||'#eceff4'});
-      levels.push({id:'weekly-pw-vwap-'+seg.start,kind:'weekly-pw',price:mid,from:Number(seg.start),to,label:'',color:cfg.vwap||'#f23645',axisColor:cfg.vwap||'#f23645',axisTextColor:'#fff',axisLabel:isCurrent,style:'solid',width:1.5,pairedRegionId:'weekly-proj-'+seg.start});
-    }
-    const cur=byStart.get(currentStart);
-    if(cur&&cur.points.length){
-      const p=cur.points[cur.points.length-1];
-      for(const [key,color] of [['vwap',cfg.vwap||'#f23645'],['upper',cfg.axisGray||'#3a4152'],['lower',cfg.axisGray||'#3a4152']]){
-        const price=Number(p[key]);if(inView(price))levels.push({id:'weekly-current-'+key,kind:'weekly',price,from:last,label:'',draw:false,color,axisColor:color,axisTextColor:'#fff',axisLabel:true});
-      }
-    }
-    const year=new Date(last*1000).getUTCFullYear(),yearStart=Date.UTC(year,0,1)/1000,day=daily.find(b=>Number(b.time)===yearStart),yearOpen=day?Number(day.open):null;
-    if(Number.isFinite(yearOpen)&&inView(yearOpen))levels.push({id:'year-open-'+year,kind:'year-open',price:yearOpen,from:first,label:'Y O',color:cfg.yearOpen||'#e6e9ef',axisColor:cfg.yearAxis||'#d9d4f0',axisTextColor:cfg.yearAxisText||'#202536',axisLabel:true,style:'solid',width:1});
-    return{curves,regions,levels,segments,projections,yearOpen,currentStart};
-  }
-
   function buildMonthlyStructure(bundle,display,view){
     if(state.template!=='monthly'||state.timeframe!=='1M'||!display.length)return{levels:[],regions:[],upper:null,lower:null,imbalance:null};
     const cfg=state.rules.monthlyStructure||{},monthly=bundle.series['1M']||display,last=display[display.length-1],current=Number(last.close);
@@ -486,7 +455,9 @@
 
     const drawnZoneIds=new Set(selectedZones.filter(z=>E.zoneIntersectsView(z,view.min,view.max,rules.zones.viewPadPct||50)).map(z=>z.id));
 
-    const allLevels=[],templateKeyStyle=templateConfig().keyLevelStyle||{},weeklyModel=buildWeeklyVwap(bundle,display,view),monthlyModel=buildMonthlyStructure(bundle,display,view),mprofileModel=buildMonthlyProfile(bundle,display,view),wprofileModel=buildWeeklyProfile(bundle,display,view);
+    const allLevels=[],templateKeyStyle=templateConfig().keyLevelStyle||{};
+    const weeklyModel=buildTemplate('weekly',bundle,display,view,{curves:[],regions:[],levels:[],segments:[],projections:[],yearOpen:null});
+    const monthlyModel=buildMonthlyStructure(bundle,display,view),mprofileModel=buildMonthlyProfile(bundle,display,view),wprofileModel=buildWeeklyProfile(bundle,display,view);
     const pq=areas.find(a=>a.scope==='PQ');
     if(pq&&layerEnabled('pqVwap'))allLevels.push({id:'line-pq-vwap',kind:'pq',price:pq.pqVwap,from:qStart,label:'PQ VWAP',color:rules.colors.pqVwap,axisColor:rules.colors.pqVwap,axisTextColor:'#eceff4',axisLabel:true,style:'solid',period:'Q / 1h',source:'exact'});
     if(pq&&layerEnabled('pqBounds')){
@@ -732,15 +703,6 @@
       add('  ·  Below '+(down?fmtPrice(down.price)+' ('+down.label+')':'—'),'monthly');
       add('  ·  imbalance '+(gap?fmtPrice(gap.low)+' / '+fmtPrice(gap.high):'—'),'monthly');
       model.infoValues={upper:up||null,lower:down||null,imbalance:gap||null,barTime:Number(bar.time)};
-    }else if(state.template==='weekly'){
-      line2.appendChild(document.createTextNode('Weekly VWAP (hlc3, 30m, ±1σ)'));
-      const seg=(model.weekly&&model.weekly.segments||[]).find(x=>Number(bar.time)>=Number(x.start)&&Number(bar.time)<Number(x.end)),p=seg&&(seg.points||[]).find(x=>Number(x.time)===Number(bar.time));
-      const proj=seg&&(model.weekly&&model.weekly.projections||[]).find(x=>Number(x.weekStart)===Number(seg.start));
-      const cv=p&&p.vwap,cu=p&&p.upper,cl=p&&p.lower;
-      add('  '+(cv==null?'—':fmtPrice(cv)),'weeklyvwap');add('  +1σ '+(cu==null?'—':fmtPrice(cu)),'sigma');add('  −1σ '+(cl==null?'—':fmtPrice(cl)),'sigma');
-      add('  ·  PW '+(!proj?'—':fmtPrice(proj.pwVwap)),'weeklyvwap');add('  +1σ '+(!proj?'—':fmtPrice(proj.pwUpper)),'sigma');add('  −1σ '+(!proj?'—':fmtPrice(proj.pwLower)),'sigma');
-      add('  ·  Y O '+(model.weekly&&Number.isFinite(Number(model.weekly.yearOpen))?fmtPrice(model.weekly.yearOpen):'—'),'muted');
-      model.infoValues={weekly:{vwap:cv,upper:cu,lower:cl},previous:proj||null,yearOpen:model.weekly&&model.weekly.yearOpen,barTime:Number(bar.time)};
     }else{
       const handler=T[state.template];
       if(handler&&typeof handler.infoLine==='function'){
