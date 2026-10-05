@@ -2,6 +2,7 @@
   'use strict';
 
   const L=window.LightweightCharts,D=window.OrderFlowAnalysisData,E=window.OrderFlowAnalysisEngine,I=window.OrderFlowIndicators,AP=window.OrderFlowAnnotationPrimitives,P=window.OrderFlowAnalysisPrimitive,X=window.OrderFlowAnalysisExport,R=window.OrderFlowBoardRuntime;
+  const T=window.OrderFlowTemplates||{};
   const SYMBOLS=window.ORDER_FLOW_SYMBOLS||{};
   const WATERMARK_COLOR='rgba(196,140,60,.30)';
   const $=id=>document.getElementById(id);
@@ -271,24 +272,6 @@
     return out;
   }
 
-  function buildRvwapCurves(bundle,display){
-    if(!layerEnabled('rvwap')||state.timeframe!=='4h'||!display.length)return{curves:[],rolling:{},yearSegments:[]};
-    const four=bundle.series['4h']||[],cfg=state.rules.rvwap||{},allowed=new Set(display.map(b=>Number(b.time))),curves=[],rolling={};
-    for(const days of cfg.windowsDays||[30,60,90,365]){
-      const points=I.rollingVwap(four,Number(days)*86400).filter(p=>p.value!=null&&allowed.has(Number(p.time)));
-      rolling[String(days)]=points;
-      curves.push({id:'rvwap-'+days,label:String(days)+'D RVWAP',points,color:cfg.color||'#4caf50',width:1.5,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6,labelColor:cfg.labelColor||'#aeb7c8'});
-    }
-    const yearSegments=yearVwapSegments(four,display);
-    for(let i=0;i<yearSegments.length;i++){
-      const seg=yearSegments[i],last=i===yearSegments.length-1;
-      curves.push({id:'y-vwap-'+seg.year,label:last?'Y VWAP':'',points:seg.points.map(p=>({time:p.time,value:p.vwap})),color:cfg.yearVwap||'#e8d44d',width:1.5,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6,labelColor:cfg.yearVwap||'#e8d44d'});
-      curves.push({id:'y-upper-'+seg.year,label:'',points:seg.points.map(p=>({time:p.time,value:p.upper})),color:cfg.yearSigma||'rgba(190,196,208,.55)',width:1,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6});
-      curves.push({id:'y-lower-'+seg.year,label:'',points:seg.points.map(p=>({time:p.time,value:p.lower})),color:cfg.yearSigma||'rgba(190,196,208,.55)',width:1,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6});
-    }
-    return{curves,rolling,yearSegments};
-  }
-
   function buildWeeklyVwap(bundle,display,view){
     if(state.template!=='weekly'||state.timeframe!=='30m'||!display.length)return{curves:[],regions:[],levels:[],segments:[],projections:[],yearOpen:null};
     const cfg=state.rules.weeklyVwap||{},thirty=bundle.series['30m']||[],daily=bundle.series['1d']||[],stats=I.weeklyVwapStats(thirty,1800),projectionMap=new Map(I.weeklyProjectionStats(stats).map(x=>[Number(x.weekStart),x]));
@@ -429,6 +412,18 @@
     return{profiles,levels,regions,current,naked,extensions:ext,ended,pre,reference,singlePrints:visibleSinglePrints,allSinglePrints:singlePrints,priceWindow};
   }
 
+  function templateBuildContext(id,bundle,display,view){
+    return{
+      id,state,E,I,D,bundle,display,view,layerEnabled,symbolMeta,extrema,yearVwapSegments,colorAlpha,
+      monthLabelFromStart,nextMonthStartSec,normalizeTpoPeriod,weekLabel,fmtPrice
+    };
+  }
+  function buildTemplate(id,bundle,display,view,empty){
+    const handler=T[id];
+    if(!handler||state.template!==id||typeof handler.build!=='function')return empty;
+    return handler.build(templateBuildContext(id,bundle,display,view));
+  }
+
   function buildAnalysis(bundle){
     const rules=state.rules,tick=Number(symbolMeta().tickSize)||.01,counts=rules.display.bars;
     const source=bundle.series[state.timeframe]||bundle.series.display||[],win=windowSpec();
@@ -519,7 +514,7 @@
         ?Number(lastClosedDisplay.closeTime)+1:keyAsOfMs;
       const eligibleKeyLevels=bundle.keyLevels.levels.filter(row=>{
         const periodEnd=Date.parse(String(row.periodEnd||'')),yearly=row.kind==='year';
-        const templateOk=state.template==='rvwap'?yearly:!yearly;
+        const templateOk=templateConfig().yearLevelsOnly===true?yearly:!yearly;
         return templateOk&&Number.isFinite(periodEnd)&&periodEnd<=keyPeriodCutoffMs;
       });
       const keyCfg=rules.keyLevels||{},pane=state.chart&&state.chart.panes&&state.chart.panes()[0];
@@ -529,7 +524,7 @@
       const plotHeight=paneHeight*usableRatio;
       keySelection=E.selectKeyLevels(
         eligibleKeyLevels,current,view.min,view.max,linePad,tick,keyCfg.maxCount||6,pqStart,
-        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,(state.template==='rvwap'||!pq)?[]:[pq.pqVwap,pq.bottom,pq.top],keyCfg.minGapPx||0,plotHeight
+        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,(templateConfig().yearLevelsOnly===true||!pq)?[]:[pq.pqVwap,pq.bottom,pq.top],keyCfg.minGapPx||0,plotHeight
       );
       const firstTime=Number(display[0].time),keyStyle=templateKeyStyle;
       for(const row of keySelection.all){
@@ -558,7 +553,8 @@
     const levelsForTable=allLevels.map(l=>({...l,offView:!drawnLevelIds.has(l.id)}));
     const regions=allRegions.filter(r=>!r.offView&&regionLayerEnabled(r)),levels=levelsForTable.filter(l=>!l.offView&&levelLayerEnabled(l));
 
-    const quarterVwaps=quarterVwapSegments(one,display),rvwapModel=buildRvwapCurves(bundle,display);
+    const quarterVwaps=quarterVwapSegments(one,display);
+    const rvwapModel=buildTemplate('rvwap',bundle,display,view,{curves:[],rolling:{},yearSegments:[]});
     const profileWindow=state.template==='wprofile'?wprofileModel.priceWindow:(state.template==='mprofile'?mprofileModel.priceWindow:null);
     const currentVwap=(quarterVwaps.find(x=>x.start===qStart)||quarterVwaps[quarterVwaps.length-1]||{points:[]}).points.map(p=>({time:p.time,value:p.vwap}));
     const lastClosed=closedCalc[closedCalc.length-1];
@@ -745,21 +741,15 @@
       add('  ·  PW '+(!proj?'—':fmtPrice(proj.pwVwap)),'weeklyvwap');add('  +1σ '+(!proj?'—':fmtPrice(proj.pwUpper)),'sigma');add('  −1σ '+(!proj?'—':fmtPrice(proj.pwLower)),'sigma');
       add('  ·  Y O '+(model.weekly&&Number.isFinite(Number(model.weekly.yearOpen))?fmtPrice(model.weekly.yearOpen):'—'),'muted');
       model.infoValues={weekly:{vwap:cv,upper:cu,lower:cl},previous:proj||null,yearOpen:model.weekly&&model.weekly.yearOpen,barTime:Number(bar.time)};
-    }else if(state.template==='rvwap'){
-      line2.appendChild(document.createTextNode('Rolling VWAP (hlc3, 4h)'));
-      const valueAt=points=>{const p=(points||[]).find(x=>Number(x.time)===Number(bar.time));return p&&Number.isFinite(Number(p.value))?Number(p.value):null;};
-      const values={};
-      for(const days of (state.rules.rvwap&&state.rules.rvwap.windowsDays)||[30,60,90,365]){
-        const v=valueAt(model.rvwap&&model.rvwap.rolling&&model.rvwap.rolling[String(days)]);values[String(days)]=v;add('  '+days+'D '+(v==null?'—':fmtPrice(v)),'vwap');
-      }
-      const seg=(model.rvwap&&model.rvwap.yearSegments||[]).find(x=>Number(bar.time)>=x.start&&Number(bar.time)<x.end);
-      const yp=seg&&(seg.points||[]).find(x=>Number(x.time)===Number(bar.time)),yv=yp&&yp.vwap,yu=yp&&yp.upper,yl=yp&&yp.lower;
-      add('  ·  Y VWAP '+(yv==null?'—':fmtPrice(yv)),'yvwap');add('  +1σ '+(yu==null?'—':fmtPrice(yu)),'sigma');add('  −1σ '+(yl==null?'—':fmtPrice(yl)),'sigma');
-      model.infoValues={rolling:values,year:{vwap:yv,upper:yu,lower:yl},barTime:Number(bar.time)};
     }else{
+      const handler=T[state.template];
+      if(handler&&typeof handler.infoLine==='function'){
+        handler.infoLine({state,model,line2,fmtPrice,weekLabel,monthLabelFromStart},bar,add);
+      }else{
       const vals=infoValues(model),cv=vals.current,pv=vals.previous;line2.textContent='Anchored VWAP (hlc3, Quarter, ±1σ)';
       add('  '+fmtPrice(cv.vwap),'vwap');add('  +1σ '+fmtPrice(cv.upper),'sigma');add('  −1σ '+fmtPrice(cv.lower),'sigma');add('  PQ '+fmtPrice(pv.vwap),'pqvwap');add('  +1σ '+fmtPrice(pv.upper),'sigma');add('  −1σ '+fmtPrice(pv.lower),'sigma');
       model.infoValues={current:cv,previous:pv,barTime:Number(bar.time)};
+      }
     }
   }
   function formatRemaining(ms){const sec=Math.max(0,Math.floor(ms/1000)),d=Math.floor(sec/86400),h=Math.floor((sec%86400)/3600),m=Math.floor((sec%3600)/60),s=sec%60;if(d>0)return d+'天 '+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');return h>0?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}

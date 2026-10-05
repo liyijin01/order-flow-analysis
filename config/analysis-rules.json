@@ -169,6 +169,7 @@
     },
     "rvwap": {
       "label": "滚动 VWAP",
+      "yearLevelsOnly": true,
       "timeframes": [
         "4h"
       ],
