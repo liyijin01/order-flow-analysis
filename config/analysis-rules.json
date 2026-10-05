@@ -319,6 +319,46 @@
       },
       "table": false,
       "legend": false
+    },
+    "wprofile": {
+      "label": "周度剖面",
+      "timeframes": [
+        "1d"
+      ],
+      "defaultTimeframe": "1d",
+      "window": {
+        "1d": {
+          "mode": "recent",
+          "visibleBars": 182
+        }
+      },
+      "rightMarginPct": 30,
+      "history": {
+        "1d": 430,
+        "30m": 3500
+      },
+      "layers": {
+        "quarterBands": false,
+        "keyLevels": false,
+        "pqArea": false,
+        "pqBounds": false,
+        "pqVwap": false,
+        "pm": false,
+        "pw": false,
+        "zones": false,
+        "nPoc": false,
+        "volume": false,
+        "rvwap": false,
+        "yearLevels": false,
+        "weeklyVwap": false,
+        "weeklyProjection": false,
+        "yearOpen": false,
+        "monthlyStructure": false,
+        "mprofile": false,
+        "wprofile": true
+      },
+      "table": false,
+      "legend": false
     }
   },
   "rvwap": {
@@ -366,6 +406,25 @@
       "pocLine": "#e6d600",
       "boxFill": "rgba(255,255,255,.03)",
       "boxBorder": "#ffffff"
+    }
+  },
+  "wprofile": {
+    "rowTicks": 100,
+    "visiblePadPct": 10,
+    "maxNaked": 16,
+    "referenceWeek": {
+      "BTCUSDT": null,
+      "ETHUSDT": null,
+      "SOLUSDT": null
+    },
+    "colors": {
+      "value": "rgba(255,152,0,.9)",
+      "outside": "rgba(150,150,150,.6)",
+      "poc": "#ffeb3b",
+      "valueLine": "#ff9800",
+      "pocLine": "#e6d600",
+      "referenceFill": "rgba(190,196,208,.08)",
+      "referenceBorder": "#40a0be"
     }
   }
 }
