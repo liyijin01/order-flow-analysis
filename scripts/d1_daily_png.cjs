@@ -50,12 +50,12 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
       })():template==='mprofile'?(()=>{
         const mp=window.__analysisDebug.model?.mprofile||{},box=mp.box;
         return{currentPoc:mp.current&&mp.current.poc,box:box?{month:new Date(box.startSec*1000).toISOString().slice(0,7),vah:box.vah,val:box.val}:null,
-          naked:(mp.naked||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),side:x.side,price:x.price})),
+          naked:(mp.naked||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),side:x.side,price:x.price,touchedThisPeriod:!!x.touchedThisPeriod})),
           singlePrints:(mp.singlePrints||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),bottom:x.bottom,top:x.top}))};
       })():template==='wprofile'?(()=>{
         const wp=window.__analysisDebug.model?.wprofile||{},ref=wp.reference,rs=ref&&Date.parse(String(ref.start))/1000;
         return{currentPoc:wp.current&&wp.current.poc,reference:ref?{week:new Date(rs*1000).toISOString().slice(0,10),high:Number(ref.high),low:Number(ref.low),manual:!!ref.manual}:null,
-          naked:(wp.naked||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side,price:x.price})),
+          naked:(wp.naked||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side,price:x.price,touchedThisPeriod:!!x.touchedThisPeriod})),
           singlePrints:(wp.singlePrints||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),bottom:x.bottom,top:x.top}))};
       })():null),
       reference:(template==='rvwap'&&symbol==='BTCUSDT'?(()=>{

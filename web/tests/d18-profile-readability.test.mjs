@@ -25,3 +25,11 @@ test('D18 touched profile extensions keep newest eight by touch time',()=>{
   assert.equal(selected.length,8);
   assert.deepEqual(selected.map(x=>x.from),[9,8,7,6,5,4,3,2]);
 });
+
+
+test('D18 marks only naked levels touched by the forming period',()=>{
+  const forming={low:95,high:105};
+  assert.equal(E.profileTouchedThisPeriod({naked:true,price:100},forming),true);
+  assert.equal(E.profileTouchedThisPeriod({naked:true,price:110},forming),false);
+  assert.equal(E.profileTouchedThisPeriod({naked:false,price:100},forming),false);
+});
