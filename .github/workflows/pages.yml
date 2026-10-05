@@ -71,6 +71,17 @@ jobs:
             exit 1
           fi
 
+      - name: Limit hard-coded template branches
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path("web/analysis/main.js").read_text()
+          count = text.count("state.template===") + text.count("state.template!==")
+          print(f"main.js hard-coded template comparisons: {count}")
+          if count > 4:
+              raise SystemExit("main.js may contain at most 4 state.template===/!== comparisons")
+          PY
+
   model-diff:
     if: github.event_name == 'pull_request'
     needs: test

@@ -285,6 +285,9 @@
     },
     "mprofile": {
       "label": "月度剖面",
+      "hideCandles": true,
+      "carrier": "1d",
+      "displayTimeframeLabel": "M30 Monthly",
       "timeframes": [
         "1d"
       ],
@@ -324,6 +327,9 @@
     },
     "wprofile": {
       "label": "周度剖面",
+      "hideCandles": true,
+      "carrier": "1d",
+      "displayTimeframeLabel": "M30 Weekly",
       "timeframes": [
         "1d"
       ],

@@ -13,8 +13,8 @@
   };
 
   function tfLabel(tf){return({'30m':'30分钟','1h':'1小时','4h':'4小时','1d':'1天','1M':'1月'})[tf]||tf;}
-  function displayTfLabel(){return state.template==='mprofile'?'M30 Monthly':(state.template==='wprofile'?'M30 Weekly':tfLabel(state.timeframe));}
-  function profileTemplate(){return state.template==='mprofile'||state.template==='wprofile';}
+  function displayTfLabel(){return templateConfig().displayTimeframeLabel||tfLabel(state.timeframe);}
+  function profileTemplate(){return templateConfig().hideCandles===true;}
   function symbolMeta(){return SYMBOLS[state.symbol]||{displayName:state.symbol,tickSize:'0.01',ladderBin:'0.1'};}
   function pricePrecision(){const s=String(symbolMeta().tickSize||'0.01'),i=s.indexOf('.');return i<0?0:s.length-i-1;}
   function templateConfig(){const all=state.rules&&state.rules.templates||{};return all[state.template]||all.combined||{};}
@@ -289,39 +289,6 @@
     const firstMonday=1+((8-first.getUTCDay())%7),week=Math.floor((d.getUTCDate()-firstMonday)/7)+1;
     return mon+' W'+Math.max(1,week);
   }
-  function buildWeeklyProfile(bundle,display,view){
-    if(state.template!=='wprofile'||state.timeframe!=='1d'||!display.length)return{profiles:[],levels:[],regions:[],current:null,naked:[],extensions:[],priceWindow:null};
-    const cfg=state.rules.wprofile||{},colors=cfg.colors||{},pre=((bundle.tpo&&bundle.tpo.weekly)||[]).filter(x=>x.complete===true).map(normalizeTpoPeriod).sort((a,b)=>a.startSec-b.startSec);
-    const last=display[display.length-1],currentPrice=Number(last.close),wStart=E.utcWeekStart(last.time),wEnd=wStart+7*86400,rowSize=(Number(symbolMeta().tickSize)||.01)*Number(cfg.rowTicks||100);
-    const weekBars=(bundle.series['30m']||[]).filter(b=>Number(b.time)>=wStart&&Number(b.time)<wEnd),cp=weekBars.length?E.tpoProfile(weekBars,rowSize):null,ex=weekBars.length?extrema(weekBars):null;
-    const current=cp&&Number.isFinite(Number(cp.poc))?{startSec:wStart,endSec:wEnd,complete:false,forming:true,bars:weekBars.length,rowSize,poc:Number(cp.poc),vah:Number(cp.vah),val:Number(cp.val),high:ex.max,low:ex.min,rows:cp.rows}:null;
-    const priceWindow=E.profilePriceWindow(currentPrice,cfg.priceWindowPct,current),inPrice=p=>priceWindow&&Number(p)>=priceWindow.min&&Number(p)<=priceWindow.max;
-    const intersects=(bottom,top)=>priceWindow&&Number(top)>=priceWindow.min&&Number(bottom)<=priceWindow.max;
-    const ended=pre.slice(-25),profileColors={value:colors.value||'rgba(255,152,0,.9)',outside:colors.outside||'rgba(150,150,150,.6)',poc:colors.poc||'#ffeb3b'},profiles=ended.filter(p=>Array.isArray(p.rows)).map(p=>({...p,start:p.startSec,end:p.endSec,colors:profileColors,forming:false}));
-    if(current)profiles.push({...current,start:current.startSec,end:current.endSec,colors:profileColors});
-    const ext=E.profileExtensions(pre,['vah','val','poc']),visibleStarts=new Set(ended.map(p=>p.startSec)),touched=E.selectRecentTouched(ext.filter(x=>!x.naked&&visibleStarts.has(x.from)),cfg.maxTouched||8);
-    const distance=x=>Math.abs(Number(x.price)-currentPrice),nakedAll=ext.filter(x=>x.naked),naked=nakedAll.filter(x=>inPrice(x.price)).sort((a,b)=>{
-      const da=distance(a),db=distance(b),pa=a.side==='poc'?0:1,pb=b.side==='poc'?0:1;return da-db||pa-pb;
-    }).slice(0,Number(cfg.maxNaked)||16).map(x=>({...x,touchedThisPeriod:E.profileTouchedThisPeriod(x,current)})),nakedKeys=new Set(naked.map(x=>x.from+'|'+x.side));
-    const drawnNaked=nakedAll.filter(x=>!inPrice(x.price)||nakedKeys.has(x.from+'|'+x.side)),chosen=touched.concat(drawnNaked),levels=[];
-    for(const x of chosen){
-      const poc=x.side==='poc',base=poc?(colors.pocLine||'#e6d600'):(colors.valueLine||'#ff9800'),faded=poc?'rgba(230,214,0,.45)':'rgba(255,152,0,.45)',touchedThisPeriod=E.profileTouchedThisPeriod(x,current);
-      levels.push({id:'wprofile-'+x.from+'-'+x.side,kind:'wprofile',price:x.price,from:x.from,to:x.to,label:'',color:x.naked?base:faded,axisColor:touchedThisPeriod?colorAlpha(base,.5):base,axisTextColor:'#0b1220',axisLabel:x.naked,style:touchedThisPeriod?'dashed':'solid',width:1,naked:x.naked,touchedThisPeriod,week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side});
-    }
-    if(current&&inPrice(current.poc))levels.push({id:'wprofile-current-poc',kind:'wprofile',price:current.poc,from:wStart,label:'',color:colors.pocLine||'#e6d600',axisColor:colors.pocLine||'#e6d600',axisTextColor:'#0b1220',axisLabel:true,style:'dashed',width:1,current:true,side:'poc'});
-    const manual=cfg.referenceWeek&&cfg.referenceWeek[state.symbol],reference=E.selectReferenceWeek(pre,currentPrice,manual),regions=[];
-    if(reference){
-      const rs=Date.parse(String(reference.start))/1000,label=weekLabel(rs)+' range';
-      regions.push({id:'wprofile-ref-'+rs,type:'value',scope:'WPROFILE_REF',bottom:Number(reference.low),top:Number(reference.high),from:rs,label,
-        fill:colors.referenceFill||'rgba(190,196,208,.08)',border:colors.referenceBorder||'#40a0be',axisColor:colors.referenceBorder||'#40a0be',axisTextColor:'#0b1220',axisLabel:true,labelColor:'#ffffff',labelSize:11,labelWeight:600});
-    }
-    const allSinglePrints=E.remainingSinglePrints(pre,currentPrice,rowSize,Number.MAX_SAFE_INTEGER),maxSingle=Math.max(0,Number(cfg.maxSinglePrints)||6);
-    const visibleSinglePrints=allSinglePrints.filter(sp=>intersects(sp.bottom,sp.top)).slice(0,maxSingle),visibleSpKeys=new Set(visibleSinglePrints.map(sp=>sp.from+'|'+sp.bottom+'|'+sp.top));
-    const singlePrints=allSinglePrints.filter(sp=>!intersects(sp.bottom,sp.top)||visibleSpKeys.has(sp.from+'|'+sp.bottom+'|'+sp.top));
-    for(const sp of singlePrints)regions.push({id:'wprofile-sp-'+sp.from+'-'+sp.bottom,type:'value',scope:'SINGLE_PRINT',bottom:sp.bottom,top:sp.top,from:sp.from,label:'',fill:'rgba(168,162,58,.10)',border:'#a8a23a',axisColor:'#a8a23a',axisTextColor:'#0b1220',axisLabel:true});
-    return{profiles,levels,regions,current,naked,extensions:ext,ended,pre,reference,singlePrints:visibleSinglePrints,allSinglePrints:singlePrints,priceWindow};
-  }
-
   function templateBuildContext(id,bundle,display,view){
     return{
       id,state,E,I,D,bundle,display,view,layerEnabled,symbolMeta,extrema,yearVwapSegments,colorAlpha,
@@ -406,7 +373,13 @@
       view,
       {profiles:[],levels:[],regions:[],current:null,box:null,naked:[],priceWindow:null}
     );
-    const wprofileModel=buildWeeklyProfile(bundle,display,view);
+    const wprofileModel=buildTemplate(
+      'wprofile',
+      bundle,
+      display,
+      view,
+      {profiles:[],levels:[],regions:[],current:null,naked:[],extensions:[],priceWindow:null}
+    );
     const pq=areas.find(a=>a.scope==='PQ');
     if(pq&&layerEnabled('pqVwap'))allLevels.push({id:'line-pq-vwap',kind:'pq',price:pq.pqVwap,from:qStart,label:'PQ VWAP',color:rules.colors.pqVwap,axisColor:rules.colors.pqVwap,axisTextColor:'#eceff4',axisLabel:true,style:'solid',period:'Q / 1h',source:'exact'});
     if(pq&&layerEnabled('pqBounds')){
@@ -475,12 +448,15 @@
 
     const quarterVwaps=quarterVwapSegments(one,display);
     const rvwapModel=buildTemplate('rvwap',bundle,display,view,{curves:[],rolling:{},yearSegments:[]});
-    const profileWindow=state.template==='wprofile'?wprofileModel.priceWindow:(state.template==='mprofile'?mprofileModel.priceWindow:null);
+    const profileModels={mprofile:mprofileModel,wprofile:wprofileModel};
+    const activeHandler=T[state.template];
+    const activeProfileModel=activeHandler&&activeHandler.modelKey?profileModels[activeHandler.modelKey]:null;
+    const profileWindow=activeProfileModel&&activeProfileModel.priceWindow||null;
     const currentVwap=(quarterVwaps.find(x=>x.start===qStart)||quarterVwaps[quarterVwaps.length-1]||{points:[]}).points.map(p=>({time:p.time,value:p.vwap}));
     const lastClosed=closedCalc[closedCalc.length-1];
     const calcLastClosedUtc=lastClosed?new Date(Number(lastClosed.closeTime)+1).toISOString():null;
     return{
-      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,pqStats,keyLevels:levels.filter(l=>l.kind==='key'),yearLevels:levels.filter(l=>l.kind==='year'),curves:(rvwapModel.curves||[]).concat(weeklyModel.curves||[]),rvwap:rvwapModel,weekly:weeklyModel,monthly:monthlyModel,mprofile:mprofileModel,wprofile:wprofileModel,profiles:state.template==='wprofile'?(wprofileModel.profiles||[]):(mprofileModel.profiles||[]),missing,
+      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,pqStats,keyLevels:levels.filter(l=>l.kind==='key'),yearLevels:levels.filter(l=>l.kind==='year'),curves:(rvwapModel.curves||[]).concat(weeklyModel.curves||[]),rvwap:rvwapModel,weekly:weeklyModel,monthly:monthlyModel,mprofile:mprofileModel,wprofile:wprofileModel,profiles:activeProfileModel?(activeProfileModel.profiles||[]):[],missing,
       allRegions,allLevels:levelsForTable,viewMin:profileWindow?profileWindow.min:view.min,viewMax:profileWindow?profileWindow.max:view.max,profileWindow,visibleBars:visibleN,
       cutoffUtc:bundle.cutoffUtc||null,generatedAt:bundle.generatedAt||new Date().toISOString(),
       calcTf,calcLastClosedUtc,bundleErrors:bundle.errors||{},
@@ -626,17 +602,7 @@
     const c=document.createElement('span');c.className='muted';c.textContent=' 量 '+formatVolume(bar.volume);line1.appendChild(c);
     const line2=$('chartInfo2');line2.textContent='';
     const add=(text,klass)=>{const e=document.createElement('span');e.className=klass;e.textContent=text;line2.appendChild(e);};
-    if(state.template==='wprofile'){
-      const wp=model.wprofile||{},cur=wp.current;
-      line2.appendChild(document.createTextNode('Weekly TPO (30m, 70%)'));
-      add('  '+(cur?'POC '+fmtPrice(cur.poc)+'  VAH '+fmtPrice(cur.vah)+'  VAL '+fmtPrice(cur.val):'POC —  VAH —  VAL —'),'tpo');
-      const ref=wp.reference,rs=ref&&Date.parse(String(ref.start))/1000;
-      add('  ·  Ref '+(ref?weekLabel(rs)+' '+fmtPrice(ref.high)+' / '+fmtPrice(ref.low):'—'),'muted');
-      const touchedNow=(wp.naked||[]).filter(x=>x.touchedThisPeriod).length;
-      add('  ·  naked '+String((wp.naked||[]).length)+' ('+touchedNow+' this period)','tpo');
-      add('  ·  SP '+String((wp.singlePrints||[]).length),'tpo');
-      model.infoValues={currentPoc:cur&&cur.poc,reference:ref?{week:new Date(rs*1000).toISOString().slice(0,10),high:Number(ref.high),low:Number(ref.low),manual:!!ref.manual}:null,naked:(wp.naked||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side,price:x.price,touchedThisPeriod:!!x.touchedThisPeriod})),singlePrints:(wp.singlePrints||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),bottom:x.bottom,top:x.top})),barTime:Number(bar.time)};
-    }else{
+    {
       const handler=T[state.template];
       if(handler&&typeof handler.infoLine==='function'){
         handler.infoLine({state,model,line2,fmtPrice,weekLabel,monthLabelFromStart},bar,add);

@@ -42,24 +42,13 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
       legendVisible:getComputedStyle(document.getElementById('analysisLegend')).display!=='none',
       axis:window.__analysisDebug.axisLabels(),
       tableRows:window.__analysisDebug.model?.tableRows?.length||0,
-      values:(template==='weekly'?(()=>{
-        const m=window.__analysisDebug.model,last=Number(m.last.time),seg=(m.weekly&&m.weekly.segments||[]).find(x=>last>=Number(x.start)&&last<Number(x.end));
-        const p=seg&&(seg.points||[]).find(x=>Number(x.time)===last),proj=seg&&(m.weekly&&m.weekly.projections||[]).find(x=>Number(x.weekStart)===Number(seg.start));
-        return{weekStart:seg&&seg.start,vwap:p&&p.vwap,upper:p&&p.upper,lower:p&&p.lower,pwVwap:proj&&proj.pwVwap,pwUpper:proj&&proj.pwUpper,pwLower:proj&&proj.pwLower,yearOpen:m.weekly&&m.weekly.yearOpen};
-      })():template==='monthly'?(()=>{
-        const mm=window.__analysisDebug.model?.monthly||{},line=x=>x?{price:x.price,label:x.label,month:x.month}:null,g=mm.imbalance;
-        return{upper:line(mm.upper),lower:line(mm.lower),imbalance:g?{low:g.low,high:g.high,c1:g.c1Month,c3:g.c3Month,forming:!!g.forming}:null};
-      })():template==='mprofile'?(()=>{
-        const mp=window.__analysisDebug.model?.mprofile||{},box=mp.box;
-        return{currentPoc:mp.current&&mp.current.poc,box:box?{month:new Date(box.startSec*1000).toISOString().slice(0,7),vah:box.vah,val:box.val}:null,
-          naked:(mp.naked||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),side:x.side,price:x.price,touchedThisPeriod:!!x.touchedThisPeriod})),
-          singlePrints:(mp.singlePrints||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),bottom:x.bottom,top:x.top}))};
-      })():template==='wprofile'?(()=>{
-        const wp=window.__analysisDebug.model?.wprofile||{},ref=wp.reference,rs=ref&&Date.parse(String(ref.start))/1000;
-        return{currentPoc:wp.current&&wp.current.poc,reference:ref?{week:new Date(rs*1000).toISOString().slice(0,10),high:Number(ref.high),low:Number(ref.low),manual:!!ref.manual}:null,
-          naked:(wp.naked||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side,price:x.price,touchedThisPeriod:!!x.touchedThisPeriod})),
-          singlePrints:(wp.singlePrints||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),bottom:x.bottom,top:x.top}))};
-      })():null),
+      values:(()=>{
+        const registry=window.OrderFlowTemplates||{};
+        const handler=registry[template];
+        return handler&&typeof handler.manifestValues==='function'
+          ?handler.manifestValues({model:window.__analysisDebug.model})
+          :null;
+      })(),
       reference:(template==='rvwap'&&symbol==='BTCUSDT'?(()=>{
         const d=window.__analysisDebug,m=d.model,target=Date.UTC(2026,8,30,16,0,0)/1000,curves=m.curves||[];
         const cv=id=>{const c=curves.find(x=>x.id===id),p=c&&c.points.find(x=>Number(x.time)===target);return p&&p.value;};
