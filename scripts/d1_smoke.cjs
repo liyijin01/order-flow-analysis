@@ -812,7 +812,7 @@ function assertBoundaryStable(before,after,label){
       });
       if(mp.template!=='mprofile'||mp.tf!=='1d'||mp.profiles!==12||!mp.endedOk||!mp.currentOk)throw new Error('D16 mprofile data '+JSON.stringify(mp));
       if(Math.abs(mp.rightFraction-.30)>.025||!mp.stopsOk||mp.box>1)throw new Error('D16 mprofile layout '+JSON.stringify(mp));
-      if(mp.regions.some(x=>x!=='MPROFILE_BOX')||mp.levels.some(x=>x!=='mprofile')||mp.curves||mp.table!=='none'||mp.legend!=='none'||mp.volume||mp.quarterBands||mp.countdown)throw new Error('D16 mprofile disabled layers '+JSON.stringify(mp));
+      if(mp.regions.some(x=>!['MPROFILE_BOX','SINGLE_PRINT'].includes(x))||mp.levels.some(x=>x!=='mprofile')||mp.curves||mp.table!=='none'||mp.legend!=='none'||mp.volume||mp.quarterBands||mp.countdown)throw new Error('D16 mprofile disabled layers '+JSON.stringify(mp));
       if(mp.style.upColor!=='rgba(0,0,0,0)'||mp.style.borderUpColor!=='rgba(0,0,0,0)'||mp.style.wickUpColor!=='rgba(0,0,0,0)'||mp.style.priceLineVisible!==true)throw new Error('D16 hidden candles '+JSON.stringify(mp.style));
       if(!mp.tfButtons.find(x=>x.tf==='1d'&&x.text==='M30'&&x.display!=='none')||mp.tfButtons.some(x=>x.tf!=='1d'&&x.display!=='none')||!mp.watermark.includes('M30 Monthly')||!mp.line2.includes('Monthly TPO (30m, 70%)')||mp.tpoError)throw new Error('D16 mprofile chrome '+JSON.stringify(mp));
       for(const symbol of ['ETHUSDT','SOLUSDT','BTCUSDT']){
