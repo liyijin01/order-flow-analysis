@@ -139,7 +139,7 @@ def build_symbol(symbol: str, cutoff: datetime, cache_dir: Path, output_dir: Pat
     }
     output_dir.mkdir(parents=True,exist_ok=True)
     (output_dir/f"{symbol}.json").write_text(json.dumps(payload,separators=(",",":")),encoding="utf-8")
-    return payload,{"monthly":computed_monthly,"weekly":computed_weekly}
+    return payload,computed_monthly+computed_weekly
 
 
 def parse_cutoff(raw: str | None):
@@ -157,7 +157,7 @@ def main(argv=None):
     cutoff=parse_cutoff(args.cutoff)
     for symbol in SYMBOLS:
         payload,computed=build_symbol(symbol,cutoff,args.cache_dir,args.output_dir)
-        print(f"{symbol}: {len(payload['monthly'])} monthly + {len(payload['weekly'])} weekly TPO profiles; monthly {', '.join(computed['monthly']) if computed['monthly'] else 'cache hit'}; weekly {', '.join(computed['weekly']) if computed['weekly'] else 'cache hit'}",flush=True)
+        print(f"{symbol}: {len(payload['monthly'])} monthly + {len(payload['weekly'])} weekly TPO profiles; computed {', '.join(computed) if computed else 'cache hit'}",flush=True)
 
 
 if __name__=="__main__":
