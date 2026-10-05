@@ -20,6 +20,6 @@ test('D17 single print min height uses current-price threshold',()=>{
 });
 
 test('D17 single prints are capped at six',()=>{
-  const periods=Array.from({length:8},(_,i)=>({start:iso(i),complete:true,low:1,high:200,singlePrints:[[50+i*5,54+i*5]]}));
+  const periods=Array.from({length:8},(_,i)=>({start:iso(i),complete:true,low:1,high:2,singlePrints:[[50+i*5,54+i*5]]}));
   assert.equal(E.remainingSinglePrints(periods,88,1,6).length,6);
 });
