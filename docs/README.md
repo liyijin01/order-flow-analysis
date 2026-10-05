@@ -15,3 +15,5 @@
 1. 把本轮任务文档原样保存为 `docs/specs/{编号}.md`。
 2. 在 `CHANGELOG.md` 末尾追加一行：编号、日期、PR、做了什么、关键决定；从 D12 起只写 PR 编号，不写 squash 提交 SHA。
 3. 更新 `ROADMAP.md` 的状态；如果本轮改变了某个定义或规则，同步更新 `DECISIONS.md`。
+
+push 之前在本地跑一遍浏览器回归 `node scripts/d1_smoke.cjs`。
