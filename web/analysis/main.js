@@ -397,7 +397,13 @@
       levels.push({id:'wprofile-'+x.from+'-'+x.side,kind:'wprofile',price:x.price,from:x.from,to:x.to,label:'',color:x.naked?base:faded,axisColor:base,axisTextColor:'#0b1220',axisLabel:x.naked,style:'solid',width:1,naked:x.naked,week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side});
     }
     if(current&&inView(current.poc))levels.push({id:'wprofile-current-poc',kind:'wprofile',price:current.poc,from:wStart,label:'',color:colors.pocLine||'#e6d600',axisColor:colors.pocLine||'#e6d600',axisTextColor:'#0b1220',axisLabel:true,style:'dashed',width:1,current:true,side:'poc'});
-    return{profiles,levels,regions:[],current,naked:naked,extensions:ext,ended,pre};
+    const manual=cfg.referenceWeek&&cfg.referenceWeek[state.symbol],reference=E.selectReferenceWeek(pre,currentPrice,manual),regions=[];
+    if(reference){
+      const rs=Date.parse(String(reference.start))/1000,label=weekLabel(rs)+' range';
+      regions.push({id:'wprofile-ref-'+rs,type:'value',scope:'WPROFILE_REF',bottom:Number(reference.low),top:Number(reference.high),from:rs,label,
+        fill:colors.referenceFill||'rgba(190,196,208,.08)',border:colors.referenceBorder||'#40a0be',axisColor:colors.referenceBorder||'#40a0be',axisTextColor:'#0b1220',axisLabel:true,labelColor:'#ffffff',labelSize:11,labelWeight:600});
+    }
+    return{profiles,levels,regions,current,naked:naked,extensions:ext,ended,pre,reference};
   }
 
   function buildAnalysis(bundle){
@@ -682,8 +688,10 @@
       const wp=model.wprofile||{},cur=wp.current;
       line2.appendChild(document.createTextNode('Weekly TPO (30m, 70%)'));
       add('  '+(cur?'POC '+fmtPrice(cur.poc)+'  VAH '+fmtPrice(cur.vah)+'  VAL '+fmtPrice(cur.val):'POC —  VAH —  VAL —'),'tpo');
+      const ref=wp.reference,rs=ref&&Date.parse(String(ref.start))/1000;
+      add('  ·  Ref '+(ref?weekLabel(rs)+' '+fmtPrice(ref.high)+' / '+fmtPrice(ref.low):'—'),'muted');
       add('  ·  nPOC '+String((wp.naked||[]).filter(x=>x.side==='poc').length),'tpo');
-      model.infoValues={currentPoc:cur&&cur.poc,reference:null,naked:(wp.naked||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side,price:x.price})),singlePrints:[],barTime:Number(bar.time)};
+      model.infoValues={currentPoc:cur&&cur.poc,reference:ref?{week:new Date(rs*1000).toISOString().slice(0,10),high:Number(ref.high),low:Number(ref.low),manual:!!ref.manual}:null,naked:(wp.naked||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side,price:x.price})),singlePrints:[],barTime:Number(bar.time)};
     }else if(state.template==='mprofile'){
       const mp=model.mprofile||{},cur=mp.current,box=mp.box;
       line2.appendChild(document.createTextNode('Monthly TPO (30m, 70%)'));

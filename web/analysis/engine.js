@@ -369,6 +369,21 @@
       .slice().sort((a,b)=>Date.parse(String(b.start||''))-Date.parse(String(a.start||'')))[0]||null;
   }
 
+  function selectReferenceWeek(periods,current,manualWeek){
+    const src=(periods||[]).filter(x=>x&&x.complete===true).slice().sort((a,b)=>Date.parse(String(a.start||''))-Date.parse(String(b.start||'')));
+    if(manualWeek){
+      const target=String(manualWeek).slice(0,10),row=src.find(x=>String(x.start||'').slice(0,10)===target);
+      return row?{...row,manual:true}:null;
+    }
+    const price=Number(current),pool=src.slice(0,Math.max(0,src.length-4));
+    const candidates=pool.filter(x=>finite(x.low)&&finite(x.high)&&Number(x.low)<=price&&price<=Number(x.high));
+    candidates.sort((a,b)=>{
+      const ra=(Number(a.high)-Number(a.low))/Math.max(1e-12,Math.abs(Number(a.low))),rb=(Number(b.high)-Number(b.low))/Math.max(1e-12,Math.abs(Number(b.low)));
+      return rb-ra||Date.parse(String(b.start||''))-Date.parse(String(a.start||''));
+    });
+    return candidates.length?{...candidates[0],manual:false}:null;
+  }
+
   function capTableRows(rows,maxRows){
     const src=(rows||[]).slice(),limit=Math.max(1,Number(maxRows)||16);
     if(src.length<=limit)return src;
@@ -411,6 +426,6 @@
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,utcWeekStart,
     weightedStats,anchoredVwapSeries,alignSeriesToBars,valueArea,approxVolumeProfile,tpoProfile,exactProfile,profileIsFresh,
     atr14,detectZones,markZoneTouches,mergeZones,zoneState,selectZones,rangeOverlapRatio,suppressValueAreas,filterValueAreas,inPriceView,zoneIntersectsView,
-    wasZoneTouched,isPocNaked,selectNakedPocs,mergeKeyLevels,selectKeyLevels,profileExtensions,selectProfileValueBox,capTableRows,axisLabelSelection,regionLabelLayout,roundToTick
+    wasZoneTouched,isPocNaked,selectNakedPocs,mergeKeyLevels,selectKeyLevels,profileExtensions,selectProfileValueBox,selectReferenceWeek,capTableRows,axisLabelSelection,regionLabelLayout,roundToTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);
