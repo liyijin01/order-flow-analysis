@@ -39,7 +39,7 @@
       const panes=state.chart.panes();if(state.volume&&panes[1])panes[1].setHeight(Math.max(105,Math.round($('analysisChart').clientHeight*.18)));
     }else if(state.volume){state.chart.removeSeries(state.volume);state.volume=null;}
   }
-  function regionLayerEnabled(r){if(r.scope==='WEEKLY_PROJECTION')return layerEnabled('weeklyProjection');if(r.scope==='MONTHLY_IMBALANCE')return layerEnabled('monthlyStructure');if(r.scope==='MPROFILE_BOX')return layerEnabled('mprofile');if(r.scope==='WPROFILE_REF')return layerEnabled('wprofile');if(r.type!=='value')return layerEnabled('zones');if(r.scope==='PQ')return layerEnabled('pqArea');if(r.scope==='PM')return layerEnabled('pm');if(r.scope==='PW')return layerEnabled('pw');return true;}
+  function regionLayerEnabled(r){if(r.scope==='WEEKLY_PROJECTION')return layerEnabled('weeklyProjection');if(r.scope==='MONTHLY_IMBALANCE')return layerEnabled('monthlyStructure');if(r.scope==='MPROFILE_BOX')return layerEnabled('mprofile');if(r.scope==='WPROFILE_REF')return layerEnabled('wprofile');if(r.scope==='SINGLE_PRINT')return profileTemplate();if(r.type!=='value')return layerEnabled('zones');if(r.scope==='PQ')return layerEnabled('pqArea');if(r.scope==='PM')return layerEnabled('pm');if(r.scope==='PW')return layerEnabled('pw');return true;}
   function levelLayerEnabled(l){if(l.kind==='pq')return layerEnabled('pqVwap');if(l.kind==='pq-bound')return layerEnabled('pqBounds');if(l.kind==='npoc')return layerEnabled('nPoc');if(l.kind==='key')return layerEnabled('keyLevels');if(l.kind==='year')return layerEnabled('yearLevels');if(l.kind==='weekly'||l.kind==='weekly-pw')return layerEnabled('weeklyVwap');if(l.kind==='year-open')return layerEnabled('yearOpen');if(l.kind==='monthly-sr')return layerEnabled('monthlyStructure');if(l.kind==='mprofile')return layerEnabled('mprofile');if(l.kind==='wprofile')return layerEnabled('wprofile');return true;}
   function fmtPrice(v){
     const p=pricePrecision(),tick=Number(symbolMeta().tickSize)||.01,n=E.roundToTick(Number(v),tick);
@@ -371,7 +371,9 @@
       regions.push({id:'mprofile-box-'+box.startSec,type:'value',scope:'MPROFILE_BOX',bottom:box.val,top:box.vah,from:box.startSec,label,
         fill:colors.boxFill||'rgba(255,255,255,.03)',border:colors.boxBorder||'#ffffff',axisLabel:false,labelColor:'#ffffff',labelSize:11,labelWeight:600});
     }
-    return{profiles,levels,regions,current,box,naked:levels.filter(x=>x.naked),extensions};
+    const singlePrints=E.remainingSinglePrints(pre,currentPrice,rowSize,6);
+    for(const sp of singlePrints)regions.push({id:'mprofile-sp-'+sp.from+'-'+sp.bottom,type:'value',scope:'SINGLE_PRINT',bottom:sp.bottom,top:sp.top,from:sp.from,label:'',fill:'rgba(168,162,58,.10)',border:'#a8a23a',axisColor:'#a8a23a',axisTextColor:'#0b1220',axisLabel:true});
+    return{profiles,levels,regions,current,box,naked:levels.filter(x=>x.naked),extensions,singlePrints};
   }
 
   function weekLabel(start){
@@ -403,7 +405,9 @@
       regions.push({id:'wprofile-ref-'+rs,type:'value',scope:'WPROFILE_REF',bottom:Number(reference.low),top:Number(reference.high),from:rs,label,
         fill:colors.referenceFill||'rgba(190,196,208,.08)',border:colors.referenceBorder||'#40a0be',axisColor:colors.referenceBorder||'#40a0be',axisTextColor:'#0b1220',axisLabel:true,labelColor:'#ffffff',labelSize:11,labelWeight:600});
     }
-    return{profiles,levels,regions,current,naked:naked,extensions:ext,ended,pre,reference};
+    const singlePrints=E.remainingSinglePrints(pre,currentPrice,rowSize,6);
+    for(const sp of singlePrints)regions.push({id:'wprofile-sp-'+sp.from+'-'+sp.bottom,type:'value',scope:'SINGLE_PRINT',bottom:sp.bottom,top:sp.top,from:sp.from,label:'',fill:'rgba(168,162,58,.10)',border:'#a8a23a',axisColor:'#a8a23a',axisTextColor:'#0b1220',axisLabel:true});
+    return{profiles,levels,regions,current,naked:naked,extensions:ext,ended,pre,reference,singlePrints};
   }
 
   function buildAnalysis(bundle){
@@ -691,14 +695,16 @@
       const ref=wp.reference,rs=ref&&Date.parse(String(ref.start))/1000;
       add('  ·  Ref '+(ref?weekLabel(rs)+' '+fmtPrice(ref.high)+' / '+fmtPrice(ref.low):'—'),'muted');
       add('  ·  nPOC '+String((wp.naked||[]).filter(x=>x.side==='poc').length),'tpo');
-      model.infoValues={currentPoc:cur&&cur.poc,reference:ref?{week:new Date(rs*1000).toISOString().slice(0,10),high:Number(ref.high),low:Number(ref.low),manual:!!ref.manual}:null,naked:(wp.naked||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side,price:x.price})),singlePrints:[],barTime:Number(bar.time)};
+      add('  ·  SP '+String((wp.singlePrints||[]).length),'tpo');
+      model.infoValues={currentPoc:cur&&cur.poc,reference:ref?{week:new Date(rs*1000).toISOString().slice(0,10),high:Number(ref.high),low:Number(ref.low),manual:!!ref.manual}:null,naked:(wp.naked||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side,price:x.price})),singlePrints:(wp.singlePrints||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),bottom:x.bottom,top:x.top})),barTime:Number(bar.time)};
     }else if(state.template==='mprofile'){
       const mp=model.mprofile||{},cur=mp.current,box=mp.box;
       line2.appendChild(document.createTextNode('Monthly TPO (30m, 70%)'));
       add('  '+(cur?'POC '+fmtPrice(cur.poc)+'  VAH '+fmtPrice(cur.vah)+'  VAL '+fmtPrice(cur.val):'POC —  VAH —  VAL —'),'tpo');
       add('  ·  Box '+(box?monthLabelFromStart(box.startSec,new Date(model.last.time*1000).getUTCFullYear())+' VA '+fmtPrice(box.vah)+' / '+fmtPrice(box.val):'—'),'muted');
       add('  ·  naked '+String((mp.naked||[]).length),'tpo');
-      model.infoValues={currentPoc:cur&&cur.poc,box:box?{month:new Date(box.startSec*1000).toISOString().slice(0,7),vah:box.vah,val:box.val}:null,naked:(mp.naked||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),side:x.side,price:x.price})),barTime:Number(bar.time)};
+      add('  ·  SP '+String((mp.singlePrints||[]).length),'tpo');
+      model.infoValues={currentPoc:cur&&cur.poc,box:box?{month:new Date(box.startSec*1000).toISOString().slice(0,7),vah:box.vah,val:box.val}:null,naked:(mp.naked||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),side:x.side,price:x.price})),singlePrints:(mp.singlePrints||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),bottom:x.bottom,top:x.top})),barTime:Number(bar.time)};
     }else if(state.template==='monthly'){
       const mm=model.monthly||{},up=mm.upper,down=mm.lower,gap=mm.imbalance;
       line2.appendChild(document.createTextNode('Monthly structure'));

@@ -406,7 +406,8 @@
       "pocLine": "#e6d600",
       "boxFill": "rgba(255,255,255,.03)",
       "boxBorder": "#ffffff"
-    }
+    },
+    "maxSinglePrints": 6
   },
   "wprofile": {
     "rowTicks": 100,
@@ -425,6 +426,7 @@
       "pocLine": "#e6d600",
       "referenceFill": "rgba(190,196,208,.08)",
       "referenceBorder": "#40a0be"
-    }
+    },
+    "maxSinglePrints": 6
   }
 }

@@ -7,7 +7,7 @@ const latestPath=path.resolve(process.env.ANALYSIS_LATEST||'_site/analysis/lates
 fs.mkdirSync(outDir,{recursive:true});
 fs.mkdirSync(path.dirname(latestPath),{recursive:true});
 
-const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],combinedTfs=['4h','1h','1d'],quarterTfs=['1h','4h'],rvwapTfs=['4h'],weeklyTfs=['30m'],monthlyTfs=['1M'],mprofileTfs=['1d'];
+const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],combinedTfs=['4h','1h','1d'],quarterTfs=['1h','4h'],rvwapTfs=['4h'],weeklyTfs=['30m'],monthlyTfs=['1M'],mprofileTfs=['1d'],wprofileTfs=['1d'];
 const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'1M':86400_000};
 
 (async()=>{
@@ -50,7 +50,13 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
       })():template==='mprofile'?(()=>{
         const mp=window.__analysisDebug.model?.mprofile||{},box=mp.box;
         return{currentPoc:mp.current&&mp.current.poc,box:box?{month:new Date(box.startSec*1000).toISOString().slice(0,7),vah:box.vah,val:box.val}:null,
-          naked:(mp.naked||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),side:x.side,price:x.price}))};
+          naked:(mp.naked||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),side:x.side,price:x.price})),
+          singlePrints:(mp.singlePrints||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),bottom:x.bottom,top:x.top}))};
+      })():template==='wprofile'?(()=>{
+        const wp=window.__analysisDebug.model?.wprofile||{},ref=wp.reference,rs=ref&&Date.parse(String(ref.start))/1000;
+        return{currentPoc:wp.current&&wp.current.poc,reference:ref?{week:new Date(rs*1000).toISOString().slice(0,10),high:Number(ref.high),low:Number(ref.low),manual:!!ref.manual}:null,
+          naked:(wp.naked||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side,price:x.price})),
+          singlePrints:(wp.singlePrints||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),bottom:x.bottom,top:x.top}))};
       })():null),
       reference:(template==='rvwap'&&symbol==='BTCUSDT'?(()=>{
         const d=window.__analysisDebug,m=d.model,target=Date.UTC(2026,8,30,16,0,0)/1000,curves=m.curves||[];
@@ -67,7 +73,7 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
       if(!(Number.isFinite(meta.logicalSlots)&&Math.abs(meta.logicalSlots-meta.visibleBars*1.04)<=2))throw new Error(symbol+' '+tf+' combined quarter logical slots '+meta.logicalSlots+' expected '+(meta.visibleBars*1.04));
     }else{
       if(meta.tableVisible||meta.legendVisible)throw new Error(symbol+' '+tf+' template chrome visible '+JSON.stringify(meta));
-      const r=meta.range||{},right=Math.max(0,Number(r.to)-(meta.displayBars-1)),span=Number(r.to)-Number(r.from),fraction=span>0?right/span:0,expected=template==='mprofile'?.30:.18;
+      const r=meta.range||{},right=Math.max(0,Number(r.to)-(meta.displayBars-1)),span=Number(r.to)-Number(r.from),fraction=span>0?right/span:0,expected=(template==='mprofile'||template==='wprofile')?.30:.18;
       if(Math.abs(fraction-expected)>.025)throw new Error(symbol+' '+tf+' '+template+' right margin '+fraction);
     }
     if(template==='weekly'){
@@ -75,7 +81,10 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
       if(keys.some(k=>!Number.isFinite(Number(v[k]))))throw new Error(symbol+' '+tf+' weekly values incomplete '+JSON.stringify(v));
     }
     if(template==='mprofile'){
-      const v=meta.values||{};if(!Number.isFinite(Number(v.currentPoc))||!Array.isArray(v.naked))throw new Error(symbol+' '+tf+' mprofile values incomplete '+JSON.stringify(v));
+      const v=meta.values||{};if(!Number.isFinite(Number(v.currentPoc))||!Array.isArray(v.naked)||!Array.isArray(v.singlePrints))throw new Error(symbol+' '+tf+' mprofile values incomplete '+JSON.stringify(v));
+    }
+    if(template==='wprofile'){
+      const v=meta.values||{};if(!Number.isFinite(Number(v.currentPoc))||!Array.isArray(v.naked)||!Array.isArray(v.singlePrints))throw new Error(symbol+' '+tf+' wprofile values incomplete '+JSON.stringify(v));
     }
     if(!meta.cutoff||!meta.calcLastClosedUtc)throw new Error(symbol+' '+tf+' '+template+' missing cutoff metadata');
     const cutoffMs=Date.parse(meta.cutoff),calcMsValue=Date.parse(meta.calcLastClosedUtc),earliest=cutoffMs-(calcMs[tf]+86400_000);
@@ -102,8 +111,9 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
     for(const symbol of symbols)for(const tf of weeklyTfs)await capture(symbol,tf,'weekly');
     for(const symbol of symbols)for(const tf of monthlyTfs)await capture(symbol,tf,'monthly');
     for(const symbol of symbols)for(const tf of mprofileTfs)await capture(symbol,tf,'mprofile','30m');
+    for(const symbol of symbols)for(const tf of wprofileTfs)await capture(symbol,tf,'wprofile','30m');
   } finally {await browser.close();}
-  const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap','weekly','monthly','mprofile'],files:manifest};
+  const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap','weekly','monthly','mprofile','wprofile'],files:manifest};
   fs.writeFileSync(latestPath,JSON.stringify(latest,null,2));
   fs.writeFileSync(path.join(outDir,'manifest.json'),JSON.stringify(manifest,null,2));
   const reference=manifest.find(x=>x.symbol==='BTCUSDT'&&x.template==='rvwap')?.reference;
