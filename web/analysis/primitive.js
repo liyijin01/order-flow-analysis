@@ -184,7 +184,7 @@
         let x1=this.x(l.from,size.width),x2=l.to==null?size.width:this.x(l.to,size.width),y=this.y(l.price);if(y==null)continue;if(x1==null)x1=0;if(x2==null)x2=size.width;
         if(l.draw!==false){ctx.save();ctx.strokeStyle=l.color||'#e7eaf0';ctx.lineWidth=l.width||1.3;this.lineStyle(ctx,l.style||'solid');
         ctx.beginPath();ctx.moveTo(Math.max(0,x1),y);ctx.lineTo(Math.max(0,Math.min(size.width,x2)),y);ctx.stroke();ctx.restore();}
-        if(l.label)labelTargets.push({id:l.id,text:l.label,x:Math.max(0,Math.min(size.width,x2))-8,targetY:y-8,color:l.color||'#e7eaf0',priority:1});
+        if(l.label)labelTargets.push({id:l.id,text:l.label,x:Math.max(0,Math.min(size.width,x2))-8,targetY:y-8,color:l.color||'#e7eaf0',fontSize:l.labelSize||12,fontWeight:l.labelWeight||600,priority:1});
       }
       const layout=E.regionLabelLayout(labelTargets,Number(this.model.textMinGap)||14,Number(this.model.textMaxShift)||24,size.height);
       for(const row of layout)if(row.visible){if(row.curve)this.curveLabel(ctx,row.text,row.x,row.y,row.color);else this.label(ctx,row.text,row.x,row.y,row.color,row.fontSize,row.fontWeight);}
