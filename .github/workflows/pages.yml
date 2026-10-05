@@ -71,6 +71,56 @@ jobs:
             exit 1
           fi
 
+  model-diff:
+    if: github.event_name == 'pull_request'
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout head
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Install Playwright core
+        run: npm install --no-save playwright-core@1.55.0
+      - name: Checkout PR base
+        run: git worktree add --detach _base "${{ github.event.pull_request.base.sha }}"
+      - name: Start base and head sites
+        run: |
+          python3 -m http.server 8000 --directory . >/tmp/model-head-http.log 2>&1 &
+          python3 -m http.server 8001 --directory _base >/tmp/model-base-http.log 2>&1 &
+          sleep 2
+      - name: Snapshot base and head models
+        run: |
+          node scripts/model_snapshot.cjs http://127.0.0.1:8001/analysis.html model-base.json
+          node scripts/model_snapshot.cjs http://127.0.0.1:8000/analysis.html model-head.json
+      - name: Compare model snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${GITHUB_HEAD_REF}" in
+            d19*|refactor-*) export MODEL_DIFF_STRICT=1 ;;
+            *) export MODEL_DIFF_STRICT=0 ;;
+          esac
+          node scripts/model_diff.cjs model-base.json model-head.json model-diff-report.md
+      - name: Upload model diff
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: model-diff
+          path: |
+            model-base.json
+            model-head.json
+            model-diff-report.md
+          if-no-files-found: error
+          retention-days: 14
+
+
   chart-smoke:
     if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-'))
     needs: test
