@@ -235,7 +235,7 @@ function assertBoundaryStable(before,after,label){
       if(!axisCheck.key||axisCheck.key.color!=='#3a4152'||axisCheck.key.textColor!=='#eceff4')throw new Error('D12b key price-axis style '+JSON.stringify(axisCheck));
       if(q.upColor!=='#e6e9ef'||q.downColor!=='rgba(0,0,0,0)'||q.watermarkColor!=='rgba(196,140,60,.30)')throw new Error('D12 global style '+JSON.stringify(q));
       await page.click('[data-tpl="combined"]');
-      await page.waitForFunction(()=>window.__analysisDebug?.template()==='combined'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
+      await page.waitForFunction(()=>window.__analysisDebug?.template()==='combined'&&String(window.__analysisDebug?.state?.viewKey||'').includes('|combined|')&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
       const combined=await page.evaluate(()=>({table:getComputedStyle(document.querySelector('.table-wrap')).display,legend:getComputedStyle(document.getElementById('analysisLegend')).display,volume:!!window.__analysisDebug.state.volume}));
       if(combined.table==='none'||combined.legend==='none'||!combined.volume)throw new Error('D12 combined restore '+JSON.stringify(combined));
       await page.close();
@@ -692,7 +692,7 @@ function assertBoundaryStable(before,after,label){
       if(rv.regions||rv.nonYearLevels||rv.quarterBands||rv.table!=='none'||rv.legend!=='none'||rv.volume)throw new Error('D13 disabled layers '+JSON.stringify(rv));
       if(rv.gaps.some(x=>x<18)||!rv.line2.includes('Rolling VWAP (hlc3, 4h)'))throw new Error('D13 year levels/info '+JSON.stringify(rv));
       await page.click('[data-tpl="quarter"]');
-      await page.waitForFunction(()=>window.__analysisDebug?.template()==='quarter'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
+      await page.waitForFunction(()=>window.__analysisDebug?.template()==='quarter'&&String(window.__analysisDebug?.state?.viewKey||'').includes('|quarter|')&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
       const q=await page.evaluate(()=>({year:(window.__analysisDebug.model.yearLevels||[]).length,template:window.__analysisDebug.template()}));
       if(q.template!=='quarter'||q.year)throw new Error('D13 quarter restore/year exclusion '+JSON.stringify(q));
       await page.click('[data-tpl="combined"]');
