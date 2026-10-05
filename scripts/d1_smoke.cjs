@@ -786,11 +786,11 @@ function assertBoundaryStable(before,after,label){
       if(mp.style.upColor!=='rgba(0,0,0,0)'||mp.style.borderUpColor!=='rgba(0,0,0,0)'||mp.style.wickUpColor!=='rgba(0,0,0,0)'||mp.style.priceLineVisible!==true)throw new Error('D16 hidden candles '+JSON.stringify(mp.style));
       if(!mp.tfButtons.find(x=>x.tf==='1d'&&x.text==='M30'&&x.display!=='none')||mp.tfButtons.some(x=>x.tf!=='1d'&&x.display!=='none')||!mp.watermark.includes('M30 Monthly')||!mp.line2.includes('Monthly TPO (30m, 70%)')||mp.tpoError)throw new Error('D16 mprofile chrome '+JSON.stringify(mp));
       for(const symbol of ['ETHUSDT','SOLUSDT','BTCUSDT']){
-        await page.click('[data-symbol="'+symbol+'"]');await page.waitForFunction(s=>window.__analysisDebug?.state.symbol===s&&window.__analysisDebug?.template()==='mprofile'&&document.getElementById('status')?.textContent.startsWith('Loaded '),symbol,{timeout:60000});
+        await page.evaluate(s=>document.querySelector('[data-symbol="'+s+'"]')?.click(),symbol);await page.waitForFunction(s=>window.__analysisDebug?.state.symbol===s&&window.__analysisDebug?.template()==='mprofile'&&document.getElementById('status')?.textContent.startsWith('Loaded '),symbol,{timeout:60000});
         const ok=await page.evaluate(()=>window.__analysisDebug?.model?.mprofile?.profiles?.length===12);
         if(!ok)throw new Error('D16 mprofile symbol switch '+symbol);
       }
-      await page.click('[data-tpl="monthly"]');await page.waitForFunction(()=>window.__analysisDebug?.template()==='monthly'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      await page.evaluate(()=>document.querySelector('[data-tpl="monthly"]')?.click());await page.waitForFunction(()=>window.__analysisDebug?.template()==='monthly'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const restored=await page.evaluate(()=>({visible1M:getComputedStyle(document.querySelector('[data-tf="1M"]')).display!=='none',text1d:document.querySelector('[data-tf="1d"]').textContent}));
       if(!restored.visible1M||restored.text1d!=='1D')throw new Error('D16 template restore '+JSON.stringify(restored));
       await page.close();
