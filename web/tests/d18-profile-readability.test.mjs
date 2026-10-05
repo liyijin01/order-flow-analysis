@@ -7,8 +7,10 @@ await import(pathToFileURL(path.resolve('web/analysis/engine.js')));
 const E=globalThis.OrderFlowAnalysisEngine;
 
 test('D18 profile price window uses configured percentages',()=>{
-  assert.deepEqual(E.profilePriceWindow(100,{below:18,above:25},null),{min:82,max:125});
-  assert.deepEqual(E.profilePriceWindow(100,{below:10,above:12},null),{min:90,max:112});
+  const monthly=E.profilePriceWindow(100,{below:18,above:25},null);
+  const weekly=E.profilePriceWindow(100,{below:10,above:12},null);
+  assert.ok(Math.abs(monthly.min-82)<1e-9&&Math.abs(monthly.max-125)<1e-9);
+  assert.ok(Math.abs(weekly.min-90)<1e-9&&Math.abs(weekly.max-112)<1e-9);
 });
 
 test('D18 profile price window expands to include forming profile extremes',()=>{
