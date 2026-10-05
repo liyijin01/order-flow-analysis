@@ -3,6 +3,18 @@
 
   const E=global.OrderFlowAnalysisEngine;
 
+  function mergeProfileRows(rows,rowSize,pixelsPerRow,minPx){
+    const src=(rows||[]).map(r=>[Number(r[0]),Number(r[1])]).filter(r=>Number.isFinite(r[0])&&Number.isFinite(r[1])).sort((a,b)=>a[0]-b[0]);
+    if(!src.length)return[];
+    const size=Math.max(1e-12,Number(rowSize)||1),px=Math.max(1e-12,Number(pixelsPerRow)||1),need=Math.max(1,Math.ceil((Number(minPx)||2)/px)),out=[];
+    for(let i=0;i<src.length;i+=need){
+      const part=src.slice(i,i+need),bottom=part[0][0],top=part[part.length-1][0]+size;
+      let count=0;for(const r of part)count+=Number(r[1])||0;
+      out.push({bottom,top,mid:(bottom+top)/2,count,rows:part.length});
+    }
+    return out;
+  }
+
   class AxisLabelView{
     constructor(owner,candidate){this.owner=owner;this.candidate=candidate;}
     coordinate(){
@@ -84,6 +96,7 @@
 
     autoscaleInfo(){
       const vals=[];
+      for(const p of this.model.profiles||[])vals.push(Number(p.low),Number(p.high),Number(p.val),Number(p.vah),Number(p.poc));
       for(const r of this.model.regions||[])vals.push(Number(r.bottom),Number(r.top));
       for(const l of this.model.levels||[])vals.push(Number(l.price));
       for(const c of this.model.curves||[])for(const p of c.points||[])vals.push(Number(p.value));
@@ -120,8 +133,30 @@
       return started||drew;
     }
 
+    profileRows(profile){
+      const size=Number(profile.rowSize)||1,y1=this.y(Number(profile.val)||0),y2=this.y((Number(profile.val)||0)+size);
+      const px=y1==null||y2==null?2:Math.abs(Number(y2)-Number(y1));
+      return mergeProfileRows(profile.rows,size,px,2);
+    }
+    drawProfiles(ctx,size){
+      for(const p of this.model.profiles||[]){
+        let x1=this.x(p.start,size.width),x2=this.x(p.end,size.width);if(x1==null)x1=0;if(x2==null)x2=size.width;
+        const left=Math.max(0,Math.min(size.width,x1)),periodWidth=Math.max(1,Math.min(size.width,x2)-left),rows=this.profileRows(p);
+        let maxCount=0;for(const row of rows)if(Number(row.count)>maxCount)maxCount=Number(row.count);
+        if(!(maxCount>0))continue;
+        for(const row of rows){
+          const yt=this.y(row.top),yb=this.y(row.bottom);if(yt==null||yb==null)continue;
+          const top=Math.min(yt,yb),bottom=Math.max(yt,yb),width=periodWidth*.85*(Number(row.count)/maxCount);
+          const containsPoc=Number(p.poc)>=Number(row.bottom)&&Number(p.poc)<Number(row.top);
+          const inVa=Number(row.mid)>=Number(p.val)&&Number(row.mid)<=Number(p.vah);
+          ctx.save();ctx.fillStyle=containsPoc?(p.colors&&p.colors.poc||'#ffeb3b'):(inVa?(p.colors&&p.colors.value||'rgba(64,160,190,.85)'):(p.colors&&p.colors.outside||'rgba(150,150,150,.6)'));
+          ctx.fillRect(left,top,Math.max(1,width),Math.max(1,bottom-top));ctx.restore();
+        }
+      }
+    }
     draw(ctx,size){
       const regions=this.model.regions||[],levels=this.model.levels||[],curves=this.model.curves||[],labelTargets=[];
+      this.drawProfiles(ctx,size);
       for(const c of curves){
         const points=c.points||[];if(!points.some(p=>Number.isFinite(Number(p.value))))continue;
         if(c.underlay&&Number(c.underlayWidth)>0){ctx.save();ctx.strokeStyle=c.underlay;ctx.lineWidth=Number(c.underlayWidth);ctx.lineJoin='round';ctx.lineCap='round';ctx.beginPath();if(this.curvePath(ctx,points,size))ctx.stroke();ctx.restore();}
@@ -149,12 +184,13 @@
         let x1=this.x(l.from,size.width),x2=l.to==null?size.width:this.x(l.to,size.width),y=this.y(l.price);if(y==null)continue;if(x1==null)x1=0;if(x2==null)x2=size.width;
         if(l.draw!==false){ctx.save();ctx.strokeStyle=l.color||'#e7eaf0';ctx.lineWidth=l.width||1.3;this.lineStyle(ctx,l.style||'solid');
         ctx.beginPath();ctx.moveTo(Math.max(0,x1),y);ctx.lineTo(Math.max(0,Math.min(size.width,x2)),y);ctx.stroke();ctx.restore();}
-        if(l.label)labelTargets.push({id:l.id,text:l.label,x:Math.max(0,Math.min(size.width,x2))-8,targetY:y-8,color:l.color||'#e7eaf0',priority:1});
+        if(l.label)labelTargets.push({id:l.id,text:l.label,x:Math.max(0,Math.min(size.width,x2))-8,targetY:y-8,color:l.color||'#e7eaf0',fontSize:l.labelSize||12,fontWeight:l.labelWeight||600,priority:1});
       }
       const layout=E.regionLabelLayout(labelTargets,Number(this.model.textMinGap)||14,Number(this.model.textMaxShift)||24,size.height);
       for(const row of layout)if(row.visible){if(row.curve)this.curveLabel(ctx,row.text,row.x,row.y,row.color);else this.label(ctx,row.text,row.x,row.y,row.color,row.fontSize,row.fontWeight);}
     }
 
+    debugProfiles(){return(this.model.profiles||[]).map(p=>({start:p.start,end:p.end,rows:this.profileRows(p),vah:p.vah,val:p.val,poc:p.poc,forming:!!p.forming}));}
     debugAxisLabels(){
       const out=this.axisLayout().map(x=>{
         const actual=this.series?this.series.priceToCoordinate(Number(x.price)):null;
@@ -165,5 +201,5 @@
     }
   }
 
-  global.OrderFlowAnalysisPrimitive={AnalysisBoardPrimitive};
+  global.OrderFlowAnalysisPrimitive={AnalysisBoardPrimitive,mergeProfileRows};
 })(typeof globalThis!=='undefined'?globalThis:window);

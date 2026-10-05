@@ -7,13 +7,13 @@ const latestPath=path.resolve(process.env.ANALYSIS_LATEST||'_site/analysis/lates
 fs.mkdirSync(outDir,{recursive:true});
 fs.mkdirSync(path.dirname(latestPath),{recursive:true});
 
-const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],combinedTfs=['4h','1h','1d'],quarterTfs=['1h','4h'],rvwapTfs=['4h'],weeklyTfs=['30m'],monthlyTfs=['1M'];
+const symbols=['BTCUSDT','ETHUSDT','SOLUSDT'],combinedTfs=['4h','1h','1d'],quarterTfs=['1h','4h'],rvwapTfs=['4h'],weeklyTfs=['30m'],monthlyTfs=['1M'],mprofileTfs=['1d'];
 const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'1M':86400_000};
 
 (async()=>{
   const browser=await chromium.launch({channel:'chrome',headless:true});
   const manifest=[];let cutoff=null;
-  async function capture(symbol,tf,template){
+  async function capture(symbol,tf,template,fileTf){
     const page=await browser.newPage({viewport:{width:1660,height:1300},deviceScaleFactor:1});
     const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
     const url=base+'?snapshot=1&tpl='+template+(template==='combined'?'&view=quarter':'')+'&symbol='+symbol+'&tf='+tf;
@@ -47,6 +47,10 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
       })():template==='monthly'?(()=>{
         const mm=window.__analysisDebug.model?.monthly||{},line=x=>x?{price:x.price,label:x.label,month:x.month}:null,g=mm.imbalance;
         return{upper:line(mm.upper),lower:line(mm.lower),imbalance:g?{low:g.low,high:g.high,c1:g.c1Month,c3:g.c3Month,forming:!!g.forming}:null};
+      })():template==='mprofile'?(()=>{
+        const mp=window.__analysisDebug.model?.mprofile||{},box=mp.box;
+        return{currentPoc:mp.current&&mp.current.poc,box:box?{month:new Date(box.startSec*1000).toISOString().slice(0,7),vah:box.vah,val:box.val}:null,
+          naked:(mp.naked||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),side:x.side,price:x.price}))};
       })():null),
       reference:(template==='rvwap'&&symbol==='BTCUSDT'?(()=>{
         const d=window.__analysisDebug,m=d.model,target=Date.UTC(2026,8,30,16,0,0)/1000,curves=m.curves||[];
@@ -62,19 +66,22 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
     if(template==='combined'){
       if(!(Number.isFinite(meta.logicalSlots)&&Math.abs(meta.logicalSlots-meta.visibleBars*1.04)<=2))throw new Error(symbol+' '+tf+' combined quarter logical slots '+meta.logicalSlots+' expected '+(meta.visibleBars*1.04));
     }else{
-      if(meta.tableVisible||meta.legendVisible)throw new Error(symbol+' '+tf+' quarter template chrome visible '+JSON.stringify(meta));
-      const r=meta.range||{},right=Math.max(0,Number(r.to)-(meta.displayBars-1)),span=Number(r.to)-Number(r.from),fraction=span>0?right/span:0;
-      if(Math.abs(fraction-.18)>.025)throw new Error(symbol+' '+tf+' quarter right margin '+fraction);
+      if(meta.tableVisible||meta.legendVisible)throw new Error(symbol+' '+tf+' template chrome visible '+JSON.stringify(meta));
+      const r=meta.range||{},right=Math.max(0,Number(r.to)-(meta.displayBars-1)),span=Number(r.to)-Number(r.from),fraction=span>0?right/span:0,expected=template==='mprofile'?.30:.18;
+      if(Math.abs(fraction-expected)>.025)throw new Error(symbol+' '+tf+' '+template+' right margin '+fraction);
     }
     if(template==='weekly'){
       const v=meta.values||{},keys=['weekStart','vwap','upper','lower','pwVwap','pwUpper','pwLower','yearOpen'];
       if(keys.some(k=>!Number.isFinite(Number(v[k]))))throw new Error(symbol+' '+tf+' weekly values incomplete '+JSON.stringify(v));
     }
+    if(template==='mprofile'){
+      const v=meta.values||{};if(!Number.isFinite(Number(v.currentPoc))||!Array.isArray(v.naked))throw new Error(symbol+' '+tf+' mprofile values incomplete '+JSON.stringify(v));
+    }
     if(!meta.cutoff||!meta.calcLastClosedUtc)throw new Error(symbol+' '+tf+' '+template+' missing cutoff metadata');
     const cutoffMs=Date.parse(meta.cutoff),calcMsValue=Date.parse(meta.calcLastClosedUtc),earliest=cutoffMs-(calcMs[tf]+86400_000);
     if(calcMsValue<earliest)throw new Error(symbol+' '+tf+' '+template+' calcLastClosedUtc too stale: '+meta.calcLastClosedUtc+' cutoff '+meta.cutoff);
     cutoff=cutoff||meta.cutoff;if(cutoff!==meta.cutoff)throw new Error('snapshot cutoffs disagree: '+cutoff+' vs '+meta.cutoff);
-    const fileName=template==='combined'?symbol+'-'+tf+'.png':symbol+'-'+template+'-'+tf+'.png',file=path.join(outDir,fileName);
+    const outputTf=fileTf||tf,fileName=template==='combined'?symbol+'-'+outputTf+'.png':symbol+'-'+template+'-'+outputTf+'.png',file=path.join(outDir,fileName);
     await page.locator('#analysisCapture').screenshot({path:file});
     const size=fs.statSync(file).size;if(size<50*1024)throw new Error(file+' is only '+size+' bytes');
     const png=fs.readFileSync(file),height=png.readUInt32BE(20);
@@ -82,7 +89,7 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
     const maxHeight=template==='combined'?combinedMaxHeight:900;
     if(height>maxHeight)throw new Error(file+' height '+height+' exceeds '+maxHeight+'px for '+meta.tableRows+' table rows');
     manifest.push({
-      symbol,timeframe:tf,template,view:meta.windowMode,file:path.basename(file),bytes:size,height,status:meta.status,
+      symbol,timeframe:outputTf,template,view:meta.windowMode,file:path.basename(file),bytes:size,height,status:meta.status,
       visibleBars:meta.visibleBars,logicalSlots:meta.logicalSlots,calcLastClosedUtc:meta.calcLastClosedUtc,
       supply:meta.supply,demand:meta.demand,drawn:meta.drawn,offView:meta.offView,regions:meta.regions,levels:meta.levels,keyLevels:meta.keyLevels,values:meta.values,reference:meta.reference
     });
@@ -94,8 +101,9 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
     for(const symbol of symbols)for(const tf of rvwapTfs)await capture(symbol,tf,'rvwap');
     for(const symbol of symbols)for(const tf of weeklyTfs)await capture(symbol,tf,'weekly');
     for(const symbol of symbols)for(const tf of monthlyTfs)await capture(symbol,tf,'monthly');
+    for(const symbol of symbols)for(const tf of mprofileTfs)await capture(symbol,tf,'mprofile','30m');
   } finally {await browser.close();}
-  const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap','weekly','monthly'],files:manifest};
+  const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap','weekly','monthly','mprofile'],files:manifest};
   fs.writeFileSync(latestPath,JSON.stringify(latest,null,2));
   fs.writeFileSync(path.join(outDir,'manifest.json'),JSON.stringify(manifest,null,2));
   const reference=manifest.find(x=>x.symbol==='BTCUSDT'&&x.template==='rvwap')?.reference;

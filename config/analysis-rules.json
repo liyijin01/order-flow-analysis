@@ -280,6 +280,45 @@
       },
       "table": false,
       "legend": false
+    },
+    "mprofile": {
+      "label": "月度剖面",
+      "timeframes": [
+        "1d"
+      ],
+      "defaultTimeframe": "1d",
+      "window": {
+        "1d": {
+          "mode": "recent",
+          "visibleBars": 365
+        }
+      },
+      "rightMarginPct": 30,
+      "history": {
+        "1d": 430,
+        "30m": 3500
+      },
+      "layers": {
+        "quarterBands": false,
+        "keyLevels": false,
+        "pqArea": false,
+        "pqBounds": false,
+        "pqVwap": false,
+        "pm": false,
+        "pw": false,
+        "zones": false,
+        "nPoc": false,
+        "volume": false,
+        "rvwap": false,
+        "yearLevels": false,
+        "weeklyVwap": false,
+        "weeklyProjection": false,
+        "yearOpen": false,
+        "monthlyStructure": false,
+        "mprofile": true
+      },
+      "table": false,
+      "legend": false
     }
   },
   "rvwap": {
@@ -315,5 +354,18 @@
     "axis": "#26c6da",
     "axisText": "#0b1220",
     "visiblePadPct": 10
+  },
+  "mprofile": {
+    "rowTicks": 100,
+    "visiblePadPct": 10,
+    "colors": {
+      "value": "rgba(64,160,190,.85)",
+      "outside": "rgba(150,150,150,.6)",
+      "poc": "#ffeb3b",
+      "valueLine": "#40a0be",
+      "pocLine": "#e6d600",
+      "boxFill": "rgba(255,255,255,.03)",
+      "boxBorder": "#ffffff"
+    }
   }
 }

@@ -1,0 +1,75 @@
+{
+  "symbol": "BTCUSDT",
+  "rowSize": 10,
+  "bars": [
+    {
+      "openTime": 0,
+      "time": 0,
+      "open": 110,
+      "high": 130,
+      "low": 100,
+      "close": 120,
+      "volume": 1,
+      "takerBuyBase": 0.5
+    },
+    {
+      "openTime": 1800000,
+      "time": 1800,
+      "open": 120,
+      "high": 140,
+      "low": 110,
+      "close": 130,
+      "volume": 1,
+      "takerBuyBase": 0.5
+    },
+    {
+      "openTime": 3600000,
+      "time": 3600,
+      "open": 130,
+      "high": 150,
+      "low": 120,
+      "close": 140,
+      "volume": 1,
+      "takerBuyBase": 0.5
+    },
+    {
+      "openTime": 5400000,
+      "time": 5400,
+      "open": 110,
+      "high": 120,
+      "low": 100,
+      "close": 115,
+      "volume": 1,
+      "takerBuyBase": 0.5
+    }
+  ],
+  "expected": {
+    "rows": [
+      [
+        100,
+        2
+      ],
+      [
+        110,
+        3
+      ],
+      [
+        120,
+        3
+      ],
+      [
+        130,
+        2
+      ],
+      [
+        140,
+        1
+      ]
+    ],
+    "poc": 125,
+    "vah": 140,
+    "val": 110,
+    "high": 150,
+    "low": 100
+  }
+}

@@ -87,7 +87,7 @@
     for(const b of bars||[]){
       const volume=Math.max(0,Number(b.volume)||0);sourceVolume+=volume;
       if(!(volume>0))continue;
-      const lo=Math.floor(Number(b.low)/size),hi=Math.floor((Number(b.high)-Number.EPSILON)/size);
+      const lo=Math.floor(Number(b.low)/size),hi=Math.floor((Number(b.high)-1e-12)/size);
       const count=Math.max(1,hi-lo+1),per=volume/count;
       for(let i=lo;i<=hi;i++)bins.set(i,(bins.get(i)||0)+per);
     }
@@ -99,7 +99,7 @@
   function tpoProfile(bars,binSize){
     const size=Number(binSize)||1,bins=new Map();
     for(const b of bars||[]){
-      const lo=Math.floor(Number(b.low)/size),hi=Math.floor((Number(b.high)-Number.EPSILON)/size);
+      const lo=Math.floor(Number(b.low)/size),hi=Math.floor((Number(b.high)-1e-12)/size);
       for(let i=lo;i<=hi;i++)bins.set(i,(bins.get(i)||0)+1);
     }
     const rows=Array.from(bins.entries()).sort((a,b)=>a[0]-b[0]).map(([i,v])=>[i*size,v]);
@@ -348,6 +348,27 @@
     return{all:merged.map(x=>({...x,offView:!ids.has(x.id)})),selected:selected.map(x=>({...x,offView:false}))};
   }
 
+  function profileExtensions(periods,sides){
+    const src=(periods||[]).filter(x=>x&&x.complete===true).map(x=>({...x,_start:Date.parse(String(x.start||''))/1000})).filter(x=>finite(x._start)).sort((a,b)=>a._start-b._start),out=[];
+    for(let i=0;i<src.length;i++){
+      const p=src[i];
+      for(const side of sides||['vah','val','poc']){
+        const price=Number(p[side]);if(!finite(price))continue;
+        let touch=null;
+        for(let j=i+1;j<src.length;j++){
+          const q=src[j];if(Number(q.low)<=price&&price<=Number(q.high)){touch=q;break;}
+        }
+        out.push({period:p,side,price,from:p._start,to:touch?touch._start:null,naked:!touch,touchedBy:touch||null});
+      }
+    }
+    return out;
+  }
+  function selectProfileValueBox(periods,current){
+    const price=Number(current);
+    return(periods||[]).filter(p=>p&&p.complete===true&&finite(p.val)&&finite(p.vah)&&Number(p.val)<=price&&price<=Number(p.vah))
+      .slice().sort((a,b)=>Date.parse(String(b.start||''))-Date.parse(String(a.start||'')))[0]||null;
+  }
+
   function capTableRows(rows,maxRows){
     const src=(rows||[]).slice(),limit=Math.max(1,Number(maxRows)||16);
     if(src.length<=limit)return src;
@@ -390,6 +411,6 @@
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,utcWeekStart,
     weightedStats,anchoredVwapSeries,alignSeriesToBars,valueArea,approxVolumeProfile,tpoProfile,exactProfile,profileIsFresh,
     atr14,detectZones,markZoneTouches,mergeZones,zoneState,selectZones,rangeOverlapRatio,suppressValueAreas,filterValueAreas,inPriceView,zoneIntersectsView,
-    wasZoneTouched,isPocNaked,selectNakedPocs,mergeKeyLevels,selectKeyLevels,capTableRows,axisLabelSelection,regionLabelLayout,roundToTick
+    wasZoneTouched,isPocNaked,selectNakedPocs,mergeKeyLevels,selectKeyLevels,profileExtensions,selectProfileValueBox,capTableRows,axisLabelSelection,regionLabelLayout,roundToTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);

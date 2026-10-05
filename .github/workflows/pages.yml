@@ -136,6 +136,8 @@ jobs:
         run: python scripts/d1_build_snapshot.py --profile-dir _d1-generated --output-dir _site/analysis/data
       - name: Build historical analysis key levels
         run: python scripts/d10_build_levels.py --cache-dir datarepo/levels --output-dir _site/analysis/levels
+      - name: Build monthly TPO profiles
+        run: python scripts/d16_build_tpo.py --cache-dir datarepo/tpo --output-dir _site/analysis/tpo
       - name: Prepare local D1 site
         run: |
           mkdir -p _site/web/chart/render/primitives _site/config
@@ -266,8 +268,10 @@ jobs:
 
       - name: Build historical analysis key levels
         run: python scripts/d10_build_levels.py --cache-dir datarepo/levels --output-dir _generated/analysis/levels
+      - name: Build monthly TPO profiles
+        run: python scripts/d16_build_tpo.py --cache-dir datarepo/tpo --output-dir _generated/analysis/tpo
 
-      - name: Persist new ladders sampled depth and key levels to data branch
+      - name: Persist new ladders sampled depth key levels and TPO to data branch
         shell: bash
         run: |
           set -euo pipefail
@@ -277,9 +281,9 @@ jobs:
           if [ -d depth ]; then
             git rm -r --quiet depth
           fi
-          git add ladders depth15m levels .data-branch 2>/dev/null || git add ladders depth15m levels
+          git add ladders depth15m levels tpo .data-branch 2>/dev/null || git add ladders depth15m levels tpo
           if ! git diff --cached --quiet; then
-            git commit -m 'data: refresh ladders sampled depth and key levels'
+            git commit -m 'data: refresh ladders sampled depth key levels and TPO'
             git push origin HEAD:data
           fi
 
@@ -294,6 +298,7 @@ jobs:
             _generated/profiles-*.json
             _generated/analysis/data/*.json
             _generated/analysis/levels/*.json
+            _generated/analysis/tpo/*.json
             _generated/flow/data/*.json
           if-no-files-found: error
           retention-days: 1
@@ -320,7 +325,7 @@ jobs:
           path: _generated
       - name: Prepare static site
         run: |
-          mkdir -p _site/web _site/config _site/analysis/data _site/analysis/levels _site/flow/data
+          mkdir -p _site/web _site/config _site/analysis/data _site/analysis/levels _site/analysis/tpo _site/flow/data
           cp index.html chart.html analysis.html flow.html _site/
           cp web/core.js web/live.js web/render.js web/app.js _site/web/
           cp -R web/chart web/analysis web/flow _site/web/
@@ -328,6 +333,7 @@ jobs:
           cp _generated/profiles-*.json _site/
           cp _generated/analysis/data/*.json _site/analysis/data/
           cp _generated/analysis/levels/*.json _site/analysis/levels/
+          cp _generated/analysis/tpo/*.json _site/analysis/tpo/
           cp _generated/flow/data/*.json _site/flow/data/
           touch _site/.nojekyll
       - name: Install Playwright core

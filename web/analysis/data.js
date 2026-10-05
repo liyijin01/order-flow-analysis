@@ -133,16 +133,24 @@
     if(!r.ok)throw new Error('levels '+symbol+' HTTP '+r.status);
     return r.json();
   }
+  async function fetchTpo(symbol,generatedAt,signal){
+    const suffix=generatedAt?'?v='+encodeURIComponent(generatedAt):'';
+    const r=await fetch('analysis/tpo/'+symbol+'.json'+suffix,{signal});
+    if(!r.ok)throw new Error('tpo '+symbol+' HTTP '+r.status);
+    return r.json();
+  }
 
   async function loadSnapshot(symbol){
     const r=await fetch('analysis/data/'+symbol+'.json',{cache:'no-store'});
     if(!r.ok)throw new Error('snapshot '+symbol+' HTTP '+r.status);
     const payload=await r.json(),series={},errors={...(payload.errors||{})};
     for(const [k,v] of Object.entries(payload.series||{}))series[k]=parseRows(v);
-    let keyLevels=null;
+    let keyLevels=null,tpo=null;
     try{keyLevels=await fetchKeyLevels(symbol,payload.generatedAt);}
     catch(e){errors.levels=String(e.message||e);}
-    return{schema:payload.schema||'analysis-snapshot-v1',symbol,generatedAt:payload.generatedAt,cutoffUtc:payload.cutoffUtc,series,profile:payload.profile||null,keyLevels,errors};
+    try{tpo=await fetchTpo(symbol,payload.generatedAt);}
+    catch(e){errors.tpo=String(e.message||e);}
+    return{schema:payload.schema||'analysis-snapshot-v1',symbol,generatedAt:payload.generatedAt,cutoffUtc:payload.cutoffUtc,series,profile:payload.profile||null,keyLevels,tpo,errors};
   }
 
   async function loadLive(symbol,timeframe,onProgress,signal,history){
@@ -151,7 +159,7 @@
       ?[timeframe,calcMap[timeframe],...Object.keys(history||{})]
       :[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})];
     const intervals=[];for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
-    let done=0;const total=intervals.length+2;
+    let done=0;const total=intervals.length+3;
     const step=(label)=>{done++;progress({done,total,label});};
     await Promise.all(intervals.map(interval=>
       fetchHistory(symbol,interval,capFor(interval,timeframe,history),undefined,signal)
@@ -160,11 +168,13 @@
     ));
     const profile=await fetchProfile(symbol,signal);step('exact weekly profile');
     if(!profile)errors.profile='profiles-'+symbol+'.json unavailable';
-    const generatedAt=new Date().toISOString();let keyLevels=null;
+    const generatedAt=new Date().toISOString();let keyLevels=null,tpo=null;
     try{keyLevels=await fetchKeyLevels(symbol,generatedAt,signal);step('historical key levels');}
     catch(e){if(isAbort(e,signal))throw e;errors.levels=String(e.message||e);step('historical key levels failed');}
+    try{tpo=await fetchTpo(symbol,generatedAt,signal);step('historical TPO profiles');}
+    catch(e){if(isAbort(e,signal))throw e;errors.tpo=String(e.message||e);step('historical TPO profiles failed');}
     if(!(series[timeframe]||[]).length)throw new Error(errors[timeframe]||'display candles unavailable');
-    return{schema:'analysis-live-v2',symbol,generatedAt,cutoffUtc:null,series,profile,keyLevels,errors};
+    return{schema:'analysis-live-v2',symbol,generatedAt,cutoffUtc:null,series,profile,keyLevels,tpo,errors};
   }
 
   async function refreshLiveBundle(bundle,symbol,timeframe,signal,history){
@@ -202,7 +212,7 @@
         failures.push({interval:'profile',error:errors.profile});
       }
     }
-    const generatedAt=new Date().toISOString();let keyLevels=bundle&&bundle.keyLevels||null;
+    const generatedAt=new Date().toISOString();let keyLevels=bundle&&bundle.keyLevels||null,tpo=bundle&&bundle.tpo||null;
     if(!keyLevels||errors.levels){
       try{keyLevels=await fetchKeyLevels(symbol,generatedAt,signal);delete errors.levels;}
       catch(e){
@@ -210,8 +220,12 @@
         errors.levels=String(e.message||e);failures.push({interval:'levels',error:errors.levels});
       }
     }
+    if(!tpo||errors.tpo){
+      try{tpo=await fetchTpo(symbol,generatedAt,signal);delete errors.tpo;}
+      catch(e){if(isAbort(e,signal))throw e;errors.tpo=String(e.message||e);failures.push({interval:'tpo',error:errors.tpo});}
+    }
     return{
-      bundle:{...(bundle||{}),schema:'analysis-live-v2',symbol,generatedAt,series,profile,keyLevels,errors},
+      bundle:{...(bundle||{}),schema:'analysis-live-v2',symbol,generatedAt,series,profile,keyLevels,tpo,errors},
       failures
     };
   }
@@ -236,6 +250,6 @@
 
   global.OrderFlowAnalysisData={
     intervalMs,intervalSec,displayCounts,calcMap,parseRows,closedBars,fetchHistory,fetchLatest,mergeBars,capFor,
-    fetchProfile,fetchKeyLevels,loadSnapshot,loadLive,refreshLiveBundle,formatJst,toDisplayTime,formatDisplayTime,formatDisplayTick
+    fetchProfile,fetchKeyLevels,fetchTpo,loadSnapshot,loadLive,refreshLiveBundle,formatJst,toDisplayTime,formatDisplayTime,formatDisplayTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);
