@@ -774,7 +774,7 @@ function assertBoundaryStable(before,after,label){
         const tfButtons=Array.from(document.querySelectorAll('[data-tf]')).map(b=>({tf:b.dataset.tf,text:b.textContent,display:getComputedStyle(b).display}));
         return{template:d.template(),tf:d.state.timeframe,profiles:(model.profiles||[]).length,endedOk,current:!!current,naked:naked.length,nakedLabels:(m.levels||[]).filter(x=>x.kind==='wprofile'&&x.naked).map(x=>x.label),reference:model.reference?1:0,sp:sp.length,
           rightFraction:span>0?right/span:0,regions:m.regions.map(x=>x.scope||x.type),levels:m.levels.map(x=>x.kind),table:getComputedStyle(document.querySelector('.table-wrap')).display,legend:getComputedStyle(document.getElementById('analysisLegend')).display,volume:!!d.state.volume,
-          quarterBands:d.state.quarterBands.reduce((n,x)=>n+(x.item&&x.item.points&&x.item.points.length?1:0),countdown:d.chartInfo().countdown,style,tfButtons,watermark:d.chartInfo().watermark,line2:d.chartInfo().line2,tpoError:d.state.bundle.errors.tpo||null};
+          quarterBands:d.state.quarterBands.reduce((n,x)=>n+(x.item&&x.item.points&&x.item.points.length?1:0),0),countdown:d.chartInfo().countdown,style,tfButtons,watermark:d.chartInfo().watermark,line2:d.chartInfo().line2,tpoError:d.state.bundle.errors.tpo||null};
       });
       if(wp.template!=='wprofile'||wp.tf!=='1d'||wp.profiles!==26||!wp.endedOk||!wp.current)throw new Error('D17 wprofile data '+JSON.stringify(wp));
       if(Math.abs(wp.rightFraction-.30)>.025||wp.naked>16||wp.nakedLabels.some(Boolean)||wp.reference>1||wp.sp>6)throw new Error('D17 wprofile layout '+JSON.stringify(wp));

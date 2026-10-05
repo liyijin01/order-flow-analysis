@@ -392,7 +392,7 @@
     const span=Math.max(1e-12,Number(view.max)-Number(view.min)),pad=span*Math.max(0,Number(cfg.visiblePadPct)||10)/100,lo=Number(view.min)-pad,hi=Number(view.max)+pad,inView=p=>Number(p)>=lo&&Number(p)<=hi;
     const ext=E.profileExtensions(pre,['vah','val','poc']).filter(x=>inView(x.price)),visibleStarts=new Set(ended.map(p=>p.startSec)),touched=ext.filter(x=>!x.naked&&visibleStarts.has(x.from));
     const distance=x=>Math.abs(Number(x.price)-currentPrice),naked=ext.filter(x=>x.naked).sort((a,b)=>{
-      const pa=a.side==='poc'?0:1,pb=b.side==='poc'?0:1;return pa-pb||distance(a)-distance(b);
+      const da=distance(a),db=distance(b),pa=a.side==='poc'?0:1,pb=b.side==='poc'?0:1;return da-db||pa-pb;
     }).slice(0,Number(cfg.maxNaked)||16),chosen=touched.concat(naked),levels=[];
     for(const x of chosen){
       const poc=x.side==='poc',base=poc?(colors.pocLine||'#e6d600'):(colors.valueLine||'#ff9800'),faded=poc?'rgba(230,214,0,.45)':'rgba(255,152,0,.45)';
