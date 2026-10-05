@@ -398,6 +398,11 @@
   "mprofile": {
     "rowTicks": 100,
     "visiblePadPct": 10,
+    "priceWindowPct": {
+      "below": 18,
+      "above": 25
+    },
+    "maxTouched": 8,
     "colors": {
       "value": "rgba(64,160,190,.85)",
       "outside": "rgba(150,150,150,.6)",
@@ -412,6 +417,11 @@
   "wprofile": {
     "rowTicks": 100,
     "visiblePadPct": 10,
+    "priceWindowPct": {
+      "below": 10,
+      "above": 12
+    },
+    "maxTouched": 8,
     "maxNaked": 16,
     "referenceWeek": {
       "BTCUSDT": null,

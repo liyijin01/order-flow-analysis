@@ -14,7 +14,7 @@ button.active{background:#34425b;border-color:#8aa4cd;color:#fff}button:disabled
 #status{font-size:10px;color:#8e98aa;min-height:16px;margin-bottom:8px}.error{color:#ff9f9f!important}
 #analysisCapture{background:#1b2130;border:1px solid rgba(255,255,255,.09);padding:10px}
 .capture-title{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:6px}
-#boardTitle{font-size:20px;font-weight:700;letter-spacing:-.02em}.capture-meta{font-size:10px;color:#7d899d}
+#boardTitle{font-size:20px;font-weight:700;letter-spacing:-.02em}.capture-title-meta{display:flex;align-items:center;gap:10px}.capture-meta{font-size:10px;color:#7d899d}.stale-data{display:none;font-size:10px;color:#ff6b6b;font-weight:600}
 #infoLine{font-size:11px;color:#cbd3e1;font-variant-numeric:tabular-nums;margin-bottom:7px}
 .legend{display:flex;gap:14px 18px;align-items:center;flex-wrap:wrap;font-size:10px;color:#aeb7c8;margin-bottom:8px}
 .legend-item{display:flex;align-items:center;gap:6px}.legend-mark{display:inline-block;flex:none}.legend-box{width:11px;height:11px}.legend-line{width:18px;border-top:2px solid currentColor}.legend-dash{width:18px;border-top:2px dashed currentColor}
@@ -25,7 +25,7 @@ th{color:#8e98aa;font-weight:600;background:#181e2b}td{color:#cdd5e3}.missing td
 .capture-footer{display:flex;justify-content:space-between;gap:12px;margin-top:8px;font-size:9px;color:#717d91}
 .page-footer{display:flex;justify-content:space-between;gap:12px;margin-top:10px;font-size:10px;color:#7d899d}
 body.snapshot main{max-width:1600px;padding:0}body.snapshot .topbar,body.snapshot .controls,body.snapshot #status,body.snapshot .page-footer{display:none}
-body.snapshot #analysisCapture{border:0;padding:12px;width:1600px}body.snapshot #analysisChart{height:760px}
+body.snapshot #analysisCapture{border:0;padding:12px;width:1600px}body.snapshot #analysisChart{height:760px}body.snapshot .stale-data{display:none!important}
 @media(max-width:900px){main{padding:8px}.controls{align-items:flex-start}.topbar{align-items:flex-start}#analysisChart{height:560px}.capture-title{display:block}.capture-meta{margin-top:4px}}
 @media(max-width:600px){th,td{padding:7px 6px}th:nth-child(6),td:nth-child(6){display:none}}
 </style>
@@ -41,7 +41,7 @@ body.snapshot #analysisCapture{border:0;padding:12px;width:1600px}body.snapshot 
 </div>
 <div id="status">Loading…</div>
 <section id="analysisCapture">
-  <div class="capture-title"><div id="boardTitle">BTCUSDT.P · 4小时</div><div class="capture-meta">VALUE / SUPPLY / DEMAND</div></div>
+  <div class="capture-title"><div id="boardTitle">BTCUSDT.P · 4小时</div><div class="capture-title-meta"><span id="staleData" class="stale-data"></span><span class="capture-meta">VALUE / SUPPLY / DEMAND</span></div></div>
   <div id="infoLine">Loading market data…</div>
   <div class="legend" id="analysisLegend" aria-label="分析图例"></div>
   <div id="analysisChart" aria-label="价值区、供应区、需求区成品分析图"><div id="chartInfo" class="chart-info"><div id="chartInfo1"></div><div id="chartInfo2"></div></div><div id="closeCountdown" class="close-countdown"></div></div>

@@ -122,6 +122,16 @@ async function routeKeyLevels(page,mode){
   });
 }
 
+async function routePrecomputedAge(page,initialHours){
+  const state={hours:Number(initialHours)||0};
+  await page.route(/\/analysis\/(levels|tpo)\/[A-Z]+\.json(?:\?.*)?$/,async route=>{
+    const response=await route.fetch(),body=await response.json();
+    body.generatedAt=new Date(Date.now()-state.hours*3600000).toISOString();
+    await route.fulfill({response,contentType:'application/json',body:JSON.stringify(body)});
+  });
+  return state;
+}
+
 async function routeSnapshotThrough(page,cutoffIso){
   const cutoff=Date.parse(cutoffIso);
   await page.route(/\/analysis\/data\/([A-Z]+)\.json(?:\?.*)?$/,async route=>{
@@ -772,12 +782,17 @@ function assertBoundaryStable(before,after,label){
         const ended=(model.profiles||[]).filter(x=>!x.forming),current=(model.profiles||[]).find(x=>x.forming),naked=(model.naked||[]),sp=(model.singlePrints||[]);
         let endedOk=ended.length===25;for(const p of ended){const src=pre.find(x=>Date.parse(x.start)/1000===Number(p.start));endedOk=endedOk&&!!src&&Number(src.vah)===Number(p.vah)&&Number(src.val)===Number(p.val)&&Number(src.poc)===Number(p.poc);}
         const tfButtons=Array.from(document.querySelectorAll('[data-tf]')).map(b=>({tf:b.dataset.tf,text:b.textContent,display:getComputedStyle(b).display}));
+        const touchedLines=(m.levels||[]).filter(x=>x.kind==='wprofile'&&!x.naked&&!x.current),currentTouched=(m.levels||[]).filter(x=>x.kind==='wprofile'&&x.naked&&x.touchedThisPeriod),pw=model.priceWindow||{};
+        const pane=d.mainPaneHeight(),top=d.state.candles.coordinateToPrice(0),bottom=d.state.candles.coordinateToPrice(pane);
         return{template:d.template(),tf:d.state.timeframe,profiles:(model.profiles||[]).length,endedOk,current:!!current,naked:naked.length,nakedLabels:(m.levels||[]).filter(x=>x.kind==='wprofile'&&x.naked).map(x=>x.label),reference:model.reference?1:0,sp:sp.length,
+          touchedLines:touchedLines.length,currentTouched:currentTouched.map(x=>({style:x.style,axisColor:x.axisColor})),priceWindow:pw,top,bottom,currentLow:current&&current.low,currentHigh:current&&current.high,
           rightFraction:span>0?right/span:0,regions:m.regions.map(x=>x.scope||x.type),levels:m.levels.map(x=>x.kind),table:getComputedStyle(document.querySelector('.table-wrap')).display,legend:getComputedStyle(document.getElementById('analysisLegend')).display,volume:!!d.state.volume,
           quarterBands:d.state.quarterBands.reduce((n,x)=>n+(x.item&&x.item.points&&x.item.points.length?1:0),0),countdown:d.chartInfo().countdown,style,tfButtons,watermark:d.chartInfo().watermark,line2:d.chartInfo().line2,tpoError:d.state.bundle.errors.tpo||null};
       });
       if(wp.template!=='wprofile'||wp.tf!=='1d'||wp.profiles!==26||!wp.endedOk||!wp.current)throw new Error('D17 wprofile data '+JSON.stringify(wp));
       if(Math.abs(wp.rightFraction-.30)>.025||wp.naked>16||wp.nakedLabels.some(Boolean)||wp.reference>1||wp.sp>6)throw new Error('D17 wprofile layout '+JSON.stringify(wp));
+      if(wp.touchedLines>8||wp.currentTouched.some(x=>x.style!=='dashed'||!String(x.axisColor).startsWith('rgba(')))throw new Error('D18 wprofile touched lines '+JSON.stringify(wp));
+      if(!(wp.bottom<=wp.priceWindow.min&&wp.top>=wp.priceWindow.max&&wp.currentLow>=wp.priceWindow.min&&wp.currentHigh<=wp.priceWindow.max))throw new Error('D18 wprofile price window '+JSON.stringify(wp));
       if(wp.regions.some(x=>!['WPROFILE_REF','SINGLE_PRINT'].includes(x))||wp.levels.some(x=>x!=='wprofile')||wp.table!=='none'||wp.legend!=='none'||wp.volume||wp.quarterBands||wp.countdown)throw new Error('D17 wprofile disabled layers '+JSON.stringify(wp));
       if(wp.style.upColor!=='rgba(0,0,0,0)'||wp.style.priceLineVisible!==true)throw new Error('D17 hidden candles '+JSON.stringify(wp.style));
       if(!wp.tfButtons.find(x=>x.tf==='1d'&&x.text==='M30'&&x.display!=='none')||wp.tfButtons.some(x=>x.tf!=='1d'&&x.display!=='none')||!wp.watermark.includes('M30 Weekly')||!wp.line2.includes('Weekly TPO (30m, 70%)')||!wp.line2.includes('SP ')||wp.tpoError)throw new Error('D17 wprofile chrome '+JSON.stringify(wp));
@@ -804,7 +819,9 @@ function assertBoundaryStable(before,after,label){
         const currentOk=!!current&&!!expected&&Number(current.vah)===Number(expected.vah)&&Number(current.val)===Number(expected.val)&&Number(current.poc)===Number(expected.poc);
         const ext=new Map((model.extensions||[]).map(x=>[String(x.from)+'-'+x.side,x])),lines=(m.levels||[]).filter(x=>x.kind==='mprofile'),stopsOk=lines.filter(x=>!x.current&&!x.naked).every(x=>{const e=ext.get(String(x.from)+'-'+x.side);return e&&Number(x.to)===Number(e.to);});
         const style=d.candleStyle(),tfButtons=Array.from(document.querySelectorAll('[data-tf]')).map(b=>({tf:b.dataset.tf,text:b.textContent,display:getComputedStyle(b).display}));
+        const touchedLines=lines.filter(x=>!x.naked&&!x.current),currentTouched=lines.filter(x=>x.naked&&x.touchedThisPeriod),pw=model.priceWindow||{},pane=d.mainPaneHeight(),top=d.state.candles.coordinateToPrice(0),bottom=d.state.candles.coordinateToPrice(pane);
         return{template:d.template(),tf:d.state.timeframe,profiles:(model.profiles||[]).length,endedOk,currentOk,stopsOk,box:model.box?1:0,
+          touchedLines:touchedLines.length,currentTouched:currentTouched.map(x=>({style:x.style,axisColor:x.axisColor})),priceWindow:pw,top,bottom,currentLow:current&&current.low,currentHigh:current&&current.high,
           rightFraction:span>0?right/span:0,regions:m.regions.map(x=>x.scope||x.type),levels:m.levels.map(x=>x.kind),curves:(m.curves||[]).length,
           table:getComputedStyle(document.querySelector('.table-wrap')).display,legend:getComputedStyle(document.getElementById('analysisLegend')).display,volume:!!d.state.volume,
           quarterBands:d.state.quarterBands.reduce((n,x)=>n+(x.item&&x.item.points&&x.item.points.length?1:0),0),countdown:d.chartInfo().countdown,style,tfButtons,
@@ -812,6 +829,8 @@ function assertBoundaryStable(before,after,label){
       });
       if(mp.template!=='mprofile'||mp.tf!=='1d'||mp.profiles!==12||!mp.endedOk||!mp.currentOk)throw new Error('D16 mprofile data '+JSON.stringify(mp));
       if(Math.abs(mp.rightFraction-.30)>.025||!mp.stopsOk||mp.box>1)throw new Error('D16 mprofile layout '+JSON.stringify(mp));
+      if(mp.touchedLines>8||mp.currentTouched.some(x=>x.style!=='dashed'||!String(x.axisColor).startsWith('rgba(')))throw new Error('D18 mprofile touched lines '+JSON.stringify(mp));
+      if(!(mp.bottom<=mp.priceWindow.min&&mp.top>=mp.priceWindow.max&&mp.currentLow>=mp.priceWindow.min&&mp.currentHigh<=mp.priceWindow.max))throw new Error('D18 mprofile price window '+JSON.stringify(mp));
       if(mp.regions.some(x=>!['MPROFILE_BOX','SINGLE_PRINT'].includes(x))||mp.levels.some(x=>x!=='mprofile')||mp.curves||mp.table!=='none'||mp.legend!=='none'||mp.volume||mp.quarterBands||mp.countdown)throw new Error('D16 mprofile disabled layers '+JSON.stringify(mp));
       if(mp.style.upColor!=='rgba(0,0,0,0)'||mp.style.borderUpColor!=='rgba(0,0,0,0)'||mp.style.wickUpColor!=='rgba(0,0,0,0)'||mp.style.priceLineVisible!==true)throw new Error('D16 hidden candles '+JSON.stringify(mp.style));
       if(!mp.tfButtons.find(x=>x.tf==='1d'&&x.text==='M30'&&x.display!=='none')||mp.tfButtons.some(x=>x.tf!=='1d'&&x.display!=='none')||!mp.watermark.includes('M30 Monthly')||!mp.line2.includes('Monthly TPO (30m, 70%)')||mp.tpoError)throw new Error('D16 mprofile chrome '+JSON.stringify(mp));
@@ -828,6 +847,20 @@ function assertBoundaryStable(before,after,label){
 
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
+      await routeMarket(page,requests);const age=await routePrecomputedAge(page,40);
+      await page.goto(pageUrl+'?tpl=quarter&symbol=BTCUSDT',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      let stale=await page.locator('#staleData').textContent();
+      if(!/预计算数据已 40 小时未更新/.test(stale))throw new Error('D18 stale warning missing: '+stale);
+      age.hours=0;await page.evaluate(()=>window.__analysisDebug.refresh(true));
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded ')&&!document.getElementById('staleData')?.textContent,{timeout:60000});
+      stale=await page.locator('#staleData').textContent();
+      if(stale)throw new Error('D18 fresh warning did not clear: '+stale);
+      await page.close();
+    }
+
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}}),requests=[];
       await routeMarket(page,requests);await routeKeyLevels(page,'fixture');await routeSnapshotThrough(page,'2026-10-02T00:00:00Z');
       await page.goto(pageUrl+'?tpl=combined&symbol=ETHUSDT&tf=1h&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
@@ -836,6 +869,7 @@ function assertBoundaryStable(before,after,label){
       await page.close();
     }
 
+    console.log('D18 browser smoke passed: profile price windows, touched-line caps/current-period styles and stale-data warning.');
     console.log('D17 browser smoke passed: weekly TPO profiles, naked levels, reference range, single prints and monthly single prints.');
     console.log('D16 browser smoke passed: monthly TPO profiles, naked extensions, current-month parity, value-area box and hidden candle carrier.');
     console.log('D15 browser smoke passed: 1M monthly structure, S/R, imbalance, 12-bar window and template gating.');
