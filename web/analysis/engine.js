@@ -87,7 +87,7 @@
     for(const b of bars||[]){
       const volume=Math.max(0,Number(b.volume)||0);sourceVolume+=volume;
       if(!(volume>0))continue;
-      const lo=Math.floor(Number(b.low)/size),hi=Math.floor((Number(b.high)-Number.EPSILON)/size);
+      const lo=Math.floor(Number(b.low)/size),hi=Math.floor((Number(b.high)-1e-12)/size);
       const count=Math.max(1,hi-lo+1),per=volume/count;
       for(let i=lo;i<=hi;i++)bins.set(i,(bins.get(i)||0)+per);
     }
