@@ -369,6 +369,43 @@
       .slice().sort((a,b)=>Date.parse(String(b.start||''))-Date.parse(String(a.start||'')))[0]||null;
   }
 
+  function selectReferenceWeek(periods,current,manualWeek){
+    const src=(periods||[]).filter(x=>x&&x.complete===true).slice().sort((a,b)=>Date.parse(String(a.start||''))-Date.parse(String(b.start||'')));
+    if(manualWeek){
+      const target=String(manualWeek).slice(0,10),row=src.find(x=>String(x.start||'').slice(0,10)===target);
+      return row?{...row,manual:true}:null;
+    }
+    const price=Number(current),pool=src.slice(0,Math.max(0,src.length-4));
+    const candidates=pool.filter(x=>finite(x.low)&&finite(x.high)&&Number(x.low)<=price&&price<=Number(x.high));
+    candidates.sort((a,b)=>{
+      const ra=(Number(a.high)-Number(a.low))/Math.max(1e-12,Math.abs(Number(a.low))),rb=(Number(b.high)-Number(b.low))/Math.max(1e-12,Math.abs(Number(b.low)));
+      return rb-ra||Date.parse(String(b.start||''))-Date.parse(String(a.start||''));
+    });
+    return candidates.length?{...candidates[0],manual:false}:null;
+  }
+
+  function remainingSinglePrints(periods,current,rowSize,maxCount){
+    const price=Number(current),minHeight=Math.max(Math.max(0,Number(rowSize)||0)*3,Math.abs(price)*.0015),src=(periods||[]).filter(x=>x&&x.complete===true).map(x=>({...x,_start:Date.parse(String(x.start||''))/1000})).filter(x=>finite(x._start)).sort((a,b)=>a._start-b._start),out=[];
+    const subtract=(segments,low,high)=>{
+      const next=[];for(const seg of segments){
+        const a=Number(seg[0]),b=Number(seg[1]),lo=Number(low),hi=Number(high);
+        if(!(hi>a&&lo<b)){next.push([a,b]);continue;}
+        if(lo>a)next.push([a,Math.min(b,lo)]);
+        if(hi<b)next.push([Math.max(a,hi),b]);
+      }return next.filter(x=>x[1]>x[0]);
+    };
+    for(let i=0;i<src.length;i++){
+      const p=src[i],ranges=Array.isArray(p.singlePrints)?p.singlePrints:[];
+      for(const raw of ranges){
+        let segs=[[Number(raw[0]),Number(raw[1])]].filter(x=>finite(x[0])&&finite(x[1])&&x[1]>x[0]);
+        for(let j=i+1;j<src.length&&segs.length;j++)segs=subtract(segs,src[j].low,src[j].high);
+        for(const seg of segs)if(seg[1]-seg[0]>=minHeight)out.push({period:p,from:p._start,bottom:seg[0],top:seg[1]});
+      }
+    }
+    const dist=x=>price<Number(x.bottom)?Number(x.bottom)-price:(price>Number(x.top)?price-Number(x.top):0);
+    out.sort((a,b)=>dist(a)-dist(b)||b.from-a.from);
+    return out.slice(0,Math.max(0,Number(maxCount)||6));
+  }
   function capTableRows(rows,maxRows){
     const src=(rows||[]).slice(),limit=Math.max(1,Number(maxRows)||16);
     if(src.length<=limit)return src;
@@ -411,6 +448,6 @@
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,utcWeekStart,
     weightedStats,anchoredVwapSeries,alignSeriesToBars,valueArea,approxVolumeProfile,tpoProfile,exactProfile,profileIsFresh,
     atr14,detectZones,markZoneTouches,mergeZones,zoneState,selectZones,rangeOverlapRatio,suppressValueAreas,filterValueAreas,inPriceView,zoneIntersectsView,
-    wasZoneTouched,isPocNaked,selectNakedPocs,mergeKeyLevels,selectKeyLevels,profileExtensions,selectProfileValueBox,capTableRows,axisLabelSelection,regionLabelLayout,roundToTick
+    wasZoneTouched,isPocNaked,selectNakedPocs,mergeKeyLevels,selectKeyLevels,profileExtensions,selectProfileValueBox,selectReferenceWeek,remainingSinglePrints,capTableRows,axisLabelSelection,regionLabelLayout,roundToTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);

@@ -30,3 +30,4 @@
 | D14a | 2026-10-03 | #25 | 部署验收修复：补齐 weekly 模板在 latest.json 中的 values，并加完整性断言 | 以后 weekly PNG 构建缺任一核对值直接失败 |
 | D15 | 2026-10-03 | #26 | 新增 1M “月线结构”模板：自动近似 S/R、三月 imbalance；每日新增 3 张 PNG；修 D14 周投影红线和 ±1σ 越界连线 | 月线 S/R / imbalance 为近似算法；fixture 用 BTCUSDT USD-M 1d 聚合验证 |
 | D16 | 2026-10-05 | #27 | 新增 M30 “月度剖面”模板：预计算最近 12 个完整月 TPO、通用 profile primitive、未回补 VAH/VAL/POC、当前月 POC、价值区方框；每日新增 3 张 PNG | 月度剖面沿用 30m TPO 70%、100 ticks/row、单行扩展；触碰判断只看后续已结束月份 |
+| D17 | 2026-10-05 | #28 | 新增周度 TPO 剖面模板：52 周摘要/26 周 rows、周 naked VAH/VAL/POC、参考周方框；月/周模板加入 single print；新增 3 张 wprofile PNG | 周度 TPO 与综合 PW 定义分离；single print 只保留回补后的剩余部分 |

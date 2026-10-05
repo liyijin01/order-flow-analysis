@@ -235,7 +235,7 @@ function assertBoundaryStable(before,after,label){
       if(!axisCheck.key||axisCheck.key.color!=='#3a4152'||axisCheck.key.textColor!=='#eceff4')throw new Error('D12b key price-axis style '+JSON.stringify(axisCheck));
       if(q.upColor!=='#e6e9ef'||q.downColor!=='rgba(0,0,0,0)'||q.watermarkColor!=='rgba(196,140,60,.30)')throw new Error('D12 global style '+JSON.stringify(q));
       await page.click('[data-tpl="combined"]');
-      await page.waitForFunction(()=>window.__analysisDebug?.template()==='combined'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
+      await page.waitForFunction(()=>window.__analysisDebug?.template()==='combined'&&String(window.__analysisDebug?.state?.viewKey||'').includes('|combined|')&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
       const combined=await page.evaluate(()=>({table:getComputedStyle(document.querySelector('.table-wrap')).display,legend:getComputedStyle(document.getElementById('analysisLegend')).display,volume:!!window.__analysisDebug.state.volume}));
       if(combined.table==='none'||combined.legend==='none'||!combined.volume)throw new Error('D12 combined restore '+JSON.stringify(combined));
       await page.close();
@@ -692,7 +692,7 @@ function assertBoundaryStable(before,after,label){
       if(rv.regions||rv.nonYearLevels||rv.quarterBands||rv.table!=='none'||rv.legend!=='none'||rv.volume)throw new Error('D13 disabled layers '+JSON.stringify(rv));
       if(rv.gaps.some(x=>x<18)||!rv.line2.includes('Rolling VWAP (hlc3, 4h)'))throw new Error('D13 year levels/info '+JSON.stringify(rv));
       await page.click('[data-tpl="quarter"]');
-      await page.waitForFunction(()=>window.__analysisDebug?.template()==='quarter'&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
+      await page.waitForFunction(()=>window.__analysisDebug?.template()==='quarter'&&String(window.__analysisDebug?.state?.viewKey||'').includes('|quarter|')&&document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
       const q=await page.evaluate(()=>({year:(window.__analysisDebug.model.yearLevels||[]).length,template:window.__analysisDebug.template()}));
       if(q.template!=='quarter'||q.year)throw new Error('D13 quarter restore/year exclusion '+JSON.stringify(q));
       await page.click('[data-tpl="combined"]');
@@ -765,6 +765,36 @@ function assertBoundaryStable(before,after,label){
 
     {
       const page=await browser.newPage({viewport:{width:1600,height:1000}});
+      await page.goto(pageUrl+'?tpl=wprofile&symbol=BTCUSDT&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const wp=await page.evaluate(()=>{
+        const d=window.__analysisDebug,m=d.model,r=d.view().range,span=Number(r.to)-Number(r.from),right=Math.max(0,Number(r.to)-(m.display.length-1)),model=m.wprofile||{},pre=(d.state.bundle.tpo&&d.state.bundle.tpo.weekly)||[],style=d.candleStyle();
+        const ended=(model.profiles||[]).filter(x=>!x.forming),current=(model.profiles||[]).find(x=>x.forming),naked=(model.naked||[]),sp=(model.singlePrints||[]);
+        let endedOk=ended.length===25;for(const p of ended){const src=pre.find(x=>Date.parse(x.start)/1000===Number(p.start));endedOk=endedOk&&!!src&&Number(src.vah)===Number(p.vah)&&Number(src.val)===Number(p.val)&&Number(src.poc)===Number(p.poc);}
+        const tfButtons=Array.from(document.querySelectorAll('[data-tf]')).map(b=>({tf:b.dataset.tf,text:b.textContent,display:getComputedStyle(b).display}));
+        return{template:d.template(),tf:d.state.timeframe,profiles:(model.profiles||[]).length,endedOk,current:!!current,naked:naked.length,nakedLabels:(m.levels||[]).filter(x=>x.kind==='wprofile'&&x.naked).map(x=>x.label),reference:model.reference?1:0,sp:sp.length,
+          rightFraction:span>0?right/span:0,regions:m.regions.map(x=>x.scope||x.type),levels:m.levels.map(x=>x.kind),table:getComputedStyle(document.querySelector('.table-wrap')).display,legend:getComputedStyle(document.getElementById('analysisLegend')).display,volume:!!d.state.volume,
+          quarterBands:d.state.quarterBands.reduce((n,x)=>n+(x.item&&x.item.points&&x.item.points.length?1:0),0),countdown:d.chartInfo().countdown,style,tfButtons,watermark:d.chartInfo().watermark,line2:d.chartInfo().line2,tpoError:d.state.bundle.errors.tpo||null};
+      });
+      if(wp.template!=='wprofile'||wp.tf!=='1d'||wp.profiles!==26||!wp.endedOk||!wp.current)throw new Error('D17 wprofile data '+JSON.stringify(wp));
+      if(Math.abs(wp.rightFraction-.30)>.025||wp.naked>16||wp.nakedLabels.some(Boolean)||wp.reference>1||wp.sp>6)throw new Error('D17 wprofile layout '+JSON.stringify(wp));
+      if(wp.regions.some(x=>!['WPROFILE_REF','SINGLE_PRINT'].includes(x))||wp.levels.some(x=>x!=='wprofile')||wp.table!=='none'||wp.legend!=='none'||wp.volume||wp.quarterBands||wp.countdown)throw new Error('D17 wprofile disabled layers '+JSON.stringify(wp));
+      if(wp.style.upColor!=='rgba(0,0,0,0)'||wp.style.priceLineVisible!==true)throw new Error('D17 hidden candles '+JSON.stringify(wp.style));
+      if(!wp.tfButtons.find(x=>x.tf==='1d'&&x.text==='M30'&&x.display!=='none')||wp.tfButtons.some(x=>x.tf!=='1d'&&x.display!=='none')||!wp.watermark.includes('M30 Weekly')||!wp.line2.includes('Weekly TPO (30m, 70%)')||!wp.line2.includes('SP ')||wp.tpoError)throw new Error('D17 wprofile chrome '+JSON.stringify(wp));
+      for(const symbol of ['ETHUSDT','SOLUSDT','BTCUSDT']){
+        await page.evaluate(s=>document.querySelector('[data-symbol="'+s+'"]')?.click(),symbol);await page.waitForFunction(s=>window.__analysisDebug?.state.symbol===s&&window.__analysisDebug?.template()==='wprofile'&&document.getElementById('status')?.textContent.startsWith('Loaded '),symbol,{timeout:60000});
+        const ok=await page.evaluate(()=>window.__analysisDebug?.model?.wprofile?.profiles?.length===26);
+        if(!ok)throw new Error('D17 wprofile symbol switch '+symbol);
+      }
+      await page.evaluate(()=>document.querySelector('[data-tpl="mprofile"]')?.click());await page.waitForFunction(()=>window.__analysisDebug?.template()==='mprofile'&&document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
+      const mp=await page.evaluate(()=>({sp:(window.__analysisDebug.model?.mprofile?.singlePrints||[]).length,line2:window.__analysisDebug.chartInfo().line2}));
+      if(mp.sp>6||!mp.line2.includes('SP '))throw new Error('D17 mprofile single prints '+JSON.stringify(mp));
+      await page.close();
+    }
+
+
+    {
+      const page=await browser.newPage({viewport:{width:1600,height:1000}});
       await page.goto(pageUrl+'?tpl=mprofile&symbol=BTCUSDT&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       const mp=await page.evaluate(()=>{
@@ -782,7 +812,7 @@ function assertBoundaryStable(before,after,label){
       });
       if(mp.template!=='mprofile'||mp.tf!=='1d'||mp.profiles!==12||!mp.endedOk||!mp.currentOk)throw new Error('D16 mprofile data '+JSON.stringify(mp));
       if(Math.abs(mp.rightFraction-.30)>.025||!mp.stopsOk||mp.box>1)throw new Error('D16 mprofile layout '+JSON.stringify(mp));
-      if(mp.regions.some(x=>x!=='MPROFILE_BOX')||mp.levels.some(x=>x!=='mprofile')||mp.curves||mp.table!=='none'||mp.legend!=='none'||mp.volume||mp.quarterBands||mp.countdown)throw new Error('D16 mprofile disabled layers '+JSON.stringify(mp));
+      if(mp.regions.some(x=>!['MPROFILE_BOX','SINGLE_PRINT'].includes(x))||mp.levels.some(x=>x!=='mprofile')||mp.curves||mp.table!=='none'||mp.legend!=='none'||mp.volume||mp.quarterBands||mp.countdown)throw new Error('D16 mprofile disabled layers '+JSON.stringify(mp));
       if(mp.style.upColor!=='rgba(0,0,0,0)'||mp.style.borderUpColor!=='rgba(0,0,0,0)'||mp.style.wickUpColor!=='rgba(0,0,0,0)'||mp.style.priceLineVisible!==true)throw new Error('D16 hidden candles '+JSON.stringify(mp.style));
       if(!mp.tfButtons.find(x=>x.tf==='1d'&&x.text==='M30'&&x.display!=='none')||mp.tfButtons.some(x=>x.tf!=='1d'&&x.display!=='none')||!mp.watermark.includes('M30 Monthly')||!mp.line2.includes('Monthly TPO (30m, 70%)')||mp.tpoError)throw new Error('D16 mprofile chrome '+JSON.stringify(mp));
       for(const symbol of ['ETHUSDT','SOLUSDT','BTCUSDT']){
@@ -806,6 +836,7 @@ function assertBoundaryStable(before,after,label){
       await page.close();
     }
 
+    console.log('D17 browser smoke passed: weekly TPO profiles, naked levels, reference range, single prints and monthly single prints.');
     console.log('D16 browser smoke passed: monthly TPO profiles, naked extensions, current-month parity, value-area box and hidden candle carrier.');
     console.log('D15 browser smoke passed: 1M monthly structure, S/R, imbalance, 12-bar window and template gating.');
     console.log('D14 browser smoke passed: 30m weekly VWAP, complete prior-week projections, 24-day window, layer gating and template restore.');
