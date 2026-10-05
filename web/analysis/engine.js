@@ -348,6 +348,16 @@
     return{all:merged.map(x=>({...x,offView:!ids.has(x.id)})),selected:selected.map(x=>({...x,offView:false}))};
   }
 
+  function profilePriceWindow(current,priceWindowPct,forming){
+    const price=Number(current),cfg=priceWindowPct||{};
+    if(!finite(price))return null;
+    const below=Math.max(0,Number(cfg.below)||0),above=Math.max(0,Number(cfg.above)||0);
+    let min=price*(1-below/100),max=price*(1+above/100);
+    if(forming&&finite(forming.low))min=Math.min(min,Number(forming.low));
+    if(forming&&finite(forming.high))max=Math.max(max,Number(forming.high));
+    return{min,max};
+  }
+
   function profileExtensions(periods,sides){
     const src=(periods||[]).filter(x=>x&&x.complete===true).map(x=>({...x,_start:Date.parse(String(x.start||''))/1000})).filter(x=>finite(x._start)).sort((a,b)=>a._start-b._start),out=[];
     for(let i=0;i<src.length;i++){
@@ -448,6 +458,6 @@
     utcQuarterStart,previousQuarterStart,utcMonthStart,previousMonthStart,utcWeekStart,
     weightedStats,anchoredVwapSeries,alignSeriesToBars,valueArea,approxVolumeProfile,tpoProfile,exactProfile,profileIsFresh,
     atr14,detectZones,markZoneTouches,mergeZones,zoneState,selectZones,rangeOverlapRatio,suppressValueAreas,filterValueAreas,inPriceView,zoneIntersectsView,
-    wasZoneTouched,isPocNaked,selectNakedPocs,mergeKeyLevels,selectKeyLevels,profileExtensions,selectProfileValueBox,selectReferenceWeek,remainingSinglePrints,capTableRows,axisLabelSelection,regionLabelLayout,roundToTick
+    wasZoneTouched,isPocNaked,selectNakedPocs,mergeKeyLevels,selectKeyLevels,profilePriceWindow,profileExtensions,selectProfileValueBox,selectReferenceWeek,remainingSinglePrints,capTableRows,axisLabelSelection,regionLabelLayout,roundToTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);

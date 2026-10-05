@@ -101,7 +101,7 @@
       for(const l of this.model.levels||[])vals.push(Number(l.price));
       for(const c of this.model.curves||[])for(const p of c.points||[])vals.push(Number(p.value));
       const lo=Number(this.model.autoscaleMin),hi=Number(this.model.autoscaleMax);
-      let min=Infinity,max=-Infinity;
+      let min=this.model.forceAutoscaleRange&&Number.isFinite(lo)?lo:Infinity,max=this.model.forceAutoscaleRange&&Number.isFinite(hi)?hi:-Infinity;
       for(const raw of vals){
         if(!Number.isFinite(raw))continue;
         let n=raw;
