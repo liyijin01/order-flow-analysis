@@ -12,7 +12,7 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
 
 (async()=>{
   const browser=await chromium.launch({channel:'chrome',headless:true});
-  const manifest=[];let cutoff=null;
+  const manifest=[];let cutoff=null,levelsGeneratedAt=null,tpoGeneratedAt=null;
   async function capture(symbol,tf,template,fileTf){
     const page=await browser.newPage({viewport:{width:1660,height:1300},deviceScaleFactor:1});
     const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
@@ -22,6 +22,8 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
     const meta=await page.evaluate(({template,symbol})=>({
       status:document.getElementById('status').textContent,
       cutoff:window.__analysisDebug.model?.cutoffUtc,
+      levelsGeneratedAt:window.__analysisDebug.state.bundle?.keyLevels?.generatedAt||null,
+      tpoGeneratedAt:window.__analysisDebug.state.bundle?.tpo?.generatedAt||null,
       template:window.__analysisDebug.template(),
       windowMode:window.__analysisDebug.windowSpec().mode,
       visibleBars:window.__analysisDebug.model?.visibleBars||0,
@@ -90,6 +92,7 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
     const cutoffMs=Date.parse(meta.cutoff),calcMsValue=Date.parse(meta.calcLastClosedUtc),earliest=cutoffMs-(calcMs[tf]+86400_000);
     if(calcMsValue<earliest)throw new Error(symbol+' '+tf+' '+template+' calcLastClosedUtc too stale: '+meta.calcLastClosedUtc+' cutoff '+meta.cutoff);
     cutoff=cutoff||meta.cutoff;if(cutoff!==meta.cutoff)throw new Error('snapshot cutoffs disagree: '+cutoff+' vs '+meta.cutoff);
+    levelsGeneratedAt=levelsGeneratedAt||meta.levelsGeneratedAt;tpoGeneratedAt=tpoGeneratedAt||meta.tpoGeneratedAt;
     const outputTf=fileTf||tf,fileName=template==='combined'?symbol+'-'+outputTf+'.png':symbol+'-'+template+'-'+outputTf+'.png',file=path.join(outDir,fileName);
     await page.locator('#analysisCapture').screenshot({path:file});
     const size=fs.statSync(file).size;if(size<50*1024)throw new Error(file+' is only '+size+' bytes');
@@ -116,6 +119,8 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
   const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap','weekly','monthly','mprofile','wprofile'],files:manifest};
   fs.writeFileSync(latestPath,JSON.stringify(latest,null,2));
   fs.writeFileSync(path.join(outDir,'manifest.json'),JSON.stringify(manifest,null,2));
+  const status={generatedAt:latest.generatedAt,dataCutoffUtc:cutoff,levelsGeneratedAt,tpoGeneratedAt,pngCount:manifest.length};
+  fs.writeFileSync(path.join(path.dirname(latestPath),'status.json'),JSON.stringify(status,null,2));
   const reference=manifest.find(x=>x.symbol==='BTCUSDT'&&x.template==='rvwap')?.reference;
   if(reference)console.log('D13 BTC reference '+JSON.stringify(reference));
   console.log('Generated '+manifest.length+' analysis PNGs; cutoff '+cutoff);

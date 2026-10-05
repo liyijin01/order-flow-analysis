@@ -780,8 +780,20 @@
     if(state.watermark)state.watermark.applyOptions({lines:[{text:symbolMeta().displayName+', '+displayTfLabel(),color:WATERMARK_COLOR,fontSize:44,fontStyle:'bold'}]});
   }
 
+  function updateStaleDataWarning(){
+    const el=$('staleData');if(!el)return;
+    el.textContent='';el.style.display='none';
+    if(state.snapshot||!state.bundle)return;
+    const raw=[state.bundle.keyLevels&&state.bundle.keyLevels.generatedAt,state.bundle.tpo&&state.bundle.tpo.generatedAt];
+    let oldest=Infinity;
+    for(const value of raw){const ms=Date.parse(String(value||''));if(Number.isFinite(ms)&&ms<oldest)oldest=ms;}
+    if(!Number.isFinite(oldest))return;
+    const hours=Math.floor(Math.max(0,Date.now()-oldest)/3600000);
+    if(hours>36){el.textContent='预计算数据已 '+hours+' 小时未更新';el.style.display='';}
+  }
+
   function updateHeader(model){
-    updateSelectionState();
+    updateSelectionState();updateStaleDataWarning();
     if(state.snapshot){
       $('infoLine').textContent=symbolMeta().displayName+' · '+displayTfLabel()+' · 收 '+fmtPrice(model.current)+' · 数据截至 '+formatCutoffJst(model.cutoffUtc);
       $('cutoff').textContent='数据截至 '+formatCutoffJst(model.cutoffUtc)+' JST';
