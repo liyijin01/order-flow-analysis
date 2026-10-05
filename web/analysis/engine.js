@@ -99,7 +99,7 @@
   function tpoProfile(bars,binSize){
     const size=Number(binSize)||1,bins=new Map();
     for(const b of bars||[]){
-      const lo=Math.floor(Number(b.low)/size),hi=Math.floor((Number(b.high)-Number.EPSILON)/size);
+      const lo=Math.floor(Number(b.low)/size),hi=Math.floor((Number(b.high)-1e-12)/size);
       for(let i=lo;i<=hi;i++)bins.set(i,(bins.get(i)||0)+1);
     }
     const rows=Array.from(bins.entries()).sort((a,b)=>a[0]-b[0]).map(([i,v])=>[i*size,v]);
