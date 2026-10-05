@@ -272,30 +272,6 @@
     return out;
   }
 
-  function buildMonthlyStructure(bundle,display,view){
-    if(state.template!=='monthly'||state.timeframe!=='1M'||!display.length)return{levels:[],regions:[],upper:null,lower:null,imbalance:null};
-    const cfg=state.rules.monthlyStructure||{},monthly=bundle.series['1M']||display,last=display[display.length-1],current=Number(last.close);
-    const asOfMs=state.snapshot&&bundle.cutoffUtc?Date.parse(bundle.cutoffUtc)+1000:Date.now();
-    const structure=I.monthlyStructureLevels(monthly,current,asOfMs),pad=Number(cfg.visiblePadPct)||10;
-    const span=Math.max(1e-12,Number(view.max)-Number(view.min)),lo=Number(view.min)-span*pad/100,hi=Number(view.max)+span*pad/100,inView=p=>Number(p)>=lo&&Number(p)<=hi;
-    const upper=structure.upper&&inView(structure.upper.price)?structure.upper:null,lower=structure.lower&&inView(structure.lower.price)?structure.lower:null,levels=[];
-    for(const row of [upper,lower].filter(Boolean))levels.push({
-      id:'monthly-sr-'+row.side+'-'+row.month,kind:'monthly-sr',price:Number(row.price),from:Number(row.time),label:row.label,
-      color:cfg.line||'#26c6da',axisColor:cfg.axis||'#26c6da',axisTextColor:cfg.axisText||'#0b1220',axisLabel:true,style:'solid',width:1,month:row.month,broken:!!row.broken,side:row.side
-    });
-    const imbalance=I.selectMonthlyImbalance(I.monthlyImbalances(monthly,asOfMs),current,view.min,view.max,pad),regions=[];
-    if(imbalance)regions.push({
-      id:'monthly-imbalance-'+imbalance.c1Month+'-'+imbalance.c3Month,type:'value',scope:'MONTHLY_IMBALANCE',
-      bottom:Number(imbalance.low),top:Number(imbalance.high),from:Number(imbalance.c1),label:'imbalance',
-      fill:cfg.fill||'rgba(38,198,218,.18)',border:cfg.line||'#26c6da',axisColor:cfg.axis||'#26c6da',axisTextColor:cfg.axisText||'#0b1220',axisLabel:true,
-      labelColor:'#ffffff',labelSize:13,labelWeight:700,
-      topStyle:imbalance.forming&&imbalance.formingEdge==='top'?'dashed':'solid',
-      bottomStyle:imbalance.forming&&imbalance.formingEdge==='bottom'?'dashed':'solid',
-      imbalanceType:imbalance.type,forming:!!imbalance.forming,c1Month:imbalance.c1Month,c3Month:imbalance.c3Month
-    });
-    return{levels,regions,upper,lower,imbalance,asOfMs};
-  }
-
   const MONTH_SHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function monthLabelFromStart(start,currentYear){
     const d=new Date(Number(start)*1000),base=MONTH_SHORT[d.getUTCMonth()];
@@ -457,7 +433,8 @@
 
     const allLevels=[],templateKeyStyle=templateConfig().keyLevelStyle||{};
     const weeklyModel=buildTemplate('weekly',bundle,display,view,{curves:[],regions:[],levels:[],segments:[],projections:[],yearOpen:null});
-    const monthlyModel=buildMonthlyStructure(bundle,display,view),mprofileModel=buildMonthlyProfile(bundle,display,view),wprofileModel=buildWeeklyProfile(bundle,display,view);
+    const monthlyModel=buildTemplate('monthly',bundle,display,view,{levels:[],regions:[],upper:null,lower:null,imbalance:null});
+    const mprofileModel=buildMonthlyProfile(bundle,display,view),wprofileModel=buildWeeklyProfile(bundle,display,view);
     const pq=areas.find(a=>a.scope==='PQ');
     if(pq&&layerEnabled('pqVwap'))allLevels.push({id:'line-pq-vwap',kind:'pq',price:pq.pqVwap,from:qStart,label:'PQ VWAP',color:rules.colors.pqVwap,axisColor:rules.colors.pqVwap,axisTextColor:'#eceff4',axisLabel:true,style:'solid',period:'Q / 1h',source:'exact'});
     if(pq&&layerEnabled('pqBounds')){
@@ -559,7 +536,7 @@
     const win=windowSpec(),cfg=templateConfig(),marginPct=Number(cfg.rightMarginPct);
     if(Number.isFinite(marginPct)&&marginPct>0){
       const visible=win.mode==='quarter'?count:Math.min(count,Number(win.visibleBars)||count);
-      const right=state.template==='monthly'&&visible>1
+      const right=cfg.proportionalRightMargin===true&&visible>1
         ?(visible-1)*(marginPct/100)/(1-marginPct/100)
         :marginBars(visible,marginPct);
       const from=Math.max(0,count-visible);
@@ -696,13 +673,6 @@
       add('  ·  naked '+String((mp.naked||[]).length)+' ('+touchedNow+' this period)','tpo');
       add('  ·  SP '+String((mp.singlePrints||[]).length),'tpo');
       model.infoValues={currentPoc:cur&&cur.poc,box:box?{month:new Date(box.startSec*1000).toISOString().slice(0,7),vah:box.vah,val:box.val}:null,naked:(mp.naked||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),side:x.side,price:x.price,touchedThisPeriod:!!x.touchedThisPeriod})),singlePrints:(mp.singlePrints||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),bottom:x.bottom,top:x.top})),barTime:Number(bar.time)};
-    }else if(state.template==='monthly'){
-      const mm=model.monthly||{},up=mm.upper,down=mm.lower,gap=mm.imbalance;
-      line2.appendChild(document.createTextNode('Monthly structure'));
-      add('  Above '+(up?fmtPrice(up.price)+' ('+up.label+')':'—'),'monthly');
-      add('  ·  Below '+(down?fmtPrice(down.price)+' ('+down.label+')':'—'),'monthly');
-      add('  ·  imbalance '+(gap?fmtPrice(gap.low)+' / '+fmtPrice(gap.high):'—'),'monthly');
-      model.infoValues={upper:up||null,lower:down||null,imbalance:gap||null,barTime:Number(bar.time)};
     }else{
       const handler=T[state.template];
       if(handler&&typeof handler.infoLine==='function'){

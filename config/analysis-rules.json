@@ -247,6 +247,7 @@
     },
     "monthly": {
       "label": "月线结构",
+      "proportionalRightMargin": true,
       "timeframes": [
         "1M"
       ],
