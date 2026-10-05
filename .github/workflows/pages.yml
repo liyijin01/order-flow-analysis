@@ -136,6 +136,8 @@ jobs:
         run: python scripts/d1_build_snapshot.py --profile-dir _d1-generated --output-dir _site/analysis/data
       - name: Build historical analysis key levels
         run: python scripts/d10_build_levels.py --cache-dir datarepo/levels --output-dir _site/analysis/levels
+      - name: Build monthly TPO profiles
+        run: python scripts/d16_build_tpo.py --cache-dir datarepo/tpo --output-dir _site/analysis/tpo
       - name: Prepare local D1 site
         run: |
           mkdir -p _site/web/chart/render/primitives _site/config
