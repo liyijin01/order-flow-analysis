@@ -11,7 +11,7 @@
 | PM 上月价值区 | 上月 30m K 线的 TPO 70% 价值区，每行 100 个 tick，单行扩展 | D1 月度探针：ETH 2025-11 VAL = 2707.00，参考值 2705.89，误差 0.04% |
 | 去年月份价位（`PY Nov VAL` 等） | 同 PM 的 TPO 算法，取去年各月 | 同上 |
 | PW 上周价值区 | aggTrades 精确成交量分布 70%；精确数据过期或缺失时，才用 30m TPO 兜底（标 ≈） | |
-| 价值区算法 | `engine.valueArea` 和 Python 版本都用**单行扩展**（`chart.html` 里的双行版本保留不动） | 上面两组验证都基于单行扩展 |
+| 价值区算法 | JS 统一由 `web/shared/value-area.js` 提供**单行扩展**；`engine.js` / `indicators.js` 调用共享实现，Python `pipeline/tpo.py` 同口径 | D16 金标准 + D19 一周 30m / 月线 fixture 的 JS / Python rows、POC、VAH、VAL 完全一致 |
 | 供应区 / 需求区 | 在更高一级周期（1h→4h、4h→1D、1D→1W）上：1~5 根窄幅基底 + 1~3 根冲击 K 线（≥1.5 ATR，实体 ≥ 50%，delta 同向）；只用已收盘 K 线形成和失效；首次触及标“已测试”，收盘越过远端边界失效 | 规则为自定义近似，不来自他的数值 |
 
 ## 2. 数据和 CI
@@ -22,7 +22,8 @@
 - USD-M 周线归档只到 2024-01，周线一律由日线聚合（周一 00:00 UTC 起）。
 - bookDepth 档位为 ±0.2 / 1 / 2 / 3 / 4 / 5（没有 2.5）。2026-09-07 ~ 09-11 的归档有异常，按日隔离、不插值。
 - 关键价位缓存在 data 分支 `levels/`，只缓存 `complete: true` 的周期；深度采样缓存在 `depth15m/`；日度价格阶梯在 `ladders/`。
-- 每个 PR 本地测完只 push 一次（push 会取消正在跑的 CI）。
+- 能本地运行时，push 前先跑单元测试和浏览器回归；不能本地运行时，每完成一项就 push，以 CI 为准。
+- **重构类 PR 必须 `model-diff` 零差异才能合并**；D19 的标准报告为 `0 differences across 30 cases`。
 
 ## 3. 前端约束
 

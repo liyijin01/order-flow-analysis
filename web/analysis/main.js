@@ -2,6 +2,7 @@
   'use strict';
 
   const L=window.LightweightCharts,D=window.OrderFlowAnalysisData,E=window.OrderFlowAnalysisEngine,I=window.OrderFlowIndicators,AP=window.OrderFlowAnnotationPrimitives,P=window.OrderFlowAnalysisPrimitive,X=window.OrderFlowAnalysisExport,R=window.OrderFlowBoardRuntime;
+  const T=window.OrderFlowTemplates||{};
   const SYMBOLS=window.ORDER_FLOW_SYMBOLS||{};
   const WATERMARK_COLOR='rgba(196,140,60,.30)';
   const $=id=>document.getElementById(id);
@@ -12,8 +13,8 @@
   };
 
   function tfLabel(tf){return({'30m':'30分钟','1h':'1小时','4h':'4小时','1d':'1天','1M':'1月'})[tf]||tf;}
-  function displayTfLabel(){return state.template==='mprofile'?'M30 Monthly':(state.template==='wprofile'?'M30 Weekly':tfLabel(state.timeframe));}
-  function profileTemplate(){return state.template==='mprofile'||state.template==='wprofile';}
+  function displayTfLabel(){return templateConfig().displayTimeframeLabel||tfLabel(state.timeframe);}
+  function profileTemplate(){return templateConfig().hideCandles===true;}
   function symbolMeta(){return SYMBOLS[state.symbol]||{displayName:state.symbol,tickSize:'0.01',ladderBin:'0.1'};}
   function pricePrecision(){const s=String(symbolMeta().tickSize||'0.01'),i=s.indexOf('.');return i<0?0:s.length-i-1;}
   function templateConfig(){const all=state.rules&&state.rules.templates||{};return all[state.template]||all.combined||{};}
@@ -271,79 +272,6 @@
     return out;
   }
 
-  function buildRvwapCurves(bundle,display){
-    if(!layerEnabled('rvwap')||state.timeframe!=='4h'||!display.length)return{curves:[],rolling:{},yearSegments:[]};
-    const four=bundle.series['4h']||[],cfg=state.rules.rvwap||{},allowed=new Set(display.map(b=>Number(b.time))),curves=[],rolling={};
-    for(const days of cfg.windowsDays||[30,60,90,365]){
-      const points=I.rollingVwap(four,Number(days)*86400).filter(p=>p.value!=null&&allowed.has(Number(p.time)));
-      rolling[String(days)]=points;
-      curves.push({id:'rvwap-'+days,label:String(days)+'D RVWAP',points,color:cfg.color||'#4caf50',width:1.5,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6,labelColor:cfg.labelColor||'#aeb7c8'});
-    }
-    const yearSegments=yearVwapSegments(four,display);
-    for(let i=0;i<yearSegments.length;i++){
-      const seg=yearSegments[i],last=i===yearSegments.length-1;
-      curves.push({id:'y-vwap-'+seg.year,label:last?'Y VWAP':'',points:seg.points.map(p=>({time:p.time,value:p.vwap})),color:cfg.yearVwap||'#e8d44d',width:1.5,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6,labelColor:cfg.yearVwap||'#e8d44d'});
-      curves.push({id:'y-upper-'+seg.year,label:'',points:seg.points.map(p=>({time:p.time,value:p.upper})),color:cfg.yearSigma||'rgba(190,196,208,.55)',width:1,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6});
-      curves.push({id:'y-lower-'+seg.year,label:'',points:seg.points.map(p=>({time:p.time,value:p.lower})),color:cfg.yearSigma||'rgba(190,196,208,.55)',width:1,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6});
-    }
-    return{curves,rolling,yearSegments};
-  }
-
-  function buildWeeklyVwap(bundle,display,view){
-    if(state.template!=='weekly'||state.timeframe!=='30m'||!display.length)return{curves:[],regions:[],levels:[],segments:[],projections:[],yearOpen:null};
-    const cfg=state.rules.weeklyVwap||{},thirty=bundle.series['30m']||[],daily=bundle.series['1d']||[],stats=I.weeklyVwapStats(thirty,1800),projectionMap=new Map(I.weeklyProjectionStats(stats).map(x=>[Number(x.weekStart),x]));
-    const first=Number(display[0].time),last=Number(display[display.length-1].time),currentStart=E.utcWeekStart(last),byStart=new Map(stats.map(x=>[Number(x.start),x]));
-    const span=Math.max(1e-12,Number(view.max)-Number(view.min)),pad=span*Math.max(0,Number(cfg.visiblePadPct)||10)/100,lo=Number(view.min)-pad,hi=Number(view.max)+pad;
-    const inView=v=>Number(v)>=lo&&Number(v)<=hi,curves=[],regions=[],levels=[],segments=[],projections=[];
-    for(const seg of stats){
-      if(Number(seg.end)<=first||Number(seg.start)>last)continue;
-      segments.push(seg);
-      const pts=(seg.points||[]).filter(p=>Number(p.time)>=first&&Number(p.time)<=last);
-      const mk=(id,key,color,width)=>({id:id+'-'+seg.start,label:'',weekStart:seg.start,points:pts.map(p=>({time:p.time,value:inView(p[key])?p[key]:null})),color,width,underlay:cfg.underlay||'rgba(190,196,208,.10)',underlayWidth:6});
-      curves.push(mk('weekly-vwap','vwap',cfg.vwap||'#f23645',1.5),mk('weekly-upper','upper',cfg.sigma||'rgba(190,196,208,.55)',1),mk('weekly-lower','lower',cfg.sigma||'rgba(190,196,208,.55)',1));
-      const baseProj=projectionMap.get(Number(seg.start));if(!baseProj)continue;
-      const top=Number(baseProj.pwUpper),bottom=Number(baseProj.pwLower),mid=Number(baseProj.pwVwap),to=Math.min(Number(seg.end),last),visible=top>=lo&&bottom<=hi,isCurrent=Number(seg.start)===currentStart;
-      const info={...baseProj,to,complete:true};projections.push(info);
-      if(!visible)continue;
-      regions.push({id:'weekly-proj-'+seg.start,type:'value',scope:'WEEKLY_PROJECTION',bottom,top,from:Number(seg.start),to,label:'',fill:cfg.projectionFill||'rgba(190,196,208,.08)',border:cfg.projectionBorder||'rgba(190,196,208,.25)',axisLabel:isCurrent,axisColor:cfg.axisGray||'#3a4152',axisTextColor:cfg.axisText||'#eceff4'});
-      levels.push({id:'weekly-pw-vwap-'+seg.start,kind:'weekly-pw',price:mid,from:Number(seg.start),to,label:'',color:cfg.vwap||'#f23645',axisColor:cfg.vwap||'#f23645',axisTextColor:'#fff',axisLabel:isCurrent,style:'solid',width:1.5,pairedRegionId:'weekly-proj-'+seg.start});
-    }
-    const cur=byStart.get(currentStart);
-    if(cur&&cur.points.length){
-      const p=cur.points[cur.points.length-1];
-      for(const [key,color] of [['vwap',cfg.vwap||'#f23645'],['upper',cfg.axisGray||'#3a4152'],['lower',cfg.axisGray||'#3a4152']]){
-        const price=Number(p[key]);if(inView(price))levels.push({id:'weekly-current-'+key,kind:'weekly',price,from:last,label:'',draw:false,color,axisColor:color,axisTextColor:'#fff',axisLabel:true});
-      }
-    }
-    const year=new Date(last*1000).getUTCFullYear(),yearStart=Date.UTC(year,0,1)/1000,day=daily.find(b=>Number(b.time)===yearStart),yearOpen=day?Number(day.open):null;
-    if(Number.isFinite(yearOpen)&&inView(yearOpen))levels.push({id:'year-open-'+year,kind:'year-open',price:yearOpen,from:first,label:'Y O',color:cfg.yearOpen||'#e6e9ef',axisColor:cfg.yearAxis||'#d9d4f0',axisTextColor:cfg.yearAxisText||'#202536',axisLabel:true,style:'solid',width:1});
-    return{curves,regions,levels,segments,projections,yearOpen,currentStart};
-  }
-
-  function buildMonthlyStructure(bundle,display,view){
-    if(state.template!=='monthly'||state.timeframe!=='1M'||!display.length)return{levels:[],regions:[],upper:null,lower:null,imbalance:null};
-    const cfg=state.rules.monthlyStructure||{},monthly=bundle.series['1M']||display,last=display[display.length-1],current=Number(last.close);
-    const asOfMs=state.snapshot&&bundle.cutoffUtc?Date.parse(bundle.cutoffUtc)+1000:Date.now();
-    const structure=I.monthlyStructureLevels(monthly,current,asOfMs),pad=Number(cfg.visiblePadPct)||10;
-    const span=Math.max(1e-12,Number(view.max)-Number(view.min)),lo=Number(view.min)-span*pad/100,hi=Number(view.max)+span*pad/100,inView=p=>Number(p)>=lo&&Number(p)<=hi;
-    const upper=structure.upper&&inView(structure.upper.price)?structure.upper:null,lower=structure.lower&&inView(structure.lower.price)?structure.lower:null,levels=[];
-    for(const row of [upper,lower].filter(Boolean))levels.push({
-      id:'monthly-sr-'+row.side+'-'+row.month,kind:'monthly-sr',price:Number(row.price),from:Number(row.time),label:row.label,
-      color:cfg.line||'#26c6da',axisColor:cfg.axis||'#26c6da',axisTextColor:cfg.axisText||'#0b1220',axisLabel:true,style:'solid',width:1,month:row.month,broken:!!row.broken,side:row.side
-    });
-    const imbalance=I.selectMonthlyImbalance(I.monthlyImbalances(monthly,asOfMs),current,view.min,view.max,pad),regions=[];
-    if(imbalance)regions.push({
-      id:'monthly-imbalance-'+imbalance.c1Month+'-'+imbalance.c3Month,type:'value',scope:'MONTHLY_IMBALANCE',
-      bottom:Number(imbalance.low),top:Number(imbalance.high),from:Number(imbalance.c1),label:'imbalance',
-      fill:cfg.fill||'rgba(38,198,218,.18)',border:cfg.line||'#26c6da',axisColor:cfg.axis||'#26c6da',axisTextColor:cfg.axisText||'#0b1220',axisLabel:true,
-      labelColor:'#ffffff',labelSize:13,labelWeight:700,
-      topStyle:imbalance.forming&&imbalance.formingEdge==='top'?'dashed':'solid',
-      bottomStyle:imbalance.forming&&imbalance.formingEdge==='bottom'?'dashed':'solid',
-      imbalanceType:imbalance.type,forming:!!imbalance.forming,c1Month:imbalance.c1Month,c3Month:imbalance.c3Month
-    });
-    return{levels,regions,upper,lower,imbalance,asOfMs};
-  }
-
   const MONTH_SHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function monthLabelFromStart(start,currentYear){
     const d=new Date(Number(start)*1000),base=MONTH_SHORT[d.getUTCMonth()];
@@ -356,77 +284,21 @@
     return{...row,startSec:Date.parse(String(row.start||''))/1000,endSec:Date.parse(String(row.end||''))/1000,
       rows:(row.rows||[]).map(r=>[Number(r[0]),Number(r[1])]),rowSize:Number(row.rowSize),poc:Number(row.poc),vah:Number(row.vah),val:Number(row.val),high:Number(row.high),low:Number(row.low)};
   }
-  function buildMonthlyProfile(bundle,display,view){
-    if(state.template!=='mprofile'||state.timeframe!=='1d'||!display.length)return{profiles:[],levels:[],regions:[],current:null,box:null,naked:[],priceWindow:null};
-    const cfg=state.rules.mprofile||{},colors=cfg.colors||{},pre=((bundle.tpo&&bundle.tpo.monthly)||[]).filter(x=>x.complete===true).map(normalizeTpoPeriod).sort((a,b)=>a.startSec-b.startSec);
-    const last=display[display.length-1],currentPrice=Number(last.close),mStart=E.utcMonthStart(last.time),mEnd=nextMonthStartSec(mStart),rowSize=(Number(symbolMeta().tickSize)||.01)*Number(cfg.rowTicks||100);
-    const monthBars=(bundle.series['30m']||[]).filter(b=>Number(b.time)>=mStart&&Number(b.time)<mEnd),cp=monthBars.length?E.tpoProfile(monthBars,rowSize):null;
-    const ex=monthBars.length?extrema(monthBars):null,current=cp&&Number.isFinite(Number(cp.poc))?{startSec:mStart,endSec:mEnd,complete:false,forming:true,bars:monthBars.length,expectedBars:null,rowSize,poc:Number(cp.poc),vah:Number(cp.vah),val:Number(cp.val),high:ex.max,low:ex.min,rows:cp.rows}:null;
-    const priceWindow=E.profilePriceWindow(currentPrice,cfg.priceWindowPct,current),inPrice=p=>priceWindow&&Number(p)>=priceWindow.min&&Number(p)<=priceWindow.max;
-    const intersects=(bottom,top)=>priceWindow&&Number(top)>=priceWindow.min&&Number(bottom)<=priceWindow.max;
-    const ended=pre.slice(-11),profileColors={value:colors.value||'rgba(64,160,190,.85)',outside:colors.outside||'rgba(150,150,150,.6)',poc:colors.poc||'#ffeb3b'};
-    const profiles=ended.map(p=>({...p,start:p.startSec,end:p.endSec,colors:profileColors,forming:false}));
-    if(current)profiles.push({...current,start:current.startSec,end:current.endSec,colors:profileColors});
-    const visibleStarts=new Set(ended.map(p=>p.startSec)),extensions=E.profileExtensions(pre,['vah','val','poc']).filter(x=>visibleStarts.has(x.from));
-    const touched=E.selectRecentTouched(extensions.filter(x=>!x.naked),cfg.maxTouched||8),nakedExtensions=extensions.filter(x=>x.naked),chosen=touched.concat(nakedExtensions),levels=[];
-    for(const x of chosen){
-      const d=new Date(x.from*1000),mon=MONTH_SHORT[d.getUTCMonth()],poc=x.side==='poc',base=poc?(colors.pocLine||'#e6d600'):(colors.valueLine||'#40a0be'),faded=poc?'rgba(230,214,0,.45)':'rgba(64,160,190,.45)',touchedThisPeriod=E.profileTouchedThisPeriod(x,current);
-      levels.push({id:'mprofile-'+x.from+'-'+x.side,kind:'mprofile',price:x.price,from:x.from,to:x.to,label:x.naked?mon+' '+x.side.toUpperCase():'',
-        color:x.naked?base:faded,axisColor:touchedThisPeriod?colorAlpha(base,.5):base,axisTextColor:'#0b1220',axisLabel:x.naked,style:touchedThisPeriod?'dashed':'solid',width:1,labelSize:11,labelWeight:600,naked:x.naked,touchedThisPeriod,month:mon,side:x.side});
-    }
-    if(current&&inPrice(current.poc)){
-      const d=new Date(mStart*1000),mon=MONTH_SHORT[d.getUTCMonth()];
-      levels.push({id:'mprofile-current-poc',kind:'mprofile',price:current.poc,from:mStart,label:mon+' POC',color:colors.pocLine||'#e6d600',axisColor:colors.pocLine||'#e6d600',axisTextColor:'#0b1220',axisLabel:true,style:'dashed',width:1,labelSize:11,labelWeight:600,current:true,side:'poc'});
-    }
-    const box=E.selectProfileValueBox(ended,currentPrice),regions=[];
-    if(box){
-      const year=new Date(mStart*1000).getUTCFullYear(),label=monthLabelFromStart(box.startSec,year)+' VA';
-      regions.push({id:'mprofile-box-'+box.startSec,type:'value',scope:'MPROFILE_BOX',bottom:box.val,top:box.vah,from:box.startSec,label,
-        fill:colors.boxFill||'rgba(255,255,255,.03)',border:colors.boxBorder||'#ffffff',axisLabel:false,labelColor:'#ffffff',labelSize:11,labelWeight:600});
-    }
-    const allSinglePrints=E.remainingSinglePrints(pre,currentPrice,rowSize,Number.MAX_SAFE_INTEGER),maxSingle=Math.max(0,Number(cfg.maxSinglePrints)||6);
-    const visibleSinglePrints=allSinglePrints.filter(sp=>intersects(sp.bottom,sp.top)).slice(0,maxSingle),visibleSpKeys=new Set(visibleSinglePrints.map(sp=>sp.from+'|'+sp.bottom+'|'+sp.top));
-    const singlePrints=allSinglePrints.filter(sp=>!intersects(sp.bottom,sp.top)||visibleSpKeys.has(sp.from+'|'+sp.bottom+'|'+sp.top));
-    for(const sp of singlePrints)regions.push({id:'mprofile-sp-'+sp.from+'-'+sp.bottom,type:'value',scope:'SINGLE_PRINT',bottom:sp.bottom,top:sp.top,from:sp.from,label:'',fill:'rgba(168,162,58,.10)',border:'#a8a23a',axisColor:'#a8a23a',axisTextColor:'#0b1220',axisLabel:true});
-    return{profiles,levels,regions,current,box,naked:levels.filter(x=>x.naked&&inPrice(x.price)),extensions,singlePrints:visibleSinglePrints,allSinglePrints:singlePrints,priceWindow};
-  }
-
   function weekLabel(start){
     const d=new Date(Number(start)*1000),mon=MONTH_SHORT[d.getUTCMonth()],first=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1));
     const firstMonday=1+((8-first.getUTCDay())%7),week=Math.floor((d.getUTCDate()-firstMonday)/7)+1;
     return mon+' W'+Math.max(1,week);
   }
-  function buildWeeklyProfile(bundle,display,view){
-    if(state.template!=='wprofile'||state.timeframe!=='1d'||!display.length)return{profiles:[],levels:[],regions:[],current:null,naked:[],extensions:[],priceWindow:null};
-    const cfg=state.rules.wprofile||{},colors=cfg.colors||{},pre=((bundle.tpo&&bundle.tpo.weekly)||[]).filter(x=>x.complete===true).map(normalizeTpoPeriod).sort((a,b)=>a.startSec-b.startSec);
-    const last=display[display.length-1],currentPrice=Number(last.close),wStart=E.utcWeekStart(last.time),wEnd=wStart+7*86400,rowSize=(Number(symbolMeta().tickSize)||.01)*Number(cfg.rowTicks||100);
-    const weekBars=(bundle.series['30m']||[]).filter(b=>Number(b.time)>=wStart&&Number(b.time)<wEnd),cp=weekBars.length?E.tpoProfile(weekBars,rowSize):null,ex=weekBars.length?extrema(weekBars):null;
-    const current=cp&&Number.isFinite(Number(cp.poc))?{startSec:wStart,endSec:wEnd,complete:false,forming:true,bars:weekBars.length,rowSize,poc:Number(cp.poc),vah:Number(cp.vah),val:Number(cp.val),high:ex.max,low:ex.min,rows:cp.rows}:null;
-    const priceWindow=E.profilePriceWindow(currentPrice,cfg.priceWindowPct,current),inPrice=p=>priceWindow&&Number(p)>=priceWindow.min&&Number(p)<=priceWindow.max;
-    const intersects=(bottom,top)=>priceWindow&&Number(top)>=priceWindow.min&&Number(bottom)<=priceWindow.max;
-    const ended=pre.slice(-25),profileColors={value:colors.value||'rgba(255,152,0,.9)',outside:colors.outside||'rgba(150,150,150,.6)',poc:colors.poc||'#ffeb3b'},profiles=ended.filter(p=>Array.isArray(p.rows)).map(p=>({...p,start:p.startSec,end:p.endSec,colors:profileColors,forming:false}));
-    if(current)profiles.push({...current,start:current.startSec,end:current.endSec,colors:profileColors});
-    const ext=E.profileExtensions(pre,['vah','val','poc']),visibleStarts=new Set(ended.map(p=>p.startSec)),touched=E.selectRecentTouched(ext.filter(x=>!x.naked&&visibleStarts.has(x.from)),cfg.maxTouched||8);
-    const distance=x=>Math.abs(Number(x.price)-currentPrice),nakedAll=ext.filter(x=>x.naked),naked=nakedAll.filter(x=>inPrice(x.price)).sort((a,b)=>{
-      const da=distance(a),db=distance(b),pa=a.side==='poc'?0:1,pb=b.side==='poc'?0:1;return da-db||pa-pb;
-    }).slice(0,Number(cfg.maxNaked)||16).map(x=>({...x,touchedThisPeriod:E.profileTouchedThisPeriod(x,current)})),nakedKeys=new Set(naked.map(x=>x.from+'|'+x.side));
-    const drawnNaked=nakedAll.filter(x=>!inPrice(x.price)||nakedKeys.has(x.from+'|'+x.side)),chosen=touched.concat(drawnNaked),levels=[];
-    for(const x of chosen){
-      const poc=x.side==='poc',base=poc?(colors.pocLine||'#e6d600'):(colors.valueLine||'#ff9800'),faded=poc?'rgba(230,214,0,.45)':'rgba(255,152,0,.45)',touchedThisPeriod=E.profileTouchedThisPeriod(x,current);
-      levels.push({id:'wprofile-'+x.from+'-'+x.side,kind:'wprofile',price:x.price,from:x.from,to:x.to,label:'',color:x.naked?base:faded,axisColor:touchedThisPeriod?colorAlpha(base,.5):base,axisTextColor:'#0b1220',axisLabel:x.naked,style:touchedThisPeriod?'dashed':'solid',width:1,naked:x.naked,touchedThisPeriod,week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side});
-    }
-    if(current&&inPrice(current.poc))levels.push({id:'wprofile-current-poc',kind:'wprofile',price:current.poc,from:wStart,label:'',color:colors.pocLine||'#e6d600',axisColor:colors.pocLine||'#e6d600',axisTextColor:'#0b1220',axisLabel:true,style:'dashed',width:1,current:true,side:'poc'});
-    const manual=cfg.referenceWeek&&cfg.referenceWeek[state.symbol],reference=E.selectReferenceWeek(pre,currentPrice,manual),regions=[];
-    if(reference){
-      const rs=Date.parse(String(reference.start))/1000,label=weekLabel(rs)+' range';
-      regions.push({id:'wprofile-ref-'+rs,type:'value',scope:'WPROFILE_REF',bottom:Number(reference.low),top:Number(reference.high),from:rs,label,
-        fill:colors.referenceFill||'rgba(190,196,208,.08)',border:colors.referenceBorder||'#40a0be',axisColor:colors.referenceBorder||'#40a0be',axisTextColor:'#0b1220',axisLabel:true,labelColor:'#ffffff',labelSize:11,labelWeight:600});
-    }
-    const allSinglePrints=E.remainingSinglePrints(pre,currentPrice,rowSize,Number.MAX_SAFE_INTEGER),maxSingle=Math.max(0,Number(cfg.maxSinglePrints)||6);
-    const visibleSinglePrints=allSinglePrints.filter(sp=>intersects(sp.bottom,sp.top)).slice(0,maxSingle),visibleSpKeys=new Set(visibleSinglePrints.map(sp=>sp.from+'|'+sp.bottom+'|'+sp.top));
-    const singlePrints=allSinglePrints.filter(sp=>!intersects(sp.bottom,sp.top)||visibleSpKeys.has(sp.from+'|'+sp.bottom+'|'+sp.top));
-    for(const sp of singlePrints)regions.push({id:'wprofile-sp-'+sp.from+'-'+sp.bottom,type:'value',scope:'SINGLE_PRINT',bottom:sp.bottom,top:sp.top,from:sp.from,label:'',fill:'rgba(168,162,58,.10)',border:'#a8a23a',axisColor:'#a8a23a',axisTextColor:'#0b1220',axisLabel:true});
-    return{profiles,levels,regions,current,naked,extensions:ext,ended,pre,reference,singlePrints:visibleSinglePrints,allSinglePrints:singlePrints,priceWindow};
+  function templateBuildContext(id,bundle,display,view){
+    return{
+      id,state,E,I,D,bundle,display,view,layerEnabled,symbolMeta,extrema,yearVwapSegments,colorAlpha,
+      monthLabelFromStart,nextMonthStartSec,normalizeTpoPeriod,weekLabel,fmtPrice
+    };
+  }
+  function buildTemplate(id,bundle,display,view,empty){
+    const handler=T[id];
+    if(!handler||state.template!==id||typeof handler.build!=='function')return empty;
+    return handler.build(templateBuildContext(id,bundle,display,view));
   }
 
   function buildAnalysis(bundle){
@@ -491,7 +363,23 @@
 
     const drawnZoneIds=new Set(selectedZones.filter(z=>E.zoneIntersectsView(z,view.min,view.max,rules.zones.viewPadPct||50)).map(z=>z.id));
 
-    const allLevels=[],templateKeyStyle=templateConfig().keyLevelStyle||{},weeklyModel=buildWeeklyVwap(bundle,display,view),monthlyModel=buildMonthlyStructure(bundle,display,view),mprofileModel=buildMonthlyProfile(bundle,display,view),wprofileModel=buildWeeklyProfile(bundle,display,view);
+    const allLevels=[],templateKeyStyle=templateConfig().keyLevelStyle||{};
+    const weeklyModel=buildTemplate('weekly',bundle,display,view,{curves:[],regions:[],levels:[],segments:[],projections:[],yearOpen:null});
+    const monthlyModel=buildTemplate('monthly',bundle,display,view,{levels:[],regions:[],upper:null,lower:null,imbalance:null});
+    const mprofileModel=buildTemplate(
+      'mprofile',
+      bundle,
+      display,
+      view,
+      {profiles:[],levels:[],regions:[],current:null,box:null,naked:[],priceWindow:null}
+    );
+    const wprofileModel=buildTemplate(
+      'wprofile',
+      bundle,
+      display,
+      view,
+      {profiles:[],levels:[],regions:[],current:null,naked:[],extensions:[],priceWindow:null}
+    );
     const pq=areas.find(a=>a.scope==='PQ');
     if(pq&&layerEnabled('pqVwap'))allLevels.push({id:'line-pq-vwap',kind:'pq',price:pq.pqVwap,from:qStart,label:'PQ VWAP',color:rules.colors.pqVwap,axisColor:rules.colors.pqVwap,axisTextColor:'#eceff4',axisLabel:true,style:'solid',period:'Q / 1h',source:'exact'});
     if(pq&&layerEnabled('pqBounds')){
@@ -519,7 +407,7 @@
         ?Number(lastClosedDisplay.closeTime)+1:keyAsOfMs;
       const eligibleKeyLevels=bundle.keyLevels.levels.filter(row=>{
         const periodEnd=Date.parse(String(row.periodEnd||'')),yearly=row.kind==='year';
-        const templateOk=state.template==='rvwap'?yearly:!yearly;
+        const templateOk=templateConfig().yearLevelsOnly===true?yearly:!yearly;
         return templateOk&&Number.isFinite(periodEnd)&&periodEnd<=keyPeriodCutoffMs;
       });
       const keyCfg=rules.keyLevels||{},pane=state.chart&&state.chart.panes&&state.chart.panes()[0];
@@ -529,7 +417,7 @@
       const plotHeight=paneHeight*usableRatio;
       keySelection=E.selectKeyLevels(
         eligibleKeyLevels,current,view.min,view.max,linePad,tick,keyCfg.maxCount||6,pqStart,
-        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,(state.template==='rvwap'||!pq)?[]:[pq.pqVwap,pq.bottom,pq.top],keyCfg.minGapPx||0,plotHeight
+        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,(templateConfig().yearLevelsOnly===true||!pq)?[]:[pq.pqVwap,pq.bottom,pq.top],keyCfg.minGapPx||0,plotHeight
       );
       const firstTime=Number(display[0].time),keyStyle=templateKeyStyle;
       for(const row of keySelection.all){
@@ -558,13 +446,17 @@
     const levelsForTable=allLevels.map(l=>({...l,offView:!drawnLevelIds.has(l.id)}));
     const regions=allRegions.filter(r=>!r.offView&&regionLayerEnabled(r)),levels=levelsForTable.filter(l=>!l.offView&&levelLayerEnabled(l));
 
-    const quarterVwaps=quarterVwapSegments(one,display),rvwapModel=buildRvwapCurves(bundle,display);
-    const profileWindow=state.template==='wprofile'?wprofileModel.priceWindow:(state.template==='mprofile'?mprofileModel.priceWindow:null);
+    const quarterVwaps=quarterVwapSegments(one,display);
+    const rvwapModel=buildTemplate('rvwap',bundle,display,view,{curves:[],rolling:{},yearSegments:[]});
+    const profileModels={mprofile:mprofileModel,wprofile:wprofileModel};
+    const activeHandler=T[state.template];
+    const activeProfileModel=activeHandler&&activeHandler.modelKey?profileModels[activeHandler.modelKey]:null;
+    const profileWindow=activeProfileModel&&activeProfileModel.priceWindow||null;
     const currentVwap=(quarterVwaps.find(x=>x.start===qStart)||quarterVwaps[quarterVwaps.length-1]||{points:[]}).points.map(p=>({time:p.time,value:p.vwap}));
     const lastClosed=closedCalc[closedCalc.length-1];
     const calcLastClosedUtc=lastClosed?new Date(Number(lastClosed.closeTime)+1).toISOString():null;
     return{
-      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,pqStats,keyLevels:levels.filter(l=>l.kind==='key'),yearLevels:levels.filter(l=>l.kind==='year'),curves:(rvwapModel.curves||[]).concat(weeklyModel.curves||[]),rvwap:rvwapModel,weekly:weeklyModel,monthly:monthlyModel,mprofile:mprofileModel,wprofile:wprofileModel,profiles:state.template==='wprofile'?(wprofileModel.profiles||[]):(mprofileModel.profiles||[]),missing,
+      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,pqStats,keyLevels:levels.filter(l=>l.kind==='key'),yearLevels:levels.filter(l=>l.kind==='year'),curves:(rvwapModel.curves||[]).concat(weeklyModel.curves||[]),rvwap:rvwapModel,weekly:weeklyModel,monthly:monthlyModel,mprofile:mprofileModel,wprofile:wprofileModel,profiles:activeProfileModel?(activeProfileModel.profiles||[]):[],missing,
       allRegions,allLevels:levelsForTable,viewMin:profileWindow?profileWindow.min:view.min,viewMax:profileWindow?profileWindow.max:view.max,profileWindow,visibleBars:visibleN,
       cutoffUtc:bundle.cutoffUtc||null,generatedAt:bundle.generatedAt||new Date().toISOString(),
       calcTf,calcLastClosedUtc,bundleErrors:bundle.errors||{},
@@ -592,7 +484,7 @@
     const win=windowSpec(),cfg=templateConfig(),marginPct=Number(cfg.rightMarginPct);
     if(Number.isFinite(marginPct)&&marginPct>0){
       const visible=win.mode==='quarter'?count:Math.min(count,Number(win.visibleBars)||count);
-      const right=state.template==='monthly'&&visible>1
+      const right=cfg.proportionalRightMargin===true&&visible>1
         ?(visible-1)*(marginPct/100)/(1-marginPct/100)
         :marginBars(visible,marginPct);
       const from=Math.max(0,count-visible);
@@ -710,56 +602,15 @@
     const c=document.createElement('span');c.className='muted';c.textContent=' 量 '+formatVolume(bar.volume);line1.appendChild(c);
     const line2=$('chartInfo2');line2.textContent='';
     const add=(text,klass)=>{const e=document.createElement('span');e.className=klass;e.textContent=text;line2.appendChild(e);};
-    if(state.template==='wprofile'){
-      const wp=model.wprofile||{},cur=wp.current;
-      line2.appendChild(document.createTextNode('Weekly TPO (30m, 70%)'));
-      add('  '+(cur?'POC '+fmtPrice(cur.poc)+'  VAH '+fmtPrice(cur.vah)+'  VAL '+fmtPrice(cur.val):'POC —  VAH —  VAL —'),'tpo');
-      const ref=wp.reference,rs=ref&&Date.parse(String(ref.start))/1000;
-      add('  ·  Ref '+(ref?weekLabel(rs)+' '+fmtPrice(ref.high)+' / '+fmtPrice(ref.low):'—'),'muted');
-      const touchedNow=(wp.naked||[]).filter(x=>x.touchedThisPeriod).length;
-      add('  ·  naked '+String((wp.naked||[]).length)+' ('+touchedNow+' this period)','tpo');
-      add('  ·  SP '+String((wp.singlePrints||[]).length),'tpo');
-      model.infoValues={currentPoc:cur&&cur.poc,reference:ref?{week:new Date(rs*1000).toISOString().slice(0,10),high:Number(ref.high),low:Number(ref.low),manual:!!ref.manual}:null,naked:(wp.naked||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),side:x.side,price:x.price,touchedThisPeriod:!!x.touchedThisPeriod})),singlePrints:(wp.singlePrints||[]).map(x=>({week:new Date(x.from*1000).toISOString().slice(0,10),bottom:x.bottom,top:x.top})),barTime:Number(bar.time)};
-    }else if(state.template==='mprofile'){
-      const mp=model.mprofile||{},cur=mp.current,box=mp.box;
-      line2.appendChild(document.createTextNode('Monthly TPO (30m, 70%)'));
-      add('  '+(cur?'POC '+fmtPrice(cur.poc)+'  VAH '+fmtPrice(cur.vah)+'  VAL '+fmtPrice(cur.val):'POC —  VAH —  VAL —'),'tpo');
-      add('  ·  Box '+(box?monthLabelFromStart(box.startSec,new Date(model.last.time*1000).getUTCFullYear())+' VA '+fmtPrice(box.vah)+' / '+fmtPrice(box.val):'—'),'muted');
-      const touchedNow=(mp.naked||[]).filter(x=>x.touchedThisPeriod).length;
-      add('  ·  naked '+String((mp.naked||[]).length)+' ('+touchedNow+' this period)','tpo');
-      add('  ·  SP '+String((mp.singlePrints||[]).length),'tpo');
-      model.infoValues={currentPoc:cur&&cur.poc,box:box?{month:new Date(box.startSec*1000).toISOString().slice(0,7),vah:box.vah,val:box.val}:null,naked:(mp.naked||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),side:x.side,price:x.price,touchedThisPeriod:!!x.touchedThisPeriod})),singlePrints:(mp.singlePrints||[]).map(x=>({month:new Date(x.from*1000).toISOString().slice(0,7),bottom:x.bottom,top:x.top})),barTime:Number(bar.time)};
-    }else if(state.template==='monthly'){
-      const mm=model.monthly||{},up=mm.upper,down=mm.lower,gap=mm.imbalance;
-      line2.appendChild(document.createTextNode('Monthly structure'));
-      add('  Above '+(up?fmtPrice(up.price)+' ('+up.label+')':'—'),'monthly');
-      add('  ·  Below '+(down?fmtPrice(down.price)+' ('+down.label+')':'—'),'monthly');
-      add('  ·  imbalance '+(gap?fmtPrice(gap.low)+' / '+fmtPrice(gap.high):'—'),'monthly');
-      model.infoValues={upper:up||null,lower:down||null,imbalance:gap||null,barTime:Number(bar.time)};
-    }else if(state.template==='weekly'){
-      line2.appendChild(document.createTextNode('Weekly VWAP (hlc3, 30m, ±1σ)'));
-      const seg=(model.weekly&&model.weekly.segments||[]).find(x=>Number(bar.time)>=Number(x.start)&&Number(bar.time)<Number(x.end)),p=seg&&(seg.points||[]).find(x=>Number(x.time)===Number(bar.time));
-      const proj=seg&&(model.weekly&&model.weekly.projections||[]).find(x=>Number(x.weekStart)===Number(seg.start));
-      const cv=p&&p.vwap,cu=p&&p.upper,cl=p&&p.lower;
-      add('  '+(cv==null?'—':fmtPrice(cv)),'weeklyvwap');add('  +1σ '+(cu==null?'—':fmtPrice(cu)),'sigma');add('  −1σ '+(cl==null?'—':fmtPrice(cl)),'sigma');
-      add('  ·  PW '+(!proj?'—':fmtPrice(proj.pwVwap)),'weeklyvwap');add('  +1σ '+(!proj?'—':fmtPrice(proj.pwUpper)),'sigma');add('  −1σ '+(!proj?'—':fmtPrice(proj.pwLower)),'sigma');
-      add('  ·  Y O '+(model.weekly&&Number.isFinite(Number(model.weekly.yearOpen))?fmtPrice(model.weekly.yearOpen):'—'),'muted');
-      model.infoValues={weekly:{vwap:cv,upper:cu,lower:cl},previous:proj||null,yearOpen:model.weekly&&model.weekly.yearOpen,barTime:Number(bar.time)};
-    }else if(state.template==='rvwap'){
-      line2.appendChild(document.createTextNode('Rolling VWAP (hlc3, 4h)'));
-      const valueAt=points=>{const p=(points||[]).find(x=>Number(x.time)===Number(bar.time));return p&&Number.isFinite(Number(p.value))?Number(p.value):null;};
-      const values={};
-      for(const days of (state.rules.rvwap&&state.rules.rvwap.windowsDays)||[30,60,90,365]){
-        const v=valueAt(model.rvwap&&model.rvwap.rolling&&model.rvwap.rolling[String(days)]);values[String(days)]=v;add('  '+days+'D '+(v==null?'—':fmtPrice(v)),'vwap');
-      }
-      const seg=(model.rvwap&&model.rvwap.yearSegments||[]).find(x=>Number(bar.time)>=x.start&&Number(bar.time)<x.end);
-      const yp=seg&&(seg.points||[]).find(x=>Number(x.time)===Number(bar.time)),yv=yp&&yp.vwap,yu=yp&&yp.upper,yl=yp&&yp.lower;
-      add('  ·  Y VWAP '+(yv==null?'—':fmtPrice(yv)),'yvwap');add('  +1σ '+(yu==null?'—':fmtPrice(yu)),'sigma');add('  −1σ '+(yl==null?'—':fmtPrice(yl)),'sigma');
-      model.infoValues={rolling:values,year:{vwap:yv,upper:yu,lower:yl},barTime:Number(bar.time)};
-    }else{
+    {
+      const handler=T[state.template];
+      if(handler&&typeof handler.infoLine==='function'){
+        handler.infoLine({state,model,line2,fmtPrice,weekLabel,monthLabelFromStart},bar,add);
+      }else{
       const vals=infoValues(model),cv=vals.current,pv=vals.previous;line2.textContent='Anchored VWAP (hlc3, Quarter, ±1σ)';
       add('  '+fmtPrice(cv.vwap),'vwap');add('  +1σ '+fmtPrice(cv.upper),'sigma');add('  −1σ '+fmtPrice(cv.lower),'sigma');add('  PQ '+fmtPrice(pv.vwap),'pqvwap');add('  +1σ '+fmtPrice(pv.upper),'sigma');add('  −1σ '+fmtPrice(pv.lower),'sigma');
       model.infoValues={current:cv,previous:pv,barTime:Number(bar.time)};
+      }
     }
   }
   function formatRemaining(ms){const sec=Math.max(0,Math.floor(ms/1000)),d=Math.floor(sec/86400),h=Math.floor((sec%86400)/3600),m=Math.floor((sec%3600)/60),s=sec%60;if(d>0)return d+'天 '+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');return h>0?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}

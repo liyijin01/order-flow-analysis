@@ -13,3 +13,16 @@ test('D16 E.tpoProfile matches Python shared fixture exactly',()=>{
   assert.deepEqual(got.rows,exp.rows);
   for(const key of ['poc','vah','val'])assert.equal(got[key],exp[key]);
 });
+
+
+const monthlyFixture=JSON.parse(
+  fs.readFileSync(path.resolve('web/tests/fixtures/btcusdt-um-1M-2026-10-01.json'),'utf8')
+);
+
+test('D19 shared TPO matches engine for the full monthly fixture',()=>{
+  const shared=globalThis.OrderFlowValueArea;
+  const fromShared=shared.tpoProfile(monthlyFixture.bars,10);
+  const fromEngine=E.tpoProfile(monthlyFixture.bars,10);
+  assert.deepEqual(fromEngine.rows,fromShared.rows);
+  for(const key of ['poc','vah','val'])assert.equal(fromEngine[key],fromShared[key]);
+});

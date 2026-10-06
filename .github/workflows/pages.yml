@@ -62,7 +62,7 @@ jobs:
           node --check web/live.js
           node --check web/render.js
           node --check web/app.js
-          find web/chart web/analysis web/flow -name '*.js' -print0 | xargs -0 -n1 node --check
+          find web/chart web/analysis web/flow web/shared -name '*.js' -print0 | xargs -0 -n1 node --check
 
       - name: Ban large-array argument spreading
         run: |
@@ -71,8 +71,69 @@ jobs:
             exit 1
           fi
 
+      - name: Limit hard-coded template branches
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path("web/analysis/main.js").read_text()
+          count = text.count("state.template===") + text.count("state.template!==")
+          print(f"main.js hard-coded template comparisons: {count}")
+          if count > 4:
+              raise SystemExit("main.js may contain at most 4 state.template===/!== comparisons")
+          PY
+
+  model-diff:
+    if: github.event_name == 'pull_request'
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout head
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Install Playwright core
+        run: npm install --no-save playwright-core@1.55.0
+      - name: Checkout PR base
+        run: git worktree add --detach _base "${{ github.event.pull_request.base.sha }}"
+      - name: Start base and head sites
+        run: |
+          python3 -m http.server 8000 --directory . >/tmp/model-head-http.log 2>&1 &
+          python3 -m http.server 8001 --directory _base >/tmp/model-base-http.log 2>&1 &
+          sleep 2
+      - name: Snapshot base and head models
+        run: |
+          node scripts/model_snapshot.cjs http://127.0.0.1:8001/analysis.html model-base.json
+          node scripts/model_snapshot.cjs http://127.0.0.1:8000/analysis.html model-head.json
+      - name: Compare model snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${GITHUB_HEAD_REF}" in
+            d19*|refactor-*) export MODEL_DIFF_STRICT=1 ;;
+            *) export MODEL_DIFF_STRICT=0 ;;
+          esac
+          node scripts/model_diff.cjs model-base.json model-head.json model-diff-report.md
+      - name: Upload model diff
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: model-diff
+          path: |
+            model-base.json
+            model-head.json
+            model-diff-report.md
+          if-no-files-found: error
+          retention-days: 14
+
+
   chart-smoke:
-    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-'))
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19-'))
     needs: test
     runs-on: ubuntu-24.04
     permissions:
@@ -92,13 +153,13 @@ jobs:
           python3 -m http.server 8000 >/tmp/order-flow-http.log 2>&1 &
           sleep 2
       - name: Render C2.1-C4 regression suite
-        if: startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-')
+        if: startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19-')
         run: node scripts/c2_1_c4_smoke.cjs
       - name: Run C4.1 browser regression checks
-        if: startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-')
+        if: startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19-')
         run: node scripts/c4_1_smoke.cjs
       - name: Upload C2.1-C4 screenshots
-        if: always() && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-'))
+        if: always() && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19-'))
         uses: actions/upload-artifact@v7
         with:
           name: c2-1-c4-chart-screenshots
@@ -142,7 +203,7 @@ jobs:
         run: |
           mkdir -p _site/web/chart/render/primitives _site/config
           cp analysis.html _site/
-          cp -R web/analysis _site/web/
+          cp -R web/analysis web/shared _site/web/
           cp web/chart/indicators.js _site/web/chart/
           cp web/chart/render/primitives/base.js web/chart/render/primitives/band.js _site/web/chart/render/primitives/
           cp config/symbols.js config/analysis-rules.json _site/config/
@@ -200,7 +261,7 @@ jobs:
         run: |
           mkdir -p _flow-site/web _flow-site/config
           cp flow.html _flow-site/
-          cp -R web/analysis web/chart web/flow _flow-site/web/
+          cp -R web/analysis web/chart web/flow web/shared _flow-site/web/
           cp config/symbols.js config/flow-rules.json _flow-site/config/
       - name: Start local flow site
         run: |
@@ -328,7 +389,7 @@ jobs:
           mkdir -p _site/web _site/config _site/analysis/data _site/analysis/levels _site/analysis/tpo _site/flow/data
           cp index.html chart.html analysis.html flow.html _site/
           cp web/core.js web/live.js web/render.js web/app.js _site/web/
-          cp -R web/chart web/analysis web/flow _site/web/
+          cp -R web/chart web/analysis web/flow web/shared _site/web/
           cp config/symbols.js config/analysis-rules.json config/annotation-rules.json config/flow-rules.json _site/config/
           cp _generated/profiles-*.json _site/
           cp _generated/analysis/data/*.json _site/analysis/data/

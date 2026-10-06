@@ -52,34 +52,15 @@
   }
 
   function valueArea(rows,binSize,pct){
-    const sorted=(rows||[]).map(r=>[Number(r[0]),Number(r[1])]).filter(r=>finite(r[0])&&finite(r[1])).sort((a,b)=>a[0]-b[0]);
-    if(!sorted.length)return null;
-    const total=sorted.reduce((a,r)=>a+r[1],0);
+    if(!global.OrderFlowValueArea&&typeof require==='function')require('../shared/value-area.js');
+    const area=global.OrderFlowValueArea.valueArea(rows,binSize,pct);
+    if(!area)return null;
     const size=Number(binSize)||1;
-    const midpoint=(sorted[0][0]+sorted[sorted.length-1][0]+size)/2;
-    let max=-Infinity,candidates=[];
-    sorted.forEach((r,i)=>{if(r[1]>max){max=r[1];candidates=[i];}else if(r[1]===max)candidates.push(i);});
-    let pocIndex=candidates[0],best=Infinity;
-    for(const i of candidates){
-      const dist=Math.abs((sorted[i][0]+size/2)-midpoint);
-      if(dist<=best){best=dist;pocIndex=i;}
-    }
-    let lo=pocIndex,hi=pocIndex,acc=sorted[pocIndex][1];
-    const target=total*(pct==null?0.70:pct);
-    while(acc<target&&(lo>0||hi<sorted.length-1)){
-      const up=(hi+1<sorted.length?sorted[hi+1][1]:0)+(hi+2<sorted.length?sorted[hi+2][1]:0);
-      const dn=(lo-1>=0?sorted[lo-1][1]:0)+(lo-2>=0?sorted[lo-2][1]:0);
-      if(hi<sorted.length-1&&(lo===0||up>=dn)){
-        if(hi+1<sorted.length)acc+=sorted[hi+1][1];
-        if(hi+2<sorted.length)acc+=sorted[hi+2][1];
-        hi=Math.min(sorted.length-1,hi+2);
-      }else{
-        if(lo-1>=0)acc+=sorted[lo-1][1];
-        if(lo-2>=0)acc+=sorted[lo-2][1];
-        lo=Math.max(0,lo-2);
-      }
-    }
-    return {rows:sorted,pocLower:sorted[pocIndex][0],poc:sorted[pocIndex][0]+size/2,vah:sorted[hi][0]+size,val:sorted[lo][0],included:acc,total};
+    const sorted=(rows||[])
+      .map(row=>[Number(row[0]),Number(row[1])])
+      .filter(row=>finite(row[0])&&finite(row[1]))
+      .sort((a,b)=>a[0]-b[0]);
+    return{...area,rows:sorted,pocLower:area.poc-size/2};
   }
 
   function anchoredVwap(bars,anchorTime,k){
