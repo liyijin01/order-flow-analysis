@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,6 +22,43 @@ class D16TpoTests(unittest.TestCase):
         self.assertEqual(got["rows"],exp["rows"])
         for key in ("poc","vah","val","high","low"):
             self.assertEqual(got[key],exp[key])
+
+    def test_js_and_python_match_all_fixtures(self):
+        fixtures=[
+            ROOT/"web/tests/fixtures/tpo-consistency.json",
+            ROOT/"web/tests/fixtures/btcusdt-um-1M-2026-10-01.json",
+        ]
+        node_script=r"""
+const fs=require('fs');
+(async()=>{
+  await import('./web/shared/value-area.js');
+  const fx=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
+  const rowSize=Number(fx.rowSize||10);
+  const got=globalThis.OrderFlowValueArea.tpoProfile(fx.bars,rowSize);
+  process.stdout.write(JSON.stringify(got));
+})().catch(error=>{console.error(error);process.exit(1);});
+"""
+        for fixture in fixtures:
+            fx=json.loads(fixture.read_text(encoding="utf-8"))
+            bars=[
+                Bar(
+                    int(x["openTime"]),
+                    x["open"],x["high"],x["low"],x["close"],x["volume"],x["takerBuyBase"]
+                )
+                for x in fx["bars"]
+            ]
+            py_profile=profile_from_bars(fx.get("symbol","BTCUSDT"),bars)
+            result=subprocess.run(
+                ["node","-e",node_script,str(fixture)],
+                cwd=ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            js_profile=json.loads(result.stdout)
+            self.assertEqual(js_profile["rows"],py_profile["rows"],fixture.name)
+            for key in ("poc","vah","val"):
+                self.assertEqual(js_profile[key],py_profile[key],fixture.name)
 
     def test_incomplete_month_is_not_cached(self):
         from datetime import datetime, timezone

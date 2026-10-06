@@ -62,7 +62,7 @@ jobs:
           node --check web/live.js
           node --check web/render.js
           node --check web/app.js
-          find web/chart web/analysis web/flow -name '*.js' -print0 | xargs -0 -n1 node --check
+          find web/chart web/analysis web/flow web/shared -name '*.js' -print0 | xargs -0 -n1 node --check
 
       - name: Ban large-array argument spreading
         run: |
@@ -133,7 +133,7 @@ jobs:
 
 
   chart-smoke:
-    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-'))
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19-'))
     needs: test
     runs-on: ubuntu-24.04
     permissions:
@@ -153,13 +153,13 @@ jobs:
           python3 -m http.server 8000 >/tmp/order-flow-http.log 2>&1 &
           sleep 2
       - name: Render C2.1-C4 regression suite
-        if: startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-')
+        if: startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19-')
         run: node scripts/c2_1_c4_smoke.cjs
       - name: Run C4.1 browser regression checks
-        if: startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-')
+        if: startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19-')
         run: node scripts/c4_1_smoke.cjs
       - name: Upload C2.1-C4 screenshots
-        if: always() && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-'))
+        if: always() && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19-'))
         uses: actions/upload-artifact@v7
         with:
           name: c2-1-c4-chart-screenshots
@@ -203,7 +203,7 @@ jobs:
         run: |
           mkdir -p _site/web/chart/render/primitives _site/config
           cp analysis.html _site/
-          cp -R web/analysis _site/web/
+          cp -R web/analysis web/shared _site/web/
           cp web/chart/indicators.js _site/web/chart/
           cp web/chart/render/primitives/base.js web/chart/render/primitives/band.js _site/web/chart/render/primitives/
           cp config/symbols.js config/analysis-rules.json _site/config/
@@ -261,7 +261,7 @@ jobs:
         run: |
           mkdir -p _flow-site/web _flow-site/config
           cp flow.html _flow-site/
-          cp -R web/analysis web/chart web/flow _flow-site/web/
+          cp -R web/analysis web/chart web/flow web/shared _flow-site/web/
           cp config/symbols.js config/flow-rules.json _flow-site/config/
       - name: Start local flow site
         run: |
@@ -389,7 +389,7 @@ jobs:
           mkdir -p _site/web _site/config _site/analysis/data _site/analysis/levels _site/analysis/tpo _site/flow/data
           cp index.html chart.html analysis.html flow.html _site/
           cp web/core.js web/live.js web/render.js web/app.js _site/web/
-          cp -R web/chart web/analysis web/flow _site/web/
+          cp -R web/chart web/analysis web/flow web/shared _site/web/
           cp config/symbols.js config/analysis-rules.json config/annotation-rules.json config/flow-rules.json _site/config/
           cp _generated/profiles-*.json _site/
           cp _generated/analysis/data/*.json _site/analysis/data/

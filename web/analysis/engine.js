@@ -61,25 +61,8 @@
   }
 
   function valueArea(rows,binSize,pct){
-    const sorted=(rows||[]).map(r=>[Number(r[0]),Number(r[1])]).filter(r=>finite(r[0])&&finite(r[1])).sort((a,b)=>a[0]-b[0]);
-    if(!sorted.length)return null;
-    const total=sorted.reduce((a,r)=>a+r[1],0),size=Number(binSize)||1;
-    let max=-Infinity,pocIndex=0;
-    const midpoint=(sorted[0][0]+sorted[sorted.length-1][0]+size)/2;
-    let best=Infinity;
-    for(let i=0;i<sorted.length;i++){
-      const v=sorted[i][1],dist=Math.abs((sorted[i][0]+size/2)-midpoint);
-      if(v>max||(v===max&&dist<=best)){max=v;pocIndex=i;best=dist;}
-    }
-    let lo=pocIndex,hi=pocIndex,acc=sorted[pocIndex][1],target=total*(pct==null?.70:Number(pct));
-    while(acc<target&&(lo>0||hi<sorted.length-1)){
-      const up=hi<sorted.length-1?sorted[hi+1][1]:-1;
-      const dn=lo>0?sorted[lo-1][1]:-1;
-      if(up>=dn&&hi<sorted.length-1){hi++;acc+=sorted[hi][1];}
-      else if(lo>0){lo--;acc+=sorted[lo][1];}
-      else{hi++;acc+=sorted[hi][1];}
-    }
-    return{poc:sorted[pocIndex][0]+size/2,vah:sorted[hi][0]+size,val:sorted[lo][0],included:acc,total};
+    if(!global.OrderFlowValueArea&&typeof require==='function')require('../shared/value-area.js');
+    return global.OrderFlowValueArea.valueArea(rows,binSize,pct);
   }
 
   function approxVolumeProfile(bars,binSize){
@@ -97,14 +80,8 @@
   }
 
   function tpoProfile(bars,binSize){
-    const size=Number(binSize)||1,bins=new Map();
-    for(const b of bars||[]){
-      const lo=Math.floor(Number(b.low)/size),hi=Math.floor((Number(b.high)-1e-12)/size);
-      for(let i=lo;i<=hi;i++)bins.set(i,(bins.get(i)||0)+1);
-    }
-    const rows=Array.from(bins.entries()).sort((a,b)=>a[0]-b[0]).map(([i,v])=>[i*size,v]);
-    const va=valueArea(rows,size,.70);
-    return{binSize:size,rows,...(va||{})};
+    if(!global.OrderFlowValueArea&&typeof require==='function')require('../shared/value-area.js');
+    return global.OrderFlowValueArea.tpoProfile(bars,binSize);
   }
 
   function exactProfile(profilePayload){
