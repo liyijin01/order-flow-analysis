@@ -24,7 +24,7 @@
 1. 我会发一份 .md 任务文档，严格按文档实现；文档和现有代码冲突时以文档为准，偏差写进回复。
 2. 从最新 main 切文档指定的分支，所有改动放进一个 PR。
 3. 每个 PR 都要：把本轮任务文档原样保存为 `docs/specs/{编号}.md`；在 `docs/CHANGELOG.md` 末尾追加一行（“提交 / PR”列只写 PR 编号，不写 squash SHA）；更新 `docs/ROADMAP.md` 的状态；改了定义或规则时同步更新 `docs/DECISIONS.md`。
-4. 每完成一项在本地跑单元测试（`node --test web/tests/*.test.mjs`、`python -m unittest discover pipeline/tests -v`）并 commit。**push 之前在本地起 server 跑一遍浏览器回归 `node scripts/d1_smoke.cjs`**，通过后再 push。CI 失败时修复，同样先在本地跑通再 push（每次 push 都会取消正在跑的 CI）。
+4. 能本地运行时：每完成一项跑单元测试（`node --test web/tests/*.test.mjs`、`python -m unittest discover pipeline/tests -v`）并 commit，push 前起 server 跑一遍浏览器回归 `node scripts/d1_smoke.cjs`。不能本地运行时：每完成一项就 commit 并 push，以 CI 为准，CI 全绿再做下一项。
 5. 金标准对不上时，不要为了贴合参考值去改已经验证过的定义，照实写进回复，由我决定。
 6. CI 全绿后直接 squash merge 到 main，不需要等我 review。
 7. 等 main 上的 Pages workflow 部署成功，按文档的验收项自查，按文档的回复格式给我链接。
