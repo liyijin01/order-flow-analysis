@@ -166,17 +166,17 @@
       }
       return{intervals,limits};
     }
-    const {intervals,limits}=livePlan(timeframe,history);
+    const required=timeframe==='1M'
+      ?[timeframe,calcMap[timeframe],...Object.keys(history||{})]
+      :[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})];
+    const intervals=[];for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
     const limits={};for(const interval of intervals)limits[interval]=capFor(interval,timeframe,history);
     return{intervals,limits};
   }
 
   async function loadLive(symbol,timeframe,onProgress,signal,history){
     const progress=typeof onProgress==='function'?onProgress:()=>{},errors={},series={};
-    const required=timeframe==='1M'
-      ?[timeframe,calcMap[timeframe],...Object.keys(history||{})]
-      :[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})];
-    const intervals=[];for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
+    const {intervals,limits}=livePlan(timeframe,history);
     let done=0;const total=intervals.length+3;
     const step=(label)=>{done++;progress({done,total,label});};
     await Promise.all(intervals.map(interval=>
