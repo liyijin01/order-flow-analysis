@@ -264,7 +264,7 @@
     missing.push(...zonesModel.missing);
     const {selectedZones,drawnZoneIds}=zonesModel;
 
-    const allLevels=[],templateKeyStyle=templateConfig().keyLevelStyle||{};
+    const allLevels=[];
     const weeklyModel=buildTemplate('weekly',bundle,display,view,{curves:[],regions:[],levels:[],segments:[],projections:[],yearOpen:null});
     const monthlyModel=buildTemplate('monthly',bundle,display,view,{levels:[],regions:[],upper:null,lower:null,imbalance:null});
     const mprofileModel=buildTemplate(
@@ -290,42 +290,15 @@
     allLevels.push(...npocModel.levels);
 
     const linePad=rules.valueAreas.visiblePadPct;
-    let keySelection={all:[],selected:[]};
-    if(bundle.keyLevels&&Array.isArray(bundle.keyLevels.levels)){
-      const keyAsOfMs=state.snapshot&&bundle.cutoffUtc?Date.parse(bundle.cutoffUtc):Date.now();
-      const closedDisplay=D.closedBars(display,keyAsOfMs);
-      const lastClosedDisplay=closedDisplay[closedDisplay.length-1];
-      const keyPeriodCutoffMs=lastClosedDisplay&&Number.isFinite(Number(lastClosedDisplay.closeTime))
-        ?Number(lastClosedDisplay.closeTime)+1:keyAsOfMs;
-      const eligibleKeyLevels=bundle.keyLevels.levels.filter(row=>{
-        const periodEnd=Date.parse(String(row.periodEnd||'')),yearly=row.kind==='year';
-        const templateOk=templateConfig().yearLevelsOnly===true?yearly:!yearly;
-        return templateOk&&Number.isFinite(periodEnd)&&periodEnd<=keyPeriodCutoffMs;
-      });
-      const keyCfg=rules.keyLevels||{},pane=state.chart&&state.chart.panes&&state.chart.panes()[0];
-      const paneHeight=pane&&typeof pane.getHeight==='function'?pane.getHeight():$('analysisChart').clientHeight;
-      const scaleMargins=state.candles&&state.candles.priceScale?state.candles.priceScale().options().scaleMargins:null;
-      const usableRatio=Math.max(.1,1-Math.max(0,Number(scaleMargins&&scaleMargins.top)||0)-Math.max(0,Number(scaleMargins&&scaleMargins.bottom)||0));
-      const plotHeight=paneHeight*usableRatio;
-      keySelection=E.selectKeyLevels(
-        eligibleKeyLevels,current,view.min,view.max,linePad,tick,keyCfg.maxCount||6,pqStart,
-        keyCfg.maxMonthly||2,keyCfg.minGapPct||2,(templateConfig().yearLevelsOnly===true||!pq)?[]:[pq.pqVwap,pq.bottom,pq.top],keyCfg.minGapPx||0,plotHeight
-      );
-      const firstTime=Number(display[0].time),keyStyle=templateKeyStyle;
-      for(const row of keySelection.all){
-        const monthly=row.keyKind==='py-month',yearly=row.kind==='year',yearVwap=yearly&&row.side==='VWAP',rvCfg=rules.rvwap||{};
-        allLevels.push({
-          id:(yearly?'year-':'key-')+row.id,kind:yearly?'year':'key',price:Number(row.price),from:firstTime,label:row.label,
-          color:yearVwap?(rvCfg.historicalVwap||'#f5a623'):(keyStyle.color||(monthly?rules.colors.keyMonth:rules.colors.keyLevel)),
-          axisColor:yearVwap?(rvCfg.historicalVwap||'#f5a623'):(keyStyle.axisColor||rules.colors.keyAxis),axisTextColor:yearly?'#eceff4':(keyStyle.axisTextColor||'#111827'),axisLabel:true,
-          style:yearVwap?'solid':(keyStyle.style||(monthly?'solid':'dashed')),width:yearVwap?1.5:1,period:yearly?'Y / 4h VWAP±1σ':(monthly?'M / 30m TPO':'Q / 1h VWAP±1σ'),
-          source:'precomputed',keyKind:row.keyKind,sourceId:row.id,side:row.side
-        });
-      }
-    }else missing.push({type:'关键价位',period:'Q / 1h VWAP±1σ + M / 30m TPO',source:'precomputed'});
+    const keyLevelModel=Layers.keyLevels.build({
+      state,E,D,bundle,display,current,view,layerEnabled,templateConfig,tick,
+      layers:{valueAreas:valueAreaModel}
+    });
+    missing.push(...keyLevelModel.missing);
+    allLevels.push(...keyLevelModel.levels);
 
     allLevels.push(...weeklyModel.levels,...monthlyModel.levels,...mprofileModel.levels,...wprofileModel.levels);
-    const selectedKeyIds=new Set(keySelection.selected.map(x=>(x.kind==='year'?'year-':'key-')+x.id));
+    const selectedKeyIds=keyLevelModel.selectedIds;
     const weeklyRegionIds=new Set(weeklyModel.regions.map(r=>r.id)),monthlyRegionIds=new Set(monthlyModel.regions.map(r=>r.id)),mprofileRegionIds=new Set(mprofileModel.regions.map(r=>r.id)),wprofileRegionIds=new Set(wprofileModel.regions.map(r=>r.id));
     const drawnLevelIds=new Set(allLevels.filter(l=>{
       if(l.kind==='key'||l.kind==='year')return selectedKeyIds.has(l.id);
