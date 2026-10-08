@@ -83,11 +83,6 @@
     }
   }
   const rangesClose=R.rangesClose;
-  function fillAlpha(base,tested){
-    if(!tested)return base;
-    if(base.startsWith('rgba('))return base.replace(/,[^,]+\)$/g,',.08)');
-    return base;
-  }
   function colorAlpha(color,alpha){
     const a=Math.max(0,Math.min(1,Number(alpha)));
     const s=String(color||'');
@@ -271,19 +266,11 @@
 
     const asOfMs=state.snapshot&&bundle.cutoffUtc?Date.parse(bundle.cutoffUtc)+1000:Date.now();
     const closedCalc=D.closedBars(calc,asOfMs);
-    let selectedZones=[];
-    if(closedCalc.length){
-      const detected=E.detectZones(closedCalc,rules.zones);
-      selectedZones=E.selectZones(E.markZoneTouches(detected,calc),current,rules.zones).map(z=>{
-        const supply=z.type==='supply',baseFill=supply?rules.colors.supplyFill:rules.colors.demandFill,border=supply?rules.colors.supplyBorder:rules.colors.demandBorder;
-        const stateText=z.zoneState==='inside'?'·测试中':(z.zoneState==='breaking'?'·击穿待确认':(z.tested?'·已测试':''));
-        return{...z,type:z.type,fill:fillAlpha(baseFill,z.tested),border,period:calcTf,source:'exact',
-          label:(supply?'供应区':'需求区')+stateText+' · '+calcTf.toUpperCase()+' · '+z.strength.toFixed(1)+'ATR',
-          tableType:supply?'供应区':'需求区'};
-      });
-    }else missing.push({type:'供应/需求区',period:calcTf,source:'exact'});
-
-    const drawnZoneIds=new Set(selectedZones.filter(z=>E.zoneIntersectsView(z,view.min,view.max,rules.zones.viewPadPct||50)).map(z=>z.id));
+    const zonesModel=Layers.zones.build({
+      state,E,D,bundle,view,current,layerEnabled
+    });
+    missing.push(...zonesModel.missing);
+    const {selectedZones,drawnZoneIds}=zonesModel;
 
     const allLevels=[],templateKeyStyle=templateConfig().keyLevelStyle||{};
     const weeklyModel=buildTemplate('weekly',bundle,display,view,{curves:[],regions:[],levels:[],segments:[],projections:[],yearOpen:null});
