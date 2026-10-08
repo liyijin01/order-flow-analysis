@@ -10,7 +10,8 @@
 
     build(ctx){
       const {
-        state,E,D,bundle,display,current,view,layerEnabled,templateConfig,tick,layers
+        state,E,D,bundle,display,current,view,layerEnabled,templateConfig,tick,layers,
+        previousQuarterStart,linePad,plotHeight,templateKeyStyle
       }=ctx;
       const enabled=layerEnabled('keyLevels')||layerEnabled('yearLevels');
       if(!enabled){
@@ -48,22 +49,6 @@
         });
 
         const keyCfg=rules.keyLevels||{};
-        const pane=state.chart&&state.chart.panes&&state.chart.panes()[0];
-        const root=document.getElementById('analysisChart');
-        const paneHeight=pane&&typeof pane.getHeight==='function'
-          ?pane.getHeight()
-          :(root?root.clientHeight:0);
-        const scaleMargins=state.candles&&state.candles.priceScale
-          ?state.candles.priceScale().options().scaleMargins
-          :null;
-        const usableRatio=Math.max(
-          .1,
-          1-Math.max(0,Number(scaleMargins&&scaleMargins.top)||0)
-            -Math.max(0,Number(scaleMargins&&scaleMargins.bottom)||0)
-        );
-        const plotHeight=paneHeight*usableRatio;
-        const last=display[display.length-1];
-        const previousQuarterStart=E.previousQuarterStart(last.time);
         const reserve=yearOnly||!pq?[]:[pq.pqVwap,pq.bottom,pq.top];
 
         keySelection=E.selectKeyLevels(
@@ -71,7 +56,7 @@
           current,
           view.min,
           view.max,
-          rules.valueAreas.visiblePadPct,
+          linePad,
           tick,
           keyCfg.maxCount||6,
           previousQuarterStart,
@@ -83,7 +68,7 @@
         );
 
         const firstTime=Number(display[0].time);
-        const keyStyle=cfg.keyLevelStyle||{};
+        const keyStyle=templateKeyStyle||{};
         const rvwapCfg=rules.rvwap||{};
         for(const row of keySelection.all){
           const monthly=row.keyKind==='py-month';

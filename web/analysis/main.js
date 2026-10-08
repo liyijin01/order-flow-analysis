@@ -290,8 +290,25 @@
     allLevels.push(...npocModel.levels);
 
     const linePad=rules.valueAreas.visiblePadPct;
+    const keyPane=state.chart&&state.chart.panes&&state.chart.panes()[0];
+    const keyPaneHeight=keyPane&&typeof keyPane.getHeight==='function'
+      ?keyPane.getHeight()
+      :$('analysisChart').clientHeight;
+    const keyScaleMargins=state.candles&&state.candles.priceScale
+      ?state.candles.priceScale().options().scaleMargins
+      :null;
+    const keyUsableRatio=Math.max(
+      .1,
+      1-Math.max(0,Number(keyScaleMargins&&keyScaleMargins.top)||0)
+        -Math.max(0,Number(keyScaleMargins&&keyScaleMargins.bottom)||0)
+    );
+    const keyPlotHeight=keyPaneHeight*keyUsableRatio;
     const keyLevelModel=Layers.keyLevels.build({
       state,E,D,bundle,display,current,view,layerEnabled,templateConfig,tick,
+      previousQuarterStart:pqStart,
+      linePad,
+      plotHeight:keyPlotHeight,
+      templateKeyStyle:templateConfig().keyLevelStyle||{},
       layers:{valueAreas:valueAreaModel}
     });
     missing.push(...keyLevelModel.missing);
