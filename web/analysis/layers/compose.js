@@ -5,7 +5,7 @@
   registry.compose={
     needs(){return{};},
     build(ctx){
-      const {state,E,I,D,bundle,Layers,templates:T,symbolMeta,templateConfig,layerEnabled,windowSpec,defaultWindow,profileTemplate,extrema,yearVwapSegments,colorAlpha,monthLabelFromStart,nextMonthStartSec,normalizeTpoPeriod,weekLabel,fmtPrice,documentRoot:$}=ctx;
+      const {state,E,I,D,bundle,Layers,templates:T,symbolMeta,templateConfig,layerEnabled,windowSpec,defaultWindow,profileTemplate,extrema,colorAlpha,monthLabelFromStart,nextMonthStartSec,normalizeTpoPeriod,weekLabel,fmtPrice,documentRoot:$}=ctx;
   function regionLayerEnabled(r){if(r.scope==='WEEKLY_PROJECTION')return layerEnabled('weeklyProjection');if(r.scope==='MONTHLY_IMBALANCE')return layerEnabled('monthlyStructure');if(r.scope==='MPROFILE_BOX')return layerEnabled('mprofile');if(r.scope==='WPROFILE_REF')return layerEnabled('wprofile');if(r.scope==='SINGLE_PRINT')return profileTemplate();if(r.type!=='value')return layerEnabled('zones');if(r.scope==='PQ')return layerEnabled('pqArea');if(r.scope==='PM')return layerEnabled('pm');if(r.scope==='PW')return layerEnabled('pw');return true;}
   function levelLayerEnabled(l){if(l.kind==='pq')return layerEnabled('pqVwap');if(l.kind==='pq-bound')return layerEnabled('pqBounds');if(l.kind==='npoc')return layerEnabled('nPoc');if(l.kind==='key')return layerEnabled('keyLevels');if(l.kind==='year')return layerEnabled('yearLevels');if(l.kind==='weekly'||l.kind==='weekly-pw')return layerEnabled('weeklyVwap');if(l.kind==='year-open')return layerEnabled('yearOpen');if(l.kind==='monthly-sr')return layerEnabled('monthlyStructure');if(l.kind==='mprofile')return layerEnabled('mprofile');if(l.kind==='wprofile')return layerEnabled('wprofile');return true;}
 
@@ -72,7 +72,7 @@
 
   function templateBuildContext(id,bundle,display,view){
     return{
-      id,state,E,I,D,bundle,display,view,layerEnabled,symbolMeta,extrema,yearVwapSegments,colorAlpha,
+      id,state,E,I,D,bundle,display,view,layerEnabled,symbolMeta,extrema,colorAlpha,
       monthLabelFromStart,nextMonthStartSec,normalizeTpoPeriod,weekLabel,fmtPrice
     };
   }

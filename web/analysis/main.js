@@ -44,42 +44,10 @@
     const p=pricePrecision(),tick=Number(symbolMeta().tickSize)||.01,n=E.roundToTick(Number(v),tick);
     return n.toLocaleString(undefined,{minimumFractionDigits:p,maximumFractionDigits:p});
   }
-  function jstParts(ms){
-    const parts=new Intl.DateTimeFormat('en-GB',{
-      timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',
-      hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
-    }).formatToParts(new Date(Number(ms)));
-    const out={};for(const p of parts)if(p.type!=='literal')out[p.type]=p.value;return out;
-  }
-  function formatJstClock(ms){const p=jstParts(ms);return p.hour+':'+p.minute+':'+p.second;}
-  function formatCutoffJst(iso){
-    const ms=Date.parse(String(iso||''));if(!Number.isFinite(ms))return'—';
-    const p=jstParts(ms);return p.year+'/'+p.month+'/'+p.day+' '+p.hour+':'+p.minute;
-  }
-  function legendEntries(){
-    const c=state.rules&&state.rules.colors||{};
-    return[
-      {key:'pq',label:'PQ 上季价值区',kind:'box',color:c.pqBorder},
-      {key:'pm',label:'PM 上月价值区',kind:'box',color:c.pmBorder},
-      {key:'pw',label:'PW 上周价值区',kind:'box',color:c.pwBorder},
-      {key:'supply',label:'供应区',kind:'box',color:c.supplyBorder},
-      {key:'demand',label:'需求区',kind:'box',color:c.demandBorder},
-      {key:'current-vwap',label:'本季 VWAP ±1σ',kind:'line',color:c.vwap},
-      {key:'pq-vwap',label:'PQ VWAP',kind:'line',color:c.pqVwap},
-      {key:'npoc',label:'未回补 POC',kind:'dash',color:c.nPoc},
-      {key:'key-level',label:'关键价位',kind:'dash',color:c.keyLevel}
-    ];
-  }
-  function renderLegend(){
-    const root=$('analysisLegend');if(!root)return;
-    root.textContent='';
-    for(const e of legendEntries()){
-      const item=document.createElement('span');item.className='legend-item';item.dataset.legend=e.key;
-      const mark=document.createElement('i');mark.className='legend-mark '+(e.kind==='box'?'legend-box':(e.kind==='dash'?'legend-dash':'legend-line'));
-      if(e.kind==='box')mark.style.backgroundColor=e.color;else mark.style.color=e.color;
-      item.appendChild(mark);item.appendChild(document.createTextNode(e.label));root.appendChild(item);
-    }
-  }
+  const Ui=window.OrderFlowAnalysisUi;
+  const formatJstClock=Ui.formatJstClock,formatCutoffJst=Ui.formatCutoffJst,formatRemaining=Ui.formatRemaining;
+  const legendEntries=()=>Ui.legendEntries(state.rules);
+  const renderLegend=()=>Ui.renderLegend($('analysisLegend'),state.rules);
   const rangesClose=R.rangesClose;
   function colorAlpha(color,alpha){
     const a=Math.max(0,Math.min(1,Number(alpha)));
@@ -136,20 +104,6 @@
   }
 
 
-  function yearVwapSegments(fourHour,display){
-    if(!fourHour.length||!display.length)return[];
-    const years=[];for(const b of display){const y=new Date(Number(b.time)*1000).getUTCFullYear();if(!years.includes(y))years.push(y);}
-    const out=[];
-    for(const year of years){
-      const start=Date.UTC(year,0,1)/1000,end=Date.UTC(year+1,0,1)/1000;
-      const calc=fourHour.filter(b=>Number(b.time)>=start&&Number(b.time)<end);if(!calc.length)continue;
-      const raw=I.anchoredVwap(calc,start,1),allowed=new Set(display.filter(b=>Number(b.time)>=start&&Number(b.time)<end).map(b=>Number(b.time)));
-      const points=raw.filter(p=>allowed.has(Number(p.time))).map(p=>({time:Number(p.time),vwap:p.vwap,upper:p.upper,lower:p.lower}));
-      if(points.length)out.push({year,start,end,points,final:points[points.length-1]});
-    }
-    return out;
-  }
-
   const MONTH_SHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function monthLabelFromStart(start,currentYear){
     const d=new Date(Number(start)*1000),base=MONTH_SHORT[d.getUTCMonth()];
@@ -171,7 +125,7 @@
     const handler=T[state.template];
     const ctx={
       state,E,I,D,bundle,Layers,templates:T,symbolMeta,templateConfig,layerEnabled,windowSpec,defaultWindow,
-      profileTemplate,extrema,yearVwapSegments,colorAlpha,monthLabelFromStart,nextMonthStartSec,normalizeTpoPeriod,
+      profileTemplate,extrema,colorAlpha,monthLabelFromStart,nextMonthStartSec,normalizeTpoPeriod,
       weekLabel,fmtPrice,documentRoot:$,compose:Layers.compose
     };
     if(handler&&handler.modelBuilder&&typeof handler.build==='function')return handler.build(ctx);
@@ -316,7 +270,6 @@
       handler.infoLine({state,model,line2,fmtPrice,weekLabel,monthLabelFromStart},bar,add);
     }
   }
-  function formatRemaining(ms){const sec=Math.max(0,Math.floor(ms/1000)),d=Math.floor(sec/86400),h=Math.floor((sec%86400)/3600),m=Math.floor((sec%3600)/60),s=sec%60;if(d>0)return d+'天 '+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');return h>0?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
   function updateCountdown(){
     const el=$('closeCountdown');el.style.display='none';el.textContent='';
     if(state.snapshot||profileTemplate()||!state.model){if(state.primitive)state.primitive.setCountdown(null);return;}
