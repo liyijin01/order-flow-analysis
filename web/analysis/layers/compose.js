@@ -170,7 +170,7 @@
     const levelsForTable=allLevels.map(l=>({...l,offView:!drawnLevelIds.has(l.id)}));
     const regions=allRegions.filter(r=>!r.offView&&regionLayerEnabled(r)),levels=levelsForTable.filter(l=>!l.offView&&levelLayerEnabled(l));
 
-    const quarterLayer=Layers.quarterBands.build({state,E,I,D,bundle,display});
+    const quarterLayer=Layers.quarterBands.build({state,E,I,D,bundle,display,layerEnabled});
     const quarterVwaps=quarterLayer.quarterVwaps;
     const rvwapModel=buildTemplate('rvwap',bundle,display,view,{curves:[],rolling:{},yearSegments:[]});
     const profileModels={mprofile:mprofileModel,wprofile:wprofileModel};
@@ -178,7 +178,8 @@
     const activeProfileModel=activeHandler&&activeHandler.modelKey?profileModels[activeHandler.modelKey]:null;
     const profileWindow=activeProfileModel&&activeProfileModel.priceWindow||null;
     const currentVwap=quarterLayer.currentVwap;
-    const lastClosed=closedCalc[closedCalc.length-1];
+    const effectiveCalc=state.snapshot||layerEnabled('zones')?closedCalc:D.closedBars(display,asOfMs);
+    const lastClosed=effectiveCalc[effectiveCalc.length-1];
     const calcLastClosedUtc=lastClosed?new Date(Number(lastClosed.closeTime)+1).toISOString():null;
     return{
       symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,pqStats,keyLevels:levels.filter(l=>l.kind==='key'),yearLevels:levels.filter(l=>l.kind==='year'),curves:(rvwapModel.curves||[]).concat(weeklyModel.curves||[]),rvwap:rvwapModel,weekly:weeklyModel,monthly:monthlyModel,mprofile:mprofileModel,wprofile:wprofileModel,profiles:activeProfileModel?(activeProfileModel.profiles||[]):[],missing,

@@ -22,6 +22,12 @@
 
   const definition={
     modelBuilder:true,
+    needs(ctx){
+      const tf=ctx.state.timeframe,calc=ctx.state.rules.zones.calcIntervals[tf];
+      const requested={[tf]:ctx.D.capFor(tf,tf,{}),'1h':5000,'30m':3500};
+      if(calc)requested[calc]=Math.max(requested[calc]||0,ctx.D.capFor(calc,tf,{}));
+      return requested;
+    },
     build(ctx){return ctx.compose.build(ctx);},
     infoLine,
     manifestValues(){return null;}

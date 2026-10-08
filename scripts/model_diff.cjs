@@ -6,7 +6,7 @@ if(!basePath||!headPath||!reportPath){
   process.exit(2);
 }
 const base=JSON.parse(fs.readFileSync(basePath,'utf8')),head=JSON.parse(fs.readFileSync(headPath,'utf8'));
-const diffs=[];
+const diffs=[],permitted=[];
 
 function relEqual(a,b){
   if(Object.is(a,b))return true;
@@ -14,6 +14,10 @@ function relEqual(a,b){
   return Math.abs(a-b)/Math.max(1,Math.abs(a),Math.abs(b))<=1e-9;
 }
 function compare(a,b,path){
+  if(path.endsWith('.calcLastClosedUtc')){
+    if(a!==b)permitted.push({path,base:a,head:b});
+    return;
+  }
   if(path.endsWith('.requests'))return;
   if(typeof a==='number'||typeof b==='number'){
     if(typeof a!=='number'||typeof b!=='number'||!relEqual(a,b))diffs.push({path,base:a,head:b});
@@ -65,12 +69,32 @@ else{
     report+='| `'+d.path+'` | `'+esc(d.base)+'` | `'+esc(d.head)+'` |\n';
   }
 }
+report+='\n## Allowed calcLastClosedUtc changes\n\n';
+if(permitted.length){
+  report+='| Case field | Base | Head |\n|---|---|---|\n';
+  for(const p of permitted)report+='| `'+p.path+'` | '+String(p.base)+' | '+String(p.head)+' |\n';
+}else report+='No changes.\n';
 report+='\n## Request summary\n\n';
 report+='| Case | Base requests | Head requests | Base limits | Head limits |\n|---|---:|---:|---|---|\n';
 for(const key of [...caseKeys].sort()){
   const b=requestSummary(baseCases[key]),h=requestSummary(headCases[key]);
   report+='| `'+key+'` | '+b.count+' | '+h.count+' | '+formatLimits(b.limits)+' | '+formatLimits(h.limits)+' |\n';
 }
+const maxRequests={
+  'quarter|1h':4,'quarter|4h':5,'rvwap|4h':2,'weekly|30m':3,
+  'monthly|1M':2,'mprofile|1d':2,'wprofile|1d':2
+};
+const requestViolations=[];
+for(const [key,item] of Object.entries(headCases)){
+  if(key.endsWith('|snapshot'))continue;
+  const [,template,timeframe]=key.split('|'),limit=maxRequests[template+'|'+timeframe];
+  const count=requestSummary(item).count;
+  if(limit!=null&&count>limit)requestViolations.push(key+': '+count+' > '+limit);
+  if(template==='combined'&&count!==requestSummary(baseCases[key]).count){
+    requestViolations.push(key+': combined request count changed');
+  }
+}
+report+='\n## Request limits\n\n'+(requestViolations.length?requestViolations.join('\n'):'All templates within limits')+'\n';
 fs.writeFileSync(reportPath,report);
 console.log(report.trim());
-if(diffs.length&&process.env.MODEL_DIFF_STRICT==='1')process.exit(1);
+if((diffs.length||requestViolations.length)&&process.env.MODEL_DIFF_STRICT==='1')process.exit(1);

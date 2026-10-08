@@ -4,12 +4,13 @@
   const registry=global.OrderFlowLayers=global.OrderFlowLayers||{};
 
   registry.quarterBands={
-    needs(){
-      return{'1h':5000};
+    needs(ctx){
+      return ctx.layerEnabled('quarterBands')?{'1h':5000}:{};
     },
 
     build(ctx){
       const {state,E,I,D,bundle,display}=ctx;
+      if(ctx.layerEnabled&&!ctx.layerEnabled('quarterBands'))return{quarterVwaps:[],currentVwap:[]};
       const oneHour=bundle.series['1h']||[];
       if(!oneHour.length||!display.length)return{quarterVwaps:[],currentVwap:[]};
       const starts=[];

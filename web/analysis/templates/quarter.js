@@ -22,6 +22,7 @@
 
   const definition={
     modelBuilder:true,
+    needs(){return{};},
     build(ctx){return ctx.compose.build(ctx);},
     infoLine,
     manifestValues(){return null;}

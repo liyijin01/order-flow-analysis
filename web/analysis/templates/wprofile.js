@@ -6,6 +6,8 @@
   registry.wprofile={
     modelKey:'wprofile',
 
+    needs(){return{'1d':430,'30m':1500};},
+
     build(ctx){
       const {
         state,

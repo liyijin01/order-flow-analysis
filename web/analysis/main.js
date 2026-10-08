@@ -19,6 +19,26 @@
   function pricePrecision(){const s=String(symbolMeta().tickSize||'0.01'),i=s.indexOf('.');return i<0?0:s.length-i-1;}
   function templateConfig(){const all=state.rules&&state.rules.templates||{};return all[state.template]||all[(state.rules&&state.rules.display&&state.rules.display.defaultTemplate)]||{};}
   function layerEnabled(name){const layers=templateConfig().layers||{};return layers[name]!==false;}
+  function dataNeeds(){
+    const cfg=templateConfig(),required={};
+    const add=items=>{
+      for(const [interval,value] of Object.entries(items||{})){
+        const bars=Math.ceil(Number(value));
+        if(Number.isFinite(bars)&&bars>0)required[interval]=Math.max(required[interval]||0,bars);
+      }
+    };
+    const timeframe=state.timeframe;
+    add({[timeframe]:Number(cfg.history&&cfg.history[timeframe])||D.displayCounts[timeframe]||500});
+    add(cfg.history);
+    const ctx={state,D,layerEnabled,templateConfig};
+    for(const layer of Object.values(Layers)){
+      if(layer&&typeof layer.needs==='function')add(layer.needs(ctx));
+    }
+    const handler=T[state.template];
+    if(handler&&typeof handler.needs==='function')add(handler.needs(ctx));
+    return{requiredIntervals:required};
+  }
+
   function windowSpec(){
     const cfg=templateConfig(),raw=cfg.window||{mode:'view'},spec=(raw&&raw[state.timeframe])||raw||{};
     const mode=spec.mode==='view'?state.viewMode:(spec.mode||'quarter');
@@ -328,11 +348,11 @@
     if(full){
       const bundle=await D.loadLive(state.symbol,state.timeframe,p=>{
         if(token===state.loadToken)progress.textContent='Loading '+p.done+'/'+p.total+' · '+p.label;
-      },signal,templateConfig().history||{});
+      },signal,dataNeeds());
       state.lastFullLoadAt=Date.now();
       return{bundle,full:true,failures:[]};
     }
-    const inc=await D.refreshLiveBundle(state.bundle,state.symbol,state.timeframe,signal,templateConfig().history||{});
+    const inc=await D.refreshLiveBundle(state.bundle,state.symbol,state.timeframe,signal,dataNeeds());
     return{bundle:inc.bundle,full:false,failures:inc.failures||[]};
   }
 

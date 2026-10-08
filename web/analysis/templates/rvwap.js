@@ -20,6 +20,8 @@
 
 
   registry.rvwap={
+    needs(){return{'4h':3000};},
+
     build(ctx){
       const {state,I,bundle,display,layerEnabled}=ctx;
       if(!layerEnabled('rvwap')||state.timeframe!=='4h'||!display.length){

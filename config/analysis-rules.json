@@ -305,7 +305,7 @@
       "rightMarginPct": 30,
       "history": {
         "1d": 430,
-        "30m": 3500
+        "30m": 1500
       },
       "layers": {
         "quarterBands": false,
@@ -347,7 +347,7 @@
       "rightMarginPct": 30,
       "history": {
         "1d": 430,
-        "30m": 3500
+        "30m": 1500
       },
       "layers": {
         "quarterBands": false,
