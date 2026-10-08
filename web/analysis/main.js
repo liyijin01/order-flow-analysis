@@ -2,7 +2,7 @@
   'use strict';
 
   const L=window.LightweightCharts,D=window.OrderFlowAnalysisData,E=window.OrderFlowAnalysisEngine,I=window.OrderFlowIndicators,AP=window.OrderFlowAnnotationPrimitives,P=window.OrderFlowAnalysisPrimitive,X=window.OrderFlowAnalysisExport,R=window.OrderFlowBoardRuntime;
-  const T=window.OrderFlowTemplates||{};
+  const T=window.OrderFlowTemplates||{},Layers=window.OrderFlowLayers||{};
   const SYMBOLS=window.ORDER_FLOW_SYMBOLS||{};
   const WATERMARK_COLOR='rgba(196,140,60,.30)';
   const $=id=>document.getElementById(id);
@@ -241,23 +241,6 @@
   }
 
 
-  function quarterVwapSegments(oneHour,display){
-    if(!oneHour.length||!display.length)return[];
-    const starts=[];let q=E.utcQuarterStart(display[0].time),end=E.utcQuarterStart(display[display.length-1].time);
-    while(q<=end){starts.push(q);const d=new Date(q*1000);q=Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+3,1)/1000;}
-    const sec=D.intervalSec(state.timeframe),segments=[];
-    for(const start of starts){
-      const d=new Date(start*1000),next=Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+3,1)/1000;
-      const calc=oneHour.filter(b=>Number(b.time)>=start&&Number(b.time)<next);if(!calc.length)continue;
-      const raw=I.anchoredVwap(calc,start,1);if(!raw.length)continue;
-      const target=display.filter(b=>Number(b.time)>=start&&Number(b.time)<next),maps={};
-      for(const key of ['vwap','upper','lower'])maps[key]=new Map(E.alignSeriesToBars(raw.map(p=>({time:p.time,value:p[key]})),target,sec).map(p=>[p.time,p.value]));
-      const points=[];for(const b of target){const t=Number(b.time);if(maps.vwap.has(t)&&maps.upper.has(t)&&maps.lower.has(t))points.push({time:t,vwap:maps.vwap.get(t),upper:maps.upper.get(t),lower:maps.lower.get(t)});}
-      if(points.length)segments.push({start,end:next,points,final:points[points.length-1]});
-    }
-    return segments;
-  }
-
   function yearVwapSegments(fourHour,display){
     if(!fourHour.length||!display.length)return[];
     const years=[];for(const b of display){const y=new Date(Number(b.time)*1000).getUTCFullYear();if(!years.includes(y))years.push(y);}
@@ -446,13 +429,14 @@
     const levelsForTable=allLevels.map(l=>({...l,offView:!drawnLevelIds.has(l.id)}));
     const regions=allRegions.filter(r=>!r.offView&&regionLayerEnabled(r)),levels=levelsForTable.filter(l=>!l.offView&&levelLayerEnabled(l));
 
-    const quarterVwaps=quarterVwapSegments(one,display);
+    const quarterLayer=Layers.quarterBands.build({state,E,I,D,bundle,display});
+    const quarterVwaps=quarterLayer.quarterVwaps;
     const rvwapModel=buildTemplate('rvwap',bundle,display,view,{curves:[],rolling:{},yearSegments:[]});
     const profileModels={mprofile:mprofileModel,wprofile:wprofileModel};
     const activeHandler=T[state.template];
     const activeProfileModel=activeHandler&&activeHandler.modelKey?profileModels[activeHandler.modelKey]:null;
     const profileWindow=activeProfileModel&&activeProfileModel.priceWindow||null;
-    const currentVwap=(quarterVwaps.find(x=>x.start===qStart)||quarterVwaps[quarterVwaps.length-1]||{points:[]}).points.map(p=>({time:p.time,value:p.vwap}));
+    const currentVwap=quarterLayer.currentVwap;
     const lastClosed=closedCalc[closedCalc.length-1];
     const calcLastClosedUtc=lastClosed?new Date(Number(lastClosed.closeTime)+1).toISOString():null;
     return{
