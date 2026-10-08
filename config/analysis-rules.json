@@ -15,7 +15,9 @@
     },
     "minBarSpacingPx": 5,
     "quarterRightPct": 0.04,
-    "quarterMinBarSpacing": 0.05
+    "quarterMinBarSpacing": 0.05,
+    "defaultTemplate": "quarter",
+    "recentViewTemplate": "combined"
   },
   "valueAreas": {
     "visiblePadPct": 10,
@@ -165,7 +167,9 @@
         "yearLevels": false
       },
       "table": true,
-      "legend": true
+      "legend": true,
+      "fileSuffix": false,
+      "keepsViewParam": true
     },
     "rvwap": {
       "label": "滚动 VWAP",
