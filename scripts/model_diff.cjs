@@ -37,6 +37,18 @@ function compare(a,b,path){
   }
 }
 
+function requestSummary(row){
+  const requests=(row&&row.requests)||[],limits={};
+  for(const req of requests){
+    const interval=String(req.interval||'?');
+    limits[interval]=(limits[interval]||0)+(Number(req.limit)||0);
+  }
+  return{count:requests.length,limits};
+}
+function formatLimits(limits){
+  return Object.keys(limits).sort().map(k=>k+':'+limits[k]).join(', ')||'—';
+}
+
 const baseCases=base.cases||{},headCases=head.cases||{};
 const caseKeys=new Set([...Object.keys(baseCases),...Object.keys(headCases)]);
 for(const key of [...caseKeys].sort()){
@@ -52,6 +64,12 @@ else{
     const esc=v=>String(JSON.stringify(v)).replace(/\|/g,'\\|').replace(/\n/g,' ');
     report+='| `'+d.path+'` | `'+esc(d.base)+'` | `'+esc(d.head)+'` |\n';
   }
+}
+report+='\n## Request summary\n\n';
+report+='| Case | Base requests | Head requests | Base limits | Head limits |\n|---|---:|---:|---|---|\n';
+for(const key of [...caseKeys].sort()){
+  const b=requestSummary(baseCases[key]),h=requestSummary(headCases[key]);
+  report+='| `'+key+'` | '+b.count+' | '+h.count+' | '+formatLimits(b.limits)+' | '+formatLimits(h.limits)+' |\n';
 }
 fs.writeFileSync(reportPath,report);
 console.log(report.trim());
