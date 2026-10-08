@@ -168,14 +168,6 @@
     }).observe(container);
   }
 
-  function previousMonthTpo(thirty,lastTime,tickSize){
-    const mStart=E.utcMonthStart(lastTime),pmStart=E.previousMonthStart(lastTime);
-    const bars=thirty.filter(b=>b.time>=pmStart&&b.time<mStart);
-    if(!bars.length)return null;
-    const p=E.tpoProfile(bars,tickSize*Number(state.rules.nakedPoc.tpoTicksPerRow||100));
-    return p&&Number.isFinite(p.poc)?{...p,from:mStart,bars}:null;
-  }
-
   function extrema(bars){
     let min=Infinity,max=-Infinity;
     for(const b of bars||[]){if(Number(b.low)<min)min=Number(b.low);if(Number(b.high)>max)max=Number(b.high);}
@@ -291,15 +283,11 @@
     );
     allLevels.push(...valueAreaModel.levels);
 
-    const pocCandidates=[];
-    if(pw&&weekEnd&&E.isPocNaked(pw.poc,weekEnd,thirty.length?thirty:one)){
-      pocCandidates.push({id:pw.source==='exact'?'npoc-week':'npoc-week-tpo',kind:'npoc',price:pw.poc,from:weekEnd,
-        label:pw.source==='exact'?'nPOC W':'nPOC W ≈',color:rules.colors.nPoc,style:'dashed',
-        period:pw.source==='exact'?'W / aggTrades':'W / 30m TPO',source:pw.source});
-    }
-    const mt=previousMonthTpo(thirty,last.time,tick);
-    if(mt&&E.isPocNaked(mt.poc,mt.from,thirty))pocCandidates.push({id:'npoc-month',kind:'npoc',price:mt.poc,from:mt.from,label:'nPOC M ≈',color:rules.colors.nPoc,style:'dashed',period:'M / 30m TPO',source:'approx'});
-    allLevels.push(...E.selectNakedPocs(pocCandidates,current,rules.nakedPoc.maxCount));
+    const npocModel=Layers.npoc.build({
+      state,E,bundle,display,current,layerEnabled,symbolMeta,
+      layers:{valueAreas:valueAreaModel}
+    });
+    allLevels.push(...npocModel.levels);
 
     const linePad=rules.valueAreas.visiblePadPct;
     let keySelection={all:[],selected:[]};
