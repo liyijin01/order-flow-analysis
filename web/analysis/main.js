@@ -102,11 +102,6 @@
     if(current>=bottom&&current<=top)return 0;
     const d=current>top?current-top:bottom-current;return Math.abs(d/current*100);
   }
-  function periodEndFromProfile(profile){
-    const p=profile&&profile.profiles&&profile.profiles.previous,days=p&&(p.expectedDays||p.days);
-    if(!days||!days.length)return null;
-    return Date.parse(days[days.length-1]+'T00:00:00Z')/1000+86400;
-  }
   function zoneStateText(r){
     if(r.zoneState==='inside')return'测试中';
     if(r.zoneState==='breaking')return'击穿待确认';
@@ -184,32 +179,6 @@
     if(!bars.length)return null;
     const p=E.tpoProfile(bars,tickSize*Number(state.rules.nakedPoc.tpoTicksPerRow||100));
     return p&&Number.isFinite(p.poc)?{...p,from:mStart,bars}:null;
-  }
-
-  function previousWeekTpo(thirty,lastTime,tickSize){
-    const wEnd=E.utcWeekStart(lastTime),wStart=wEnd-7*86400,bars=thirty.filter(b=>b.time>=wStart&&b.time<wEnd);
-    if(!bars.length)return null;
-    const p=E.tpoProfile(bars,tickSize*Number(state.rules.nakedPoc.tpoTicksPerRow||100));
-    return p&&Number.isFinite(p.poc)?{...p,from:wEnd,bars}:null;
-  }
-
-  function pmArea(oneHour,thirty,lastTime){
-    const cfg=state.rules.valueAreas.pm,def=cfg.definition,mStart=E.utcMonthStart(lastTime),pmStart=E.previousMonthStart(lastTime);
-    if(def==='tpo-70'){
-      const bars=thirty.filter(b=>b.time>=pmStart&&b.time<mStart);
-      const p=E.tpoProfile(bars,(Number(symbolMeta().tickSize)||.01)*Number(state.rules.nakedPoc.tpoTicksPerRow||100));
-      if(p&&Number.isFinite(p.vah))return{bottom:p.val,top:p.vah,mid:p.poc,source:'approx',definition:def};
-      return null;
-    }
-    const bars=oneHour.filter(b=>b.time>=pmStart&&b.time<mStart);
-    if(!bars.length)return null;
-    if(def==='anchored-vwap-2sigma'){
-      const s=E.weightedStats(bars);if(!s)return null;
-      return{bottom:s.vwap-2*s.sigma,top:s.vwap+2*s.sigma,mid:s.vwap,source:'approx',definition:def};
-    }
-    const p=E.approxVolumeProfile(bars,Number(symbolMeta().ladderBin)||.1);
-    if(!p||!Number.isFinite(p.vah))return null;
-    return{bottom:p.val,top:p.vah,mid:p.poc,source:'approx',definition:'volume-profile-70'};
   }
 
   function extrema(bars){
@@ -293,42 +262,12 @@
     const visibleN=win.mode==='quarter'?display.length:Math.min(display.length,Number(win.visibleBars)||defaultWindow(display.length).visible);
     const viewBars=win.mode==='quarter'||visibleN>=display.length?display:display.slice(-visibleN),view=extrema(viewBars);
     const one=bundle.series['1h']||[],thirty=bundle.series['30m']||[],calcTf=rules.zones.calcIntervals[state.timeframe],calc=bundle.series[calcTf]||[];
-    const last=display[display.length-1],current=Number(last.close),qStart=E.utcQuarterStart(last.time),pqStart=E.previousQuarterStart(last.time),areas=[],missing=[];
-
-    const pqBars=one.filter(b=>b.time>=pqStart&&b.time<qStart),pqStats=E.weightedStats(pqBars);
-    if(pqStats&&pqBars.length&&pqBars[0].time<=pqStart+3600){
-      areas.push({id:'value-pq',type:'value',scope:'PQ',bottom:pqStats.lower,top:pqStats.upper,from:qStart,
-        label:'上季价值区 PQ',tableType:'价值区 PQ',period:'Q / 1h',source:'exact',tested:E.wasZoneTouched(one,qStart,pqStats.lower,pqStats.upper),
-        fill:rules.colors.pqFill,border:rules.colors.pqBorder,borderStyle:'dashed',pqVwap:pqStats.vwap});
-    }else missing.push({type:'价值区 PQ',period:'Q / 1h',source:'exact'});
-
-    const pm=pmArea(one,thirty,last.time),mStart=E.utcMonthStart(last.time);
-    if(pm){
-      areas.push({id:'value-pm',type:'value',scope:'PM',bottom:pm.bottom,top:pm.top,from:mStart,
-        label:'上月价值区 PM'+(pm.source==='approx'?' ≈':''),tableType:'价值区 PM',period:'M / '+(pm.definition==='tpo-70'?'30m TPO':'1h'),
-        source:pm.source,tested:E.wasZoneTouched(one,mStart,pm.bottom,pm.top),fill:rules.colors.pmFill,border:rules.colors.pmBorder});
-    }else missing.push({type:'价值区 PM',period:'M',source:'approx'});
-
-    const weekAsOf=state.snapshot&&bundle.cutoffUtc?(Date.parse(bundle.cutoffUtc)+1000)/1000:Date.now()/1000;
-    const profileFresh=E.profileIsFresh(bundle.profile,weekAsOf);
-    const exactPw=profileFresh?E.exactProfile(bundle.profile):null;
-    const exactWeekEnd=profileFresh?periodEndFromProfile(bundle.profile):null;
-    const fallbackPw=!exactPw?previousWeekTpo(thirty,weekAsOf,tick):null;
-    let pw=null,weekEnd=null;
-    if(exactPw&&exactWeekEnd){
-      pw={...exactPw,source:'exact'};weekEnd=exactWeekEnd;
-      areas.push({id:'value-pw',type:'value',scope:'PW',bottom:pw.val,top:pw.vah,from:weekEnd,
-        label:'上周价值区 PW',tableType:'价值区 PW',period:'W / aggTrades',source:'exact',
-        tested:E.wasZoneTouched(thirty.length?thirty:one,weekEnd,pw.val,pw.vah),fill:rules.colors.pwFill,border:rules.colors.pwBorder});
-    }else if(fallbackPw){
-      pw={...fallbackPw,source:'approx'};weekEnd=fallbackPw.from;
-      areas.push({id:'value-pw-tpo',type:'value',scope:'PW',bottom:pw.val,top:pw.vah,from:weekEnd,
-        label:'上周价值区 PW ≈',tableType:'价值区 PW',period:'W / 30m TPO',source:'approx',
-        tested:E.wasZoneTouched(thirty,weekEnd,pw.val,pw.vah),fill:rules.colors.pwFill,border:rules.colors.pwBorder});
-    }else missing.push({type:'价值区 PW',period:'W / aggTrades or 30m TPO',source:'approx'});
-
-    const allAreas=E.suppressValueAreas(areas,rules.valueAreas.overlapSuppressPct,rules.valueAreas.maxCount||3);
-    const drawnAreaIds=new Set(E.filterValueAreas(allAreas,view.min,view.max,rules.valueAreas.visiblePadPct,rules.valueAreas.overlapSuppressPct).map(x=>x.id));
+    const last=display[display.length-1],current=Number(last.close),qStart=E.utcQuarterStart(last.time),pqStart=E.previousQuarterStart(last.time),missing=[];
+    const valueAreaModel=Layers.valueAreas.build({
+      state,E,bundle,display,view,layerEnabled,symbolMeta,templateConfig
+    });
+    missing.push(...valueAreaModel.missing);
+    const {allAreas,drawnAreaIds,pqStats,pw,weekEnd,pq}=valueAreaModel;
 
     const asOfMs=state.snapshot&&bundle.cutoffUtc?Date.parse(bundle.cutoffUtc)+1000:Date.now();
     const closedCalc=D.closedBars(calc,asOfMs);
@@ -363,12 +302,7 @@
       view,
       {profiles:[],levels:[],regions:[],current:null,naked:[],extensions:[],priceWindow:null}
     );
-    const pq=areas.find(a=>a.scope==='PQ');
-    if(pq&&layerEnabled('pqVwap'))allLevels.push({id:'line-pq-vwap',kind:'pq',price:pq.pqVwap,from:qStart,label:'PQ VWAP',color:rules.colors.pqVwap,axisColor:rules.colors.pqVwap,axisTextColor:'#eceff4',axisLabel:true,style:'solid',period:'Q / 1h',source:'exact'});
-    if(pq&&layerEnabled('pqBounds')){
-      allLevels.push({id:'line-pq-vah',kind:'pq-bound',price:pq.top,from:qStart,label:'PQ VAH',color:rules.colors.keyLevel,axisColor:templateKeyStyle.axisColor||rules.colors.keyAxis,axisTextColor:templateKeyStyle.axisTextColor||'#111827',axisLabel:templateKeyStyle.axisLabel!==false,style:'dashed',width:1,period:'Q / 1h VWAP±1σ',source:'exact'});
-      allLevels.push({id:'line-pq-val',kind:'pq-bound',price:pq.bottom,from:qStart,label:'PQ VAL',color:rules.colors.keyLevel,axisColor:templateKeyStyle.axisColor||rules.colors.keyAxis,axisTextColor:templateKeyStyle.axisTextColor||'#111827',axisLabel:templateKeyStyle.axisLabel!==false,style:'dashed',width:1,period:'Q / 1h VWAP±1σ',source:'exact'});
-    }
+    allLevels.push(...valueAreaModel.levels);
 
     const pocCandidates=[];
     if(pw&&weekEnd&&E.isPocNaked(pw.poc,weekEnd,thirty.length?thirty:one)){
