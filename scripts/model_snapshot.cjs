@@ -61,7 +61,19 @@ async function capture(browser,symbol,template,timeframe,snapshotMode){
   const query='?symbol='+encodeURIComponent(symbol)+'&tpl='+encodeURIComponent(template)+'&tf='+encodeURIComponent(timeframe)+(snapshotMode?'&snapshot=1':'');
   await page.goto(pageUrl+query,{waitUntil:'domcontentloaded',timeout:60000});
   await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
-  await page.waitForTimeout(100);
+  // Measure requests from the initial page load, before any layout-stabilization refresh.
+  const openingRequests=requests.map(x=>({interval:x.interval,limit:x.limit}));
+  // Key-level selection includes a pixel gap. After initial loading, wait for the chart
+  // pane and volume pane to settle, then rebuild the model at their final dimensions.
+  await page.waitForTimeout(400);
+  await page.evaluate(async()=>{
+    const root=document.getElementById('analysisChart');
+    const debug=window.__analysisDebug;
+    debug.state.chart.resize(root.clientWidth,root.clientHeight);
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    await debug.refresh(true);
+  });
+  await page.waitForTimeout(200);
   const summary=await page.evaluate(()=>{
     const d=window.__analysisDebug,m=d.model,primitive=d.state.primitive&&d.state.primitive.model||{};
     const pick=(obj,keys)=>{
@@ -115,7 +127,7 @@ async function capture(browser,symbol,template,timeframe,snapshotMode){
   summary.profiles=summary.profiles.map(p=>({start:p.start,poc:p.poc,vah:p.vah,val:p.val,rows:p.rows}));
   delete summary.singlePrints;
   summary.hashes={curves:curveHashes,profiles:profileHashes,singlePrints:singlePrintHashes};
-  summary.requests=requests.map(x=>({interval:x.interval,limit:x.limit}));
+  summary.requests=openingRequests;
   await page.close();
   return summary;
 }
