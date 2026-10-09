@@ -153,16 +153,34 @@
     return{schema:payload.schema||'analysis-snapshot-v1',symbol,generatedAt:payload.generatedAt,cutoffUtc:payload.cutoffUtc,series,profile:payload.profile||null,keyLevels,tpo,errors};
   }
 
-  async function loadLive(symbol,timeframe,onProgress,signal,history){
-    const progress=typeof onProgress==='function'?onProgress:()=>{},errors={},series={};
+  function livePlan(timeframe,history){
+    if(history&&history.requiredIntervals){
+      const intervals=[],limits={};
+      for(const [interval,value] of Object.entries(history.requiredIntervals)){
+        const cap=Math.ceil(Number(value));
+        if(!interval||!Number.isFinite(cap)||cap<=0)continue;
+        intervals.push(interval);limits[interval]=cap;
+      }
+      if(!intervals.includes(timeframe)){
+        intervals.unshift(timeframe);limits[timeframe]=displayCounts[timeframe]||500;
+      }
+      return{intervals,limits};
+    }
     const required=timeframe==='1M'
       ?[timeframe,calcMap[timeframe],...Object.keys(history||{})]
       :[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})];
     const intervals=[];for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
+    const limits={};for(const interval of intervals)limits[interval]=capFor(interval,timeframe,history);
+    return{intervals,limits};
+  }
+
+  async function loadLive(symbol,timeframe,onProgress,signal,history){
+    const progress=typeof onProgress==='function'?onProgress:()=>{},errors={},series={};
+    const {intervals,limits}=livePlan(timeframe,history);
     let done=0;const total=intervals.length+3;
     const step=(label)=>{done++;progress({done,total,label});};
     await Promise.all(intervals.map(interval=>
-      fetchHistory(symbol,interval,capFor(interval,timeframe,history),undefined,signal)
+      fetchHistory(symbol,interval,limits[interval],undefined,signal)
         .then(v=>{series[interval]=v;step(interval);})
         .catch(e=>{if(isAbort(e,signal))throw e;errors[interval]=String(e.message||e);step(interval+' failed');})
     ));
@@ -178,13 +196,10 @@
   }
 
   async function refreshLiveBundle(bundle,symbol,timeframe,signal,history){
-    const required=timeframe==='1M'
-      ?[timeframe,calcMap[timeframe],...Object.keys(history||{})]
-      :[timeframe,'1h','30m',calcMap[timeframe],...Object.keys(history||{})],intervals=[];
-    for(const x of required)if(x&&!intervals.includes(x))intervals.push(x);
+    const {intervals,limits}=livePlan(timeframe,history);
     const failures=[],updates={},fullIntervals=new Set(),errors={...(bundle&&bundle.errors||{})};
     await Promise.all(intervals.map(async interval=>{
-      const cap=capFor(interval,timeframe,history),existing=(bundle&&bundle.series&&bundle.series[interval])||[];
+      const cap=limits[interval],existing=(bundle&&bundle.series&&bundle.series[interval])||[];
       const needsFull=!!errors[interval]||existing.length<cap*.5;
       try{
         updates[interval]=needsFull
@@ -201,7 +216,7 @@
       if(!updates[interval])continue;
       series[interval]=fullIntervals.has(interval)
         ?updates[interval]
-        :mergeBars(series[interval]||[],updates[interval],capFor(interval,timeframe,history));
+        :mergeBars(series[interval]||[],updates[interval],limits[interval]);
     }
     let profile=bundle&&bundle.profile||null;
     if(!profile||errors.profile){

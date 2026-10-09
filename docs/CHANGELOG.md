@@ -33,3 +33,4 @@
 | D17 | 2026-10-05 | #28 | 新增周度 TPO 剖面模板：52 周摘要/26 周 rows、周 naked VAH/VAL/POC、参考周方框；月/周模板加入 single print；新增 3 张 wprofile PNG | 周度 TPO 与综合 PW 定义分离；single print 只保留回补后的剩余部分 |
 | D18 | 2026-10-05 | #29 | 月/周剖面限制价格窗口；已触淡线各最多 8 条；本期触碰虚线提示；定义诊断；预计算数据过期提示与 status.json | D18-4 诊断不满足“两条穿过都 <0.1%”，未修改既有触碰定义 |
 | D19 | 2026-10-06 | #30 | model-diff 安全网；拆分五个单一方法模板；统一 JS 价值区实现到 `web/shared/value-area.js`；d19 分支加入 chart-smoke | 重构类 PR 必须 model-diff 零差异才能合并 |
+| D19b | 2026-10-09 | #31 | 补强至 37-case model-diff；拆 quarter / combined 与五个图层；按需拉 Binance K 线；smoke 拆为 8 组 21 用例，保留 125 条断言 | 除单独列出的 calcLastClosedUtc 外模型零差异；模板及图层声明数据需求，main.js 不写模板 ID |

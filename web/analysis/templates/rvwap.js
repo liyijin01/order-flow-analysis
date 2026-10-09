@@ -3,9 +3,27 @@
 
   const registry=global.OrderFlowTemplates=global.OrderFlowTemplates||{};
 
+  const I=global.OrderFlowIndicators;
+  function yearVwapSegments(fourHour,display){
+    if(!fourHour.length||!display.length)return[];
+    const years=[];for(const b of display){const y=new Date(Number(b.time)*1000).getUTCFullYear();if(!years.includes(y))years.push(y);}
+    const out=[];
+    for(const year of years){
+      const start=Date.UTC(year,0,1)/1000,end=Date.UTC(year+1,0,1)/1000;
+      const calc=fourHour.filter(b=>Number(b.time)>=start&&Number(b.time)<end);if(!calc.length)continue;
+      const raw=I.anchoredVwap(calc,start,1),allowed=new Set(display.filter(b=>Number(b.time)>=start&&Number(b.time)<end).map(b=>Number(b.time)));
+      const points=raw.filter(p=>allowed.has(Number(p.time))).map(p=>({time:Number(p.time),vwap:p.vwap,upper:p.upper,lower:p.lower}));
+      if(points.length)out.push({year,start,end,points,final:points[points.length-1]});
+    }
+    return out;
+  }
+
+
   registry.rvwap={
+    needs(){return{'4h':3000};},
+
     build(ctx){
-      const {state,I,bundle,display,layerEnabled,yearVwapSegments}=ctx;
+      const {state,I,bundle,display,layerEnabled}=ctx;
       if(!layerEnabled('rvwap')||state.timeframe!=='4h'||!display.length){
         return{curves:[],rolling:{},yearSegments:[]};
       }

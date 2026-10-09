@@ -4,6 +4,8 @@
   const registry=global.OrderFlowTemplates=global.OrderFlowTemplates||{};
 
   registry.weekly={
+    needs(){return{'30m':2000,'1d':400};},
+
     build(ctx){
       const {state,E,I,bundle,display,view}=ctx;
       if(state.timeframe!=='30m'||!display.length){

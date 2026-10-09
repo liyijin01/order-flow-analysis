@@ -78,8 +78,8 @@ jobs:
           text = Path("web/analysis/main.js").read_text()
           count = text.count("state.template===") + text.count("state.template!==")
           print(f"main.js hard-coded template comparisons: {count}")
-          if count > 4:
-              raise SystemExit("main.js may contain at most 4 state.template===/!== comparisons")
+          if count > 0:
+              raise SystemExit("main.js must not contain template-id comparisons")
           PY
 
   model-diff:
@@ -133,7 +133,7 @@ jobs:
 
 
   chart-smoke:
-    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19-'))
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19'))
     needs: test
     runs-on: ubuntu-24.04
     permissions:
@@ -153,13 +153,13 @@ jobs:
           python3 -m http.server 8000 >/tmp/order-flow-http.log 2>&1 &
           sleep 2
       - name: Render C2.1-C4 regression suite
-        if: startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19-')
+        if: startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19')
         run: node scripts/c2_1_c4_smoke.cjs
       - name: Run C4.1 browser regression checks
-        if: startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19-')
+        if: startsWith(github.head_ref, 'c4-1-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19')
         run: node scripts/c4_1_smoke.cjs
       - name: Upload C2.1-C4 screenshots
-        if: always() && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19-'))
+        if: always() && (startsWith(github.head_ref, 'c2-') || startsWith(github.head_ref, 'd6-') || startsWith(github.head_ref, 'd7-') || startsWith(github.head_ref, 'd8-') || startsWith(github.head_ref, 'd9-') || startsWith(github.head_ref, 'd10-') || startsWith(github.head_ref, 'd12-') || startsWith(github.head_ref, 'd19'))
         uses: actions/upload-artifact@v7
         with:
           name: c2-1-c4-chart-screenshots

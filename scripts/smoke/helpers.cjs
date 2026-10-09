@@ -209,7 +209,21 @@ async function routeSnapshotThrough(page,cutoffIso){
   });
 }
 
+async function routeSyntheticSnapshot(page,nowValue){
+  const now=nowValue?new Date(nowValue):new Date('2026-09-27T12:00:00Z');
+  await page.route(/\/analysis\/data\/([A-Z]+)\.json(?:\?.*)?$/,async route=>{
+    const m=route.request().url().match(/analysis\/data\/([A-Z]+)\.json/),symbol=m&&m[1]||'BTCUSDT';
+    const series={};
+    for(const interval of ['30m','1h','4h','1d','1w','1M'])series[interval]=rows(symbol,interval);
+    const payload={
+      schema:'analysis-snapshot-v2',symbol,generatedAt:now.toISOString(),cutoffUtc:now.toISOString(),targetCutoffUtc:now.toISOString(),
+      source:'synthetic D19b model snapshot',series,profile:exactProfileFixture(symbol,now),errors:{}
+    };
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(payload)});
+  });
+}
+
 module.exports={
   intervalSec,baseMap,displayCount,expectedVisible,rows,routeMarket,routeRefreshSeconds,exactProfileFixture,routeProfiles,
-  failProfileOnce,keyLevelFixture,routeKeyLevels,tpoFixture,routeTpo,routePrecomputedAge,routeSnapshotThrough
+  failProfileOnce,keyLevelFixture,routeKeyLevels,tpoFixture,routeTpo,routeSyntheticSnapshot,routePrecomputedAge,routeSnapshotThrough
 };
