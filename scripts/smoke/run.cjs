@@ -17,7 +17,7 @@ const all=suites.flatMap(name=>{
 const selected=requested?all.filter(t=>t.file===requested+'.cjs'):all;
 const countAssertions=suites.reduce((total,name)=>{
   const file=fs.readFileSync(path.join(__dirname,name+'.cjs'),'utf8');
-  return total+(file.match(/throw new Error\\(/g)||[]).length;
+  return total+(file.match(/throw new Error\(/g)||[]).length;
 },0);
 if(countAssertions!==125||all.length!==21){
   throw new Error('Smoke assertion inventory changed: '+countAssertions+' assertions, '+all.length+' cases; expected 125 and 21');
