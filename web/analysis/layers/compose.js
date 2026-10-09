@@ -5,9 +5,21 @@
   registry.compose={
     needs(){return{};},
     build(ctx){
-      const {state,E,I,D,bundle,Layers,templates:T,symbolMeta,templateConfig,layerEnabled,windowSpec,defaultWindow,profileTemplate,extrema,colorAlpha,monthLabelFromStart,nextMonthStartSec,normalizeTpoPeriod,weekLabel,fmtPrice,documentRoot:$}=ctx;
-  function regionLayerEnabled(r){if(r.scope==='WEEKLY_PROJECTION')return layerEnabled('weeklyProjection');if(r.scope==='MONTHLY_IMBALANCE')return layerEnabled('monthlyStructure');if(r.scope==='MPROFILE_BOX')return layerEnabled('mprofile');if(r.scope==='WPROFILE_REF')return layerEnabled('wprofile');if(r.scope==='SINGLE_PRINT')return profileTemplate();if(r.type!=='value')return layerEnabled('zones');if(r.scope==='PQ')return layerEnabled('pqArea');if(r.scope==='PM')return layerEnabled('pm');if(r.scope==='PW')return layerEnabled('pw');return true;}
-  function levelLayerEnabled(l){if(l.kind==='pq')return layerEnabled('pqVwap');if(l.kind==='pq-bound')return layerEnabled('pqBounds');if(l.kind==='npoc')return layerEnabled('nPoc');if(l.kind==='key')return layerEnabled('keyLevels');if(l.kind==='year')return layerEnabled('yearLevels');if(l.kind==='weekly'||l.kind==='weekly-pw')return layerEnabled('weeklyVwap');if(l.kind==='year-open')return layerEnabled('yearOpen');if(l.kind==='monthly-sr')return layerEnabled('monthlyStructure');if(l.kind==='mprofile')return layerEnabled('mprofile');if(l.kind==='wprofile')return layerEnabled('wprofile');return true;}
+      const {state,E,I,D,bundle,Layers,templates:T,symbolMeta,templateConfig,layerEnabled,
+        windowSpec,defaultWindow,profileTemplate,extrema,colorAlpha,monthLabelFromStart,nextMonthStartSec,
+        normalizeTpoPeriod,weekLabel,fmtPrice,documentRoot:$}=ctx;
+  function regionLayerEnabled(r){if(r.scope==='WEEKLY_PROJECTION')return layerEnabled('weeklyProjection');
+    if(r.scope==='MONTHLY_IMBALANCE')return layerEnabled('monthlyStructure');if(r.scope==='MPROFILE_BOX')return layerEnabled('mprofile');
+    if(r.scope==='WPROFILE_REF')return layerEnabled('wprofile');if(r.scope==='SINGLE_PRINT')return profileTemplate();
+    if(r.type!=='value')return layerEnabled('zones');if(r.scope==='PQ')return layerEnabled('pqArea');
+    if(r.scope==='PM')return layerEnabled('pm');if(r.scope==='PW')return layerEnabled('pw');
+    return true;}
+  function levelLayerEnabled(l){if(l.kind==='pq')return layerEnabled('pqVwap');if(l.kind==='pq-bound')return layerEnabled('pqBounds');
+    if(l.kind==='npoc')return layerEnabled('nPoc');if(l.kind==='key')return layerEnabled('keyLevels');
+    if(l.kind==='year')return layerEnabled('yearLevels');if(l.kind==='weekly'||l.kind==='weekly-pw')return layerEnabled('weeklyVwap');
+    if(l.kind==='year-open')return layerEnabled('yearOpen');if(l.kind==='monthly-sr')return layerEnabled('monthlyStructure');
+    if(l.kind==='mprofile')return layerEnabled('mprofile');if(l.kind==='wprofile')return layerEnabled('wprofile');
+    return true;}
 
   function distancePct(current,bottom,top){
     if(current>=bottom&&current<=top)return 0;
@@ -32,13 +44,15 @@
     for(const l of payload.levels){
       if(l.kind==='key'&&l.offView){hiddenKeyCount++;continue;}
       let status=l.kind==='npoc'?'未回补':'有效';if(l.offView)status+='（图外）';
-      out.push({type:l.label,low:l.price,high:l.price,distance:Math.abs(l.price-current)/current*100,status,period:l.period||'',source:l.source||'exact',missing:false});
+      out.push({type:l.label,low:l.price,high:l.price,distance:Math.abs(l.price-current)/current*100,
+        status,period:l.period||'',source:l.source||'exact',missing:false});
     }
     if(hiddenKeyCount>0)out.push({
       type:'关键价位 · 另有 '+hiddenKeyCount+' 条不在当前视图',low:null,high:null,distance:null,status:'图外',
       period:'',source:'precomputed',missing:false,summary:true
     });
-    for(const m of payload.missing||[])out.push({type:m.type,low:null,high:null,distance:null,status:'缺失',period:m.period||'',source:m.source||'',missing:true});
+    for(const m of payload.missing||[])out.push({type:m.type,low:null,high:null,distance:null,
+      status:'缺失',period:m.period||'',source:m.source||'',missing:true});
     out.sort((a,b)=>{
       const ap=a.high==null?-Infinity:a.high,bp=b.high==null?-Infinity:b.high;
       return bp-ap||String(a.type).localeCompare(String(b.type));
@@ -52,9 +66,14 @@
     const step=timeframe==='4h'?14400:(timeframe==='1d'?86400:3600),groups=new Map();
     for(const b of bars||[]){
       const key=Math.floor(Number(b.time)/step)*step;let g=groups.get(key);
-      if(!g){g={time:key,openTime:key*1000,closeTime:0,open:Number(b.open),high:Number(b.high),low:Number(b.low),close:Number(b.close),volume:0,quoteVolume:0,takerBuyBase:0,takerBuyQuote:0,trades:0,count:0};groups.set(key,g);}
-      g.high=Math.max(g.high,Number(b.high));g.low=Math.min(g.low,Number(b.low));g.close=Number(b.close);g.closeTime=Math.max(Number(g.closeTime)||0,Number(b.closeTime)||0);
-      g.volume+=Number(b.volume)||0;g.quoteVolume+=Number(b.quoteVolume)||0;g.takerBuyBase+=Number(b.takerBuyBase)||0;g.takerBuyQuote+=Number(b.takerBuyQuote)||0;g.trades+=Number(b.trades)||0;g.count++;
+      if(!g){g={time:key,openTime:key*1000,closeTime:0,open:Number(b.open),high:Number(b.high),
+        low:Number(b.low),close:Number(b.close),volume:0,quoteVolume:0,takerBuyBase:0,takerBuyQuote:0,
+        trades:0,count:0};groups.set(key,g);}
+      g.high=Math.max(g.high,Number(b.high));g.low=Math.min(g.low,Number(b.low));g.close=Number(b.close);
+        g.closeTime=Math.max(Number(g.closeTime)||0,Number(b.closeTime)||0);
+      g.volume+=Number(b.volume)||0;g.quoteVolume+=Number(b.quoteVolume)||0;g.takerBuyBase+=Number(b.takerBuyBase)||0;
+        g.takerBuyQuote+=Number(b.takerBuyQuote)||0;g.trades+=Number(b.trades)||0;g.count++;
+        
     }
     const expected=timeframe==='4h'?4:24;
     return Array.from(groups.values()).filter(g=>g.count===expected).sort((a,b)=>a.time-b.time);
@@ -158,7 +177,9 @@
 
     allLevels.push(...weeklyModel.levels,...monthlyModel.levels,...mprofileModel.levels,...wprofileModel.levels);
     const selectedKeyIds=keyLevelModel.selectedIds;
-    const weeklyRegionIds=new Set(weeklyModel.regions.map(r=>r.id)),monthlyRegionIds=new Set(monthlyModel.regions.map(r=>r.id)),mprofileRegionIds=new Set(mprofileModel.regions.map(r=>r.id)),wprofileRegionIds=new Set(wprofileModel.regions.map(r=>r.id));
+    const weeklyRegionIds=new Set(weeklyModel.regions.map(r=>r.id)),monthlyRegionIds=new Set(monthlyModel.regions.map(r=>r.id)),
+      mprofileRegionIds=new Set(mprofileModel.regions.map(r=>r.id)),wprofileRegionIds=new Set(wprofileModel.regions.map(r=>r.id));
+      
     const drawnLevelIds=new Set(allLevels.filter(l=>{
       if(l.kind==='key'||l.kind==='year')return selectedKeyIds.has(l.id);
       if(l.kind==='monthly-sr'||l.kind==='mprofile'||l.kind==='wprofile')return true;
@@ -166,7 +187,12 @@
       return E.inPriceView(l.price,view.min,view.max,linePad);
     }).map(l=>l.id));
 
-    const allRegions=allAreas.concat(selectedZones,weeklyModel.regions,monthlyModel.regions,mprofileModel.regions,wprofileModel.regions).map(r=>({...r,offView:(weeklyRegionIds.has(r.id)||monthlyRegionIds.has(r.id)||mprofileRegionIds.has(r.id)||wprofileRegionIds.has(r.id))?false:(r.type==='value'?!drawnAreaIds.has(r.id):!drawnZoneIds.has(r.id))}));
+    const allRegions=allAreas.concat(selectedZones,weeklyModel.regions,monthlyModel.regions,
+      mprofileModel.regions,wprofileModel.regions).map(r=>({...r,offView:(weeklyRegionIds.has(r.id)||
+          monthlyRegionIds.has(r.id)||
+          mprofileRegionIds.has(r.id)||
+          wprofileRegionIds.has(r.id))?false:(r.type==='value'?!drawnAreaIds.has(r.id):!drawnZoneIds.has(r.id))}));
+      
     const levelsForTable=allLevels.map(l=>({...l,offView:!drawnLevelIds.has(l.id)}));
     const regions=allRegions.filter(r=>!r.offView&&regionLayerEnabled(r)),levels=levelsForTable.filter(l=>!l.offView&&levelLayerEnabled(l));
 
@@ -182,8 +208,14 @@
     const lastClosed=effectiveCalc[effectiveCalc.length-1];
     const calcLastClosedUtc=lastClosed?new Date(Number(lastClosed.closeTime)+1).toISOString():null;
     return{
-      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,quarterVwaps,pqStats,keyLevels:levels.filter(l=>l.kind==='key'),yearLevels:levels.filter(l=>l.kind==='year'),curves:(rvwapModel.curves||[]).concat(weeklyModel.curves||[]),rvwap:rvwapModel,weekly:weeklyModel,monthly:monthlyModel,mprofile:mprofileModel,wprofile:wprofileModel,profiles:activeProfileModel?(activeProfileModel.profiles||[]):[],missing,
-      allRegions,allLevels:levelsForTable,viewMin:profileWindow?profileWindow.min:view.min,viewMax:profileWindow?profileWindow.max:view.max,profileWindow,visibleBars:visibleN,
+      symbol:state.symbol,timeframe:state.timeframe,display,last,current,regions,levels,currentVwap,
+        quarterVwaps,pqStats,keyLevels:levels.filter(l=>l.kind==='key'),yearLevels:levels.filter(l=>l.kind==='year'),
+        curves:(rvwapModel.curves||[]).concat(weeklyModel.curves||[]),rvwap:rvwapModel,weekly:weeklyModel,
+        monthly:monthlyModel,mprofile:mprofileModel,wprofile:wprofileModel,profiles:activeProfileModel?(activeProfileModel.profiles||[]):[],
+        missing,
+      allRegions,allLevels:levelsForTable,viewMin:profileWindow?profileWindow.min:view.min,
+        viewMax:profileWindow?profileWindow.max:view.max,profileWindow,visibleBars:visibleN,
+        
       cutoffUtc:bundle.cutoffUtc||null,generatedAt:bundle.generatedAt||new Date().toISOString(),
       calcTf,calcLastClosedUtc,bundleErrors:bundle.errors||{},
       tableRows:templateConfig().table===false?[]:sourceRows({regions:allRegions,levels:levelsForTable,current,missing})
