@@ -455,6 +455,81 @@
     "calibration": {
       "date": "2026-10-05",
       "tvValue": 9.118
-    }
+    },
+    "visiblePadPp": 1.5,
+    "manualLevels": [
+      {
+        "price": 13.719,
+        "color": "rgba(236,239,244,.75)",
+        "style": "dashed",
+        "width": 1,
+        "label": "13.719%",
+        "source": "manual · KBeast 2026-10-05"
+      },
+      {
+        "price": 12.829,
+        "color": "#e6c229",
+        "style": "solid",
+        "width": 1,
+        "label": "12.829%",
+        "source": "manual · KBeast 2026-10-05"
+      },
+      {
+        "price": 11.886,
+        "color": "rgba(236,239,244,.75)",
+        "style": "dashed",
+        "width": 1,
+        "label": "11.886%",
+        "source": "manual · KBeast 2026-10-05"
+      },
+      {
+        "price": 10.49,
+        "color": "#e6c229",
+        "style": "solid",
+        "width": 1,
+        "label": "10.490%",
+        "source": "manual · KBeast 2026-10-05"
+      },
+      {
+        "price": 9.642,
+        "color": "#e6c229",
+        "style": "solid",
+        "width": 1,
+        "label": "9.642%",
+        "source": "manual · KBeast 2026-10-05"
+      },
+      {
+        "price": 9.064,
+        "color": "#f5a623",
+        "style": "solid",
+        "width": 1.5,
+        "label": "9.064%（2024-08 / 2025-04 高点）",
+        "source": "manual · KBeast 2026-10-05"
+      },
+      {
+        "price": 8.372,
+        "color": "#e6c229",
+        "style": "solid",
+        "width": 1,
+        "label": "8.372%",
+        "source": "manual · KBeast 2026-10-05"
+      },
+      {
+        "price": 5.114,
+        "color": "#f5a623",
+        "style": "solid",
+        "width": 1,
+        "label": "5.114%（2024 低点）",
+        "source": "manual · KBeast 2026-10-05"
+      },
+      {
+        "price": 2.463,
+        "color": "rgba(236,239,244,.75)",
+        "style": "dashed",
+        "width": 1,
+        "label": "2.463%",
+        "source": "manual · KBeast 2026-10-05"
+      }
+    ]
   }
 }
