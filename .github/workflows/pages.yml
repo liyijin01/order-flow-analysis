@@ -201,13 +201,14 @@ jobs:
         run: python scripts/d16_build_tpo.py --cache-dir datarepo/tpo --output-dir _site/analysis/tpo
       - name: Prepare local D1 site
         run: |
-          mkdir -p _site/web/chart/render/primitives _site/config
+          mkdir -p _site/web/chart/render/primitives _site/config _site/analysis/macro
           cp analysis.html _site/
           cp -R web/analysis web/shared _site/web/
           cp web/chart/indicators.js _site/web/chart/
           cp web/chart/render/primitives/base.js web/chart/render/primitives/band.js _site/web/chart/render/primitives/
           cp config/symbols.js config/analysis-rules.json _site/config/
           cp _d1-generated/profiles-*.json _site/
+          cp scripts/smoke/ssd-fixture.json _site/analysis/macro/ssd.json
       - name: Start local D1 site
         run: |
           python3 -m http.server 8000 --directory _site >/tmp/d1-http.log 2>&1 &
@@ -218,6 +219,7 @@ jobs:
         env:
           ANALYSIS_PNG_DIR: _d1-artifacts/png
           ANALYSIS_LATEST: _d1-artifacts/latest.json
+          D20_REQUIRE_SSD: '1'
         run: node scripts/d1_daily_png.cjs
       - name: Upload D1 real-market screenshots
         uses: actions/upload-artifact@v7

@@ -55,19 +55,26 @@ function formatLimits(limits){
 
 const baseCases=base.cases||{},headCases=head.cases||{};
 const caseKeys=new Set([...Object.keys(baseCases),...Object.keys(headCases)]);
-for(const key of [...caseKeys].sort()){
+const legacyKeys=[...caseKeys].filter(key=>!key.includes('|ssd|'));
+for(const key of legacyKeys.sort()){
   if(!(key in baseCases)||!(key in headCases)){diffs.push({path:'cases.'+key,base:baseCases[key],head:headCases[key]});continue;}
   compare(baseCases[key],headCases[key],'cases.'+key);
 }
 let report='# Model diff\n\n';
-if(!diffs.length)report+='0 differences across '+Object.keys(headCases).length+' cases\n';
+if(!diffs.length)report+='0 differences across '+legacyKeys.length+' cases\n';
 else{
-  report+=diffs.length+' differences across '+Object.keys(headCases).length+' cases\n\n';
+  report+=diffs.length+' differences across '+legacyKeys.length+' cases\n\n';
   report+='| Field | Base | Head |\n|---|---|---|\n';
   for(const d of diffs.slice(0,500)){
     const esc=v=>String(JSON.stringify(v)).replace(/\|/g,'\\|').replace(/\n/g,' ');
     report+='| `'+d.path+'` | `'+esc(d.base)+'` | `'+esc(d.head)+'` |\n';
   }
+}
+const ssdKeys=[...caseKeys].filter(key=>key.includes('|ssd|'));
+report+='\n## New SSD template (reported separately)\n\n';
+for(const key of ssdKeys){
+  const item=headCases[key];
+  report+='| '+key+' | '+(item?JSON.stringify(item):'missing')+' |\n';
 }
 report+='\n## Allowed calcLastClosedUtc changes\n\n';
 if(permitted.length){
@@ -76,7 +83,7 @@ if(permitted.length){
 }else report+='No changes.\n';
 report+='\n## Request summary\n\n';
 report+='| Case | Base requests | Head requests | Base limits | Head limits |\n|---|---:|---:|---|---|\n';
-for(const key of [...caseKeys].sort()){
+for(const key of legacyKeys.sort()){
   const b=requestSummary(baseCases[key]),h=requestSummary(headCases[key]);
   report+='| `'+key+'` | '+b.count+' | '+h.count+' | '+formatLimits(b.limits)+' | '+formatLimits(h.limits)+' |\n';
 }
@@ -86,7 +93,7 @@ const maxRequests={
 };
 const requestViolations=[];
 for(const [key,item] of Object.entries(headCases)){
-  if(key.endsWith('|snapshot'))continue;
+  if(key.endsWith('|snapshot')||key.includes('|ssd|'))continue;
   const [,template,timeframe]=key.split('|'),limit=maxRequests[template+'|'+timeframe];
   const count=requestSummary(item).count;
   if(limit!=null&&count>limit)requestViolations.push(key+': '+count+' > '+limit);

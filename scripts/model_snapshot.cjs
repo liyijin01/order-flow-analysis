@@ -132,6 +132,35 @@ async function capture(browser,symbol,template,timeframe,snapshotMode){
   return summary;
 }
 
+
+async function captureSsd(browser){
+  const page=await browser.newPage({viewport:{width:1600,height:1000}});
+  const fixture=require('./smoke/ssd-fixture.json');
+  await page.route('**/analysis/macro/ssd.json*',async route=>{
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(fixture)});
+  });
+  await page.goto(pageUrl+'?tpl=ssd&tf=1d&snapshot=1',{waitUntil:'domcontentloaded',timeout:60000});
+  await page.waitForFunction(()=>
+    document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:60000});
+  const result=await page.evaluate(()=>{
+    const d=window.__analysisDebug,m=d.model;
+    const handler=window.OrderFlowTemplates.ssd;
+    const values=handler.manifestValues({model:m});
+    return{
+      template:d.template(),dataSource:d.state.rules.templates.ssd.dataSource,
+      count:m.points.length,lastDate:m.date,value:m.current,raw:m.raw,ratio:m.ratio,
+      levels:m.levels.map(x=>({price:x.price,color:x.color,width:x.width,source:x.source})),
+      manifestValues:values,
+      symbolButtonsHidden:getComputedStyle(document.querySelector('[data-symbol]').parentElement).display==='none',
+      tableHidden:getComputedStyle(document.querySelector('.table-wrap')).display==='none',
+      priceFormat:d.state.line.options().priceFormat.formatter(9.068),
+      binanceRequests:d.binanceRequests()
+    };
+  });
+  await page.close();
+  return result;
+}
+
 (async()=>{
   const browser=await chromium.launch({channel:'chrome',headless:true});
   const cases={};
@@ -147,6 +176,10 @@ async function capture(browser,symbol,template,timeframe,snapshotMode){
       const timeframe=defaultTimeframes[template];
       cases['BTCUSDT|'+template+'|'+timeframe+'|snapshot']=await capture(browser,'BTCUSDT',template,timeframe,true);
     }
+    // Only capture the new feature when the served site supports it.
+    // The D19b PR base does not, and its 37 existing cases remain unchanged.
+    const html=await(await fetch(pageUrl)).text();
+    if(html.includes('data-tpl="ssd"'))cases['SSD|ssd|1d']=await captureSsd(browser);
   }finally{
     await browser.close();
   }

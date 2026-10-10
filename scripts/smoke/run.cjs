@@ -3,7 +3,7 @@ const fs=require('fs');
 const path=require('path');
 const {chromium}=require('playwright-core');
 
-const suites=['quarter','combined','common','rvwap','weekly','monthly','mprofile','wprofile'];
+const suites=['quarter','combined','common','rvwap','weekly','monthly','mprofile','wprofile','ssd'];
 const requested=process.argv[2];
 if(requested&&!suites.includes(requested)){
   console.error('Unknown smoke suite: '+requested+'. Available: '+suites.join(', '));
@@ -19,8 +19,13 @@ const countAssertions=suites.reduce((total,name)=>{
   const file=fs.readFileSync(path.join(__dirname,name+'.cjs'),'utf8');
   return total+(file.match(/throw new Error\(/g)||[]).length;
 },0);
-if(countAssertions!==125||all.length!==21){
-  throw new Error('Smoke assertion inventory changed: '+countAssertions+' assertions, '+all.length+' cases; expected 125 and 21');
+const legacyCount=suites.filter(name=>name!=='ssd').reduce((total,name)=>{
+  const file=fs.readFileSync(path.join(__dirname,name+'.cjs'),'utf8');
+  return total+(file.match(/throw new Error\(/g)||[]).length;
+},0);
+if(legacyCount!==125||all.length!==23||countAssertions<135){
+  throw new Error('Smoke assertion inventory changed: '+countAssertions+' total, '+
+    legacyCount+' legacy, '+all.length+' cases; expected >=135, 125 and 23');
 }
 
 (async()=>{
