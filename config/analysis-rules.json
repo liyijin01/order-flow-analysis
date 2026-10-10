@@ -371,6 +371,27 @@
       },
       "table": false,
       "legend": false
+    },
+    "ssd": {
+      "label": "稳定币占比",
+      "dataSource": "macro/ssd",
+      "symbolIndependent": true,
+      "hideCandles": true,
+      "timeframes": [
+        "1d"
+      ],
+      "defaultTimeframe": "1d",
+      "window": {
+        "1d": {
+          "mode": "full"
+        }
+      },
+      "rightMarginPct": 30,
+      "layers": {},
+      "table": false,
+      "legend": false,
+      "displayTimeframeLabel": "1天",
+      "chartWatermark": "USDT.D+USDC.D+DAI.D, 1天"
     }
   },
   "rvwap": {

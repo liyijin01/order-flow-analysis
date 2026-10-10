@@ -439,6 +439,12 @@
     state.template=ids.includes(q.get('tpl'))?q.get('tpl'):(q.get('view')==='recent'?recentTemplate:defaultTemplate);
     const cfg=templateConfig(),requestedTf=['30m','4h','1h','1d','1M'].includes(q.get('tf'))?q.get('tf'):null;
     state.timeframe=requestedTf&&(cfg.timeframes||[]).includes(requestedTf)?requestedTf:(cfg.defaultTimeframe||(cfg.timeframes||[])[0]||'1h');
+    if(cfg.dataSource){
+      const macro=window.OrderFlowMacroRuntime,handler=T[state.template];
+      if(!macro||!handler||typeof handler.buildMacro!=='function')throw new Error('Unsupported macro template');
+      await macro.mount({state,config:cfg,template:handler,L,D});
+      return;
+    }
     renderLegend();createChart();applyTemplateChrome();
     document.querySelectorAll('[data-symbol]').forEach(b=>b.addEventListener('click',()=>setSelection(b.dataset.symbol,state.timeframe)));
     document.querySelectorAll('[data-tf]').forEach(b=>b.addEventListener('click',()=>setSelection(state.symbol,b.dataset.tf)));
