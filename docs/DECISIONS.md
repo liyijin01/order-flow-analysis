@@ -91,3 +91,12 @@
 - **新模板和新图层必须通过 `needs(ctx)` 或模板 `history` 显式声明自己需要的数据**。实时 K 线请求是当前显示周期、当前模板及启用图层所需周期的并集；关闭的图层不得触发无关的历史数据请求。
 - **`web/analysis/main.js` 不写任何模板 ID**。模板自己的信息行、manifest 值、历史数据需求和行为由 `web/analysis/templates/` 声明；公共计算由 `web/analysis/layers/` 提供。
 - 纯重构遵守 37-case 完整哈希、页面外观、manifest 和快照检查；`model-diff` 的 Binance requests 单独比较，`calcLastClosedUtc` 允许逐项披露的变化，其他模型字段必须保持零差异。
+
+## 12. D20 稳定币占比（2026-10-10）
+
+- **数据源**：CoinGecko Demo API 的 `/coins/markets` 和 `/coins/{id}/market_chart`，只按美元市值计算。服务端 GitHub Actions 使用 `COINGECKO_DEMO_API_KEY` secret，密钥不写入网页或缓存。Demo 每天最多取近 365 天历史，使用官方自动日度粒度；空密钥或 API 报错时维持原缓存，数据 job 不失败。
+- **分子**：Tether (`tether`)、USDC (`usd-coin`)、DAI (`dai`) 美元市值求和。
+- **分母**：按 CoinGecko 当前市值排序，从币种中排除 `wrapped-tokens` 和 `liquid-staking-tokens` 两类后取 125 个。月初更新这 125 个 ID 并固定用于当月日更；当前点统一归入当天 00:00 UTC，另存真实 `fetchedAt`；回填缺币按 0 计且记录 `missingCoins`。这个分母与 TradingView CRYPTOCAP `TOTAL` 前 125 的成分可能不同，因此未校准的 `raw` 值不能直接宣称是 TradingView 官方占比。
+- **单点校准**：用参考图 2026-10-05 前一日收盘 9.118%，`ratio = raw(2026-10-05) / 9.118`，图上展示 `raw / ratio`。校准点缺失时不伪造比例；`|ratio-1|>5%` 输出 warning。它只能匹配这个锚点，无法校正其余历史时刻分母构成差异。
+- **手动关键位来源**：九条线全来自 KBeast 2026-10-05 的 `USDT.D+USDC.D+DAI.D` TradingView 截图，配置内逐条保留 `source: "manual · KBeast 2026-10-05"`，在 `latest.json` 中也声明来源。价位依次为 13.719、12.829、11.886、10.490、9.642、9.064、8.372、5.114、2.463%，自动数据不用于反推或改写这些历史关键位。
+- **非 K 线入口**：模板使用 `dataSource: "macro/ssd"`，普通 SSD 不向 Binance 发 K 线请求；仅带 `overlay=btc` 时按需加载一组 BTCUSDT 1d 收盘价，叠加倒置左价格轴。

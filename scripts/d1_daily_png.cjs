@@ -12,7 +12,7 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
 
 (async()=>{
   const browser=await chromium.launch({channel:'chrome',headless:true});
-  const manifest=[];let cutoff=null,levelsGeneratedAt=null,tpoGeneratedAt=null;
+  const manifest=[];let cutoff=null,levelsGeneratedAt=null,tpoGeneratedAt=null,ssdStatus=null;
   async function capture(symbol,tf,template,fileTf){
     const page=await browser.newPage({viewport:{width:1660,height:1300},deviceScaleFactor:1});
     const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
@@ -96,6 +96,49 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
     });
     await page.close();
   }
+  async function captureSsd(){
+    const page=await browser.newPage({viewport:{width:1660,height:1100},deviceScaleFactor:1});
+    try{
+      await page.goto(base+'?snapshot=1&tpl=ssd&tf=1d',{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>{
+        const text=document.getElementById('status')?.textContent||'';
+        return text.startsWith('Loaded ')||text.startsWith('SSD 数据不可用');
+      },undefined,{timeout:60000});
+      const meta=await page.evaluate(()=>{
+        const d=window.__analysisDebug,m=d&&d.model;
+        if(!m||d.template()!=='ssd')return null;
+        const handler=window.OrderFlowTemplates.ssd;
+        return{
+          status:document.getElementById('status').textContent,
+          template:d.template(),date:m.date,points:m.points.length,
+          generatedAt:m.generatedAt,values:handler.manifestValues({model:m}),
+          levelSource:'manual · KBeast 2026-10-05',
+          visibleLevels:m.levels.length
+        };
+      });
+      if(!meta||!meta.points){
+        const msg='SSD data unavailable; preserving existing analysis PNGs';
+        console.warn('::warning::'+msg);
+        if(process.env.D20_REQUIRE_SSD==='1')throw new Error(msg);
+        return null;
+      }
+      const file=path.join(outDir,'SSD-1d.png');
+      await page.locator('#analysisCapture').screenshot({path:file});
+      const size=fs.statSync(file).size,height=fs.readFileSync(file).readUInt32BE(20);
+      if(size<10*1024||height>900)throw new Error('SSD PNG invalid: '+size+' bytes / '+height+'px');
+      manifest.push({
+        symbol:'SSD',timeframe:'1d',template:'ssd',view:'full',
+        file:'SSD-1d.png',bytes:size,height,status:meta.status,
+        visibleBars:meta.points,logicalSlots:null,
+        calcLastClosedUtc:meta.date+'T00:00:00Z',
+        supply:0,demand:0,drawn:meta.visibleLevels,offView:0,
+        regions:0,levels:meta.visibleLevels,keyLevels:meta.visibleLevels,
+        values:meta.values,source:'CoinGecko',manualLevelSource:meta.levelSource
+      });
+      return{generatedAt:meta.generatedAt,lastDate:meta.date};
+    }finally{await page.close();}
+  }
+
   try{
     for(const symbol of symbols)for(const tf of combinedTfs)await capture(symbol,tf,'combined');
     for(const symbol of symbols)for(const tf of quarterTfs)await capture(symbol,tf,'quarter');
@@ -104,11 +147,14 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
     for(const symbol of symbols)for(const tf of monthlyTfs)await capture(symbol,tf,'monthly');
     for(const symbol of symbols)for(const tf of mprofileTfs)await capture(symbol,tf,'mprofile','30m');
     for(const symbol of symbols)for(const tf of wprofileTfs)await capture(symbol,tf,'wprofile','30m');
+    ssdStatus=await captureSsd();
   } finally {await browser.close();}
-  const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap','weekly','monthly','mprofile','wprofile'],files:manifest};
+  const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap','weekly','monthly','mprofile','wprofile','ssd'],files:manifest};
   fs.writeFileSync(latestPath,JSON.stringify(latest,null,2));
   fs.writeFileSync(path.join(outDir,'manifest.json'),JSON.stringify(manifest,null,2));
-  const status={generatedAt:latest.generatedAt,dataCutoffUtc:cutoff,levelsGeneratedAt,tpoGeneratedAt,pngCount:manifest.length};
+  const status={generatedAt:latest.generatedAt,dataCutoffUtc:cutoff,levelsGeneratedAt,tpoGeneratedAt,
+    ssdGeneratedAt:ssdStatus&&ssdStatus.generatedAt||null,ssdLastDate:ssdStatus&&ssdStatus.lastDate||null,
+    pngCount:manifest.length};
   fs.writeFileSync(path.join(path.dirname(latestPath),'status.json'),JSON.stringify(status,null,2));
   const reference=manifest.find(x=>x.symbol==='BTCUSDT'&&x.template==='rvwap')?.reference;
   if(reference)console.log('D13 BTC reference '+JSON.stringify(reference));

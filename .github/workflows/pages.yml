@@ -201,13 +201,14 @@ jobs:
         run: python scripts/d16_build_tpo.py --cache-dir datarepo/tpo --output-dir _site/analysis/tpo
       - name: Prepare local D1 site
         run: |
-          mkdir -p _site/web/chart/render/primitives _site/config
+          mkdir -p _site/web/chart/render/primitives _site/config _site/analysis/macro
           cp analysis.html _site/
           cp -R web/analysis web/shared _site/web/
           cp web/chart/indicators.js _site/web/chart/
           cp web/chart/render/primitives/base.js web/chart/render/primitives/band.js _site/web/chart/render/primitives/
           cp config/symbols.js config/analysis-rules.json _site/config/
           cp _d1-generated/profiles-*.json _site/
+          cp scripts/smoke/ssd-fixture.json _site/analysis/macro/ssd.json
       - name: Start local D1 site
         run: |
           python3 -m http.server 8000 --directory _site >/tmp/d1-http.log 2>&1 &
@@ -218,6 +219,7 @@ jobs:
         env:
           ANALYSIS_PNG_DIR: _d1-artifacts/png
           ANALYSIS_LATEST: _d1-artifacts/latest.json
+          D20_REQUIRE_SSD: '1'
         run: node scripts/d1_daily_png.cjs
       - name: Upload D1 real-market screenshots
         uses: actions/upload-artifact@v7
@@ -332,6 +334,11 @@ jobs:
       - name: Build monthly TPO profiles
         run: python scripts/d16_build_tpo.py --cache-dir datarepo/tpo --output-dir _generated/analysis/tpo
 
+      - name: Refresh cached stablecoin dominance (CoinGecko Demo)
+        env:
+          COINGECKO_DEMO_API_KEY: ${{ secrets.COINGECKO_DEMO_API_KEY }}
+        run: python scripts/d20_build_ssd.py --cache-dir datarepo/macro --output-dir _generated/analysis/macro
+
       - name: Persist new ladders sampled depth key levels and TPO to data branch
         shell: bash
         run: |
@@ -343,6 +350,7 @@ jobs:
             git rm -r --quiet depth
           fi
           git add ladders depth15m levels tpo .data-branch 2>/dev/null || git add ladders depth15m levels tpo
+          if [ -d macro ]; then git add -A macro; fi
           if ! git diff --cached --quiet; then
             git commit -m 'data: refresh ladders sampled depth key levels and TPO'
             git push origin HEAD:data
@@ -360,6 +368,7 @@ jobs:
             _generated/analysis/data/*.json
             _generated/analysis/levels/*.json
             _generated/analysis/tpo/*.json
+            _generated/analysis/macro/*.json
             _generated/flow/data/*.json
           if-no-files-found: error
           retention-days: 1
@@ -386,7 +395,7 @@ jobs:
           path: _generated
       - name: Prepare static site
         run: |
-          mkdir -p _site/web _site/config _site/analysis/data _site/analysis/levels _site/analysis/tpo _site/flow/data
+          mkdir -p _site/web _site/config _site/analysis/data _site/analysis/levels _site/analysis/tpo _site/analysis/macro _site/flow/data
           cp index.html chart.html analysis.html flow.html _site/
           cp web/core.js web/live.js web/render.js web/app.js _site/web/
           cp -R web/chart web/analysis web/flow web/shared _site/web/
@@ -395,6 +404,7 @@ jobs:
           cp _generated/analysis/data/*.json _site/analysis/data/
           cp _generated/analysis/levels/*.json _site/analysis/levels/
           cp _generated/analysis/tpo/*.json _site/analysis/tpo/
+          cp _generated/analysis/macro/*.json _site/analysis/macro/
           cp _generated/flow/data/*.json _site/flow/data/
           touch _site/.nojekyll
       - name: Install Playwright core
