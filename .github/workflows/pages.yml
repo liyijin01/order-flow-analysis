@@ -347,7 +347,8 @@ jobs:
           if [ -d depth ]; then
             git rm -r --quiet depth
           fi
-          git add ladders depth15m levels tpo macro .data-branch 2>/dev/null || git add ladders depth15m levels tpo macro
+          git add ladders depth15m levels tpo .data-branch 2>/dev/null || git add ladders depth15m levels tpo
+          if [ -d macro ]; then git add -A macro; fi
           if ! git diff --cached --quiet; then
             git commit -m 'data: refresh ladders sampled depth key levels and TPO'
             git push origin HEAD:data

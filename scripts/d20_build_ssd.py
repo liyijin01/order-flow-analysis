@@ -209,7 +209,7 @@ class DemoClient:
     def history(self, coin_id):
         return self.get(
             "/coins/" + urllib.parse.quote(coin_id, safe="") + "/market_chart",
-            vs_currency="usd", days=365, interval="daily",
+            vs_currency="usd", days=365,
         )
 
 
