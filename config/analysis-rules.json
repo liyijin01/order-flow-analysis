@@ -450,5 +450,11 @@
       "referenceBorder": "#40a0be"
     },
     "maxSinglePrints": 6
+  },
+  "ssd": {
+    "calibration": {
+      "date": "2026-10-05",
+      "tvValue": 9.118
+    }
   }
 }
