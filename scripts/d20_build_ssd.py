@@ -36,6 +36,7 @@ def empty_cache():
         "generatedAt": None,
         "source": SOURCE,
         "denominator": DENOMINATOR,
+        "dateBasis": "utc-close-day",
         "constituentsUpdatedAt": None,
         "constituents": [],
         "calibration": {},
@@ -88,7 +89,7 @@ def utc_daily_values(chart):
             sample = dt.datetime.fromtimestamp(float(point[0]) / 1000, tz=dt.timezone.utc)
             value = float(point[1])
             if sample.hour == 0 and sample.minute == 0 and sample.second == 0 and value >= 0:
-                daily[sample.date().isoformat()] = value
+                daily[(sample.date() - dt.timedelta(days=1)).isoformat()] = value
         except (ValueError, TypeError, OverflowError, OSError):
             continue
     return daily
@@ -158,6 +159,37 @@ def calibrate(cache, reference_date, reference_value):
     return ratio
 
 
+def migrate_close_dates(cache):
+    """One-time migration: UTC-midnight snapshots are prior-day closes."""
+    if cache.get("dateBasis") == "utc-close-day":
+        return False
+    for row in cache.get("points", []):
+        old_date = str(row.get("date", ""))
+        try:
+            new_date = (dt.date.fromisoformat(old_date) - dt.timedelta(days=1)).isoformat()
+        except ValueError:
+            continue
+        # D20's live spot sample was not a true midnight observation.
+        if str(row.get("fetchedAt", ""))[:10] == old_date:
+            row["approx"] = True
+        row["date"] = new_date
+    cache["points"].sort(key=lambda row: row.get("date", ""))
+    cache["dateBasis"] = "utc-close-day"
+    return True
+
+
+def daily_close_point(api, constituents, target_date, fetched_at):
+    """Request every constituent's last two days, keeping only the UTC close."""
+    charts = {}
+    for coin in dict.fromkeys(list(constituents) + list(STABLE)):
+        charts[coin] = utc_daily_values(api.history(coin, days=2))
+    rows = aggregate_backfill(charts, constituents, fetched_at, target_date)
+    row = next((item for item in rows if item["date"] == target_date), None)
+    if not row:
+        raise RuntimeError("midnight snapshot unavailable")
+    row["approx"] = False
+    return row
+
 class DemoClient:
     def __init__(self, key, min_spacing=2.1, sleeper=time.sleep, clock=time.monotonic):
         self._key = key
@@ -206,10 +238,10 @@ class DemoClient:
                 break
         return rows
 
-    def history(self, coin_id):
+    def history(self, coin_id, days=365):
         return self.get(
             "/coins/" + urllib.parse.quote(coin_id, safe="") + "/market_chart",
-            vs_currency="usd", days=365,
+            vs_currency="usd", days=days,
         )
 
 
@@ -220,15 +252,16 @@ def build_ssd(cache_dir, output_dir, key=None, today=None, client=None, rules_pa
     cache_path = Path(cache_dir) / "ssd.json"
     output_path = Path(output_dir) / "ssd.json"
     cache = load_cache(cache_path)
+    migrated = migrate_close_dates(cache)
     cache.update(schema=SCHEMA, source=SOURCE, denominator=DENOMINATOR)
     rules_path = Path(rules_path or "config/analysis-rules.json")
     try:
         config = json.loads(rules_path.read_text(encoding="utf-8"))
         cal = config.get("ssd", {}).get("calibration", {})
-        reference_date = str(cal.get("date", "2026-10-05"))
+        reference_date = str(cal.get("date", "2026-10-04"))
         reference_value = float(cal.get("tvValue", 9.118))
     except (OSError, ValueError, TypeError):
-        reference_date, reference_value = "2026-10-05", 9.118
+        reference_date, reference_value = "2026-10-04", 9.118
 
     key = key if key is not None else os.environ.get("COINGECKO_DEMO_API_KEY", "")
     if not key:
@@ -255,11 +288,18 @@ def build_ssd(cache_dir, output_dir, key=None, today=None, client=None, rules_pa
                 charts = {}
                 for coin in dict.fromkeys(list(updated["constituents"]) + list(STABLE)):
                     charts[coin] = utc_daily_values(api.history(coin))
-                first = (today.date() - dt.timedelta(days=365)).isoformat()
+                first = (today.date() - dt.timedelta(days=366)).isoformat()
                 updated["points"] = aggregate_backfill(charts, updated["constituents"], fetched_at, first)
 
-            if not any(p.get("date") == current_date for p in updated["points"]):
-                append_if_absent(updated["points"], daily_point(markets, updated["constituents"], current_date, fetched_at))
+            target_date = (today.date() - dt.timedelta(days=1)).isoformat()
+            if not any(p.get("date") == target_date for p in updated["points"]):
+                try:
+                    close = daily_close_point(api, updated["constituents"], target_date, fetched_at)
+                except Exception as error:
+                    warn("midnight close unavailable; using current market caps (" + type(error).__name__ + ")")
+                    close = daily_point(markets, updated["constituents"], target_date, fetched_at)
+                    close["approx"] = True
+                append_if_absent(updated["points"], close)
 
             updated["generatedAt"] = fetched_at
             cache = updated
@@ -270,7 +310,7 @@ def build_ssd(cache_dir, output_dir, key=None, today=None, client=None, rules_pa
 
     calibrate(cache, reference_date, reference_value)
     save_json(output_path, cache)
-    if key and cache.get("points"):
+    if (key and cache.get("points")) or migrated:
         save_json(cache_path, cache)
     print("D20 SSD: " + str(len(cache.get("points", []))) + " cached points", flush=True)
     return cache

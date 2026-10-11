@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from scripts.d20_build_ssd import (
     aggregate_backfill, append_if_absent, build_ssd, calibrate,
-    daily_point, top_125, utc_daily_values,
+    daily_point, top_125, utc_daily_values, migrate_close_dates, daily_close_point,
 )
 
 
@@ -32,7 +32,7 @@ class TestStablecoinDominance(unittest.TestCase):
             [midnight - 3600_000, 77], [midnight, 101],
             [midnight + 3600_000, 999],
         ]}
-        self.assertEqual(utc_daily_values(chart), {"2026-10-05": 101.0})
+        self.assertEqual(utc_daily_values(chart), {"2026-10-04": 101.0})
         charts = {
             "tether": {"2026-10-05": 8},
             "usd-coin": {"2026-10-05": 2},
@@ -89,8 +89,68 @@ class TestStablecoinDominance(unittest.TestCase):
             self.assertEqual(result["generatedAt"], "2026-10-05T00:00:00Z")
             self.assertEqual(
                 json.loads((Path(root) / "out" / "ssd.json").read_text())["points"],
-                old["points"],
+                [{"date": "2026-10-03", "raw": 8.88}],
             )
+
+
+    def test_migration_shifts_once_and_flags_legacy_intraday_sample(self):
+        original = {
+            "points": [
+                {"date": "2026-10-04", "raw": 9.04, "fetchedAt": "2026-10-10T03:00:00Z"},
+                {"date": "2026-10-10", "raw": 9.2, "fetchedAt": "2026-10-10T15:00:00Z"},
+            ]
+        }
+        self.assertTrue(migrate_close_dates(original))
+        self.assertEqual([p["date"] for p in original["points"]],
+                         ["2026-10-03", "2026-10-09"])
+        self.assertTrue(original["points"][-1]["approx"])
+        self.assertFalse(migrate_close_dates(original))
+        self.assertEqual(original["points"][0]["date"], "2026-10-03")
+
+    def test_daily_close_uses_midnight_and_not_live_market_cap(self):
+        midnight = int(dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc).timestamp() * 1000)
+        class FakeClient:
+            def history(self, coin_id, days=365):
+                self_days.append(days)
+                values = {"tether": 8, "usd-coin": 2, "dai": 1, "alpha": 30}
+                return {"market_caps": [[midnight, values[coin_id]]]}
+        self_days = []
+        row = daily_close_point(FakeClient(), ["alpha"], "2026-10-10",
+                                "2026-10-11T03:00:00Z")
+        self.assertEqual(self_days, [2, 2, 2, 2])
+        self.assertEqual(row["date"], "2026-10-10")
+        self.assertFalse(row["approx"])
+        self.assertAlmostEqual(row["raw"], 11 / 30 * 100)
+
+    def test_daily_close_failure_falls_back_to_approx(self):
+        with tempfile.TemporaryDirectory() as root:
+            cache_dir = Path(root) / "macro"
+            cache_dir.mkdir()
+            constituents = ["coin-" + str(i) for i in range(125)]
+            points = [{"date": "2026-10-09", "raw": 9.118,
+                       "total": 100, "fetchedAt": "2026-10-10T02:00:00Z"}]
+            cached = {"schema": "ssd-v1", "dateBasis": "utc-close-day",
+                      "constituentsUpdatedAt": "2026-10-01T00:00:00Z",
+                      "constituents": constituents, "points": points}
+            (cache_dir / "ssd.json").write_text(json.dumps(cached))
+            class FailHistory:
+                def market_rows(self, category=None, max_pages=4):
+                    ids = constituents + list(("tether", "usd-coin", "dai"))
+                    return [{"id": id_, "market_cap": 100} for id_ in ids]
+                def history(self, coin_id, days=365):
+                    raise RuntimeError("mocked history failure")
+            fake_rules = Path(root) / "config.json"
+            fake_rules.write_text(json.dumps({"ssd": {
+                "calibration": {"date": "2026-10-09", "tvValue": 9.118}
+            }}))
+            result = build_ssd(
+                cache_dir, Path(root) / "out", key="unit-test-key",
+                today=dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc),
+                client=FailHistory(), rules_path=fake_rules
+            )
+            today = next(p for p in result["points"] if p["date"] == "2026-10-10")
+            self.assertTrue(today["approx"])
+            self.assertEqual(len(result["points"]), 2)
 
 
 if __name__ == "__main__":
