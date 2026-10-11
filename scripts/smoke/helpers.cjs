@@ -188,6 +188,13 @@ async function routeTpo(page,nowValue){
 
 async function routePrecomputedAge(page,initialHours){
   const state={hours:Number(initialHours)||0};
+  await page.route('**/analysis/status.json',async route=>{
+    const version='smoke-v'+state.hours;
+    await route.fulfill({
+      status:200,contentType:'application/json',
+      body:JSON.stringify({levelsGeneratedAt:version,tpoGeneratedAt:version,profileGeneratedAt:version})
+    });
+  });
   await page.route(/\/analysis\/(levels|tpo)\/[A-Z]+\.json(?:\?.*)?$/,async route=>{
     const response=await route.fetch(),body=await response.json();
     body.generatedAt=new Date(Date.now()-state.hours*3600000).toISOString();
