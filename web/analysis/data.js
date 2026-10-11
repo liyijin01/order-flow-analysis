@@ -88,28 +88,39 @@
     return Array.from(dedup.values()).sort((a,b)=>a.time-b.time).slice(-maxBars);
   }
 
-  function parallelPagePlan(interval,maxBars,endTime,market){
+  function parallelPagePlan(interval,maxBars,firstOpenTime,market){
     const step=intervalMs(interval),limit=maxLimit(market||'um');
-    const align=interval==='1w'?4*86400_000:0;
-    const aligned=Math.floor((endTime-align)/step)*step+align;
     const pages=[];
+    // The last returned candle, not wall-clock time, anchors old history pages.
+    // This avoids gaps when the exchange fixture or a market is lagging.
     for(let offset=0;offset<maxBars;offset+=limit){
       const count=Math.min(limit,maxBars-offset);
-      const start=aligned-(offset+count-1)*step;
-      const end=offset===0?endTime:aligned-(offset-1)*step-1;
-      pages.push({startTime:Math.floor(start),endTime:Math.floor(end),limit:count});
+      pages.push({
+        startTime:Math.floor(firstOpenTime-(offset+count)*step),
+        endTime:Math.floor(firstOpenTime-offset*step-1),
+        limit:count
+      });
     }
     return pages;
   }
 
   async function fetchHistory(symbol,interval,maxBars,endTime,signal,market){
-    const m=market||'um',pageMax=maxLimit(m);
-    // Monthly Binance windows have variable lengths; retain the legacy request.
-    if(interval==='1M'||Number(maxBars)<=pageMax||!intervalMsMap[interval]){
+    const m=market||'um',pageMax=maxLimit(m),requested=Math.max(1,Number(maxBars)||pageMax);
+    if(interval==='1M'||requested<=pageMax||!intervalMsMap[interval]){
       return fetchHistorySerial(symbol,interval,maxBars,endTime,signal,market);
     }
     const end=Number.isFinite(endTime)?Number(endTime):Date.now();
-    const pages=parallelPagePlan(interval,Number(maxBars),end,m);
+    const firstParams=new URLSearchParams({
+      symbol,interval,limit:String(pageMax),endTime:String(Math.floor(end))
+    });
+    const latestRaw=await requestJson(endpoint(m)+'?'+firstParams.toString(),4,signal);
+    if(!Array.isArray(latestRaw)||!latestRaw.length)return[];
+    const latest=parseRows(latestRaw);
+    if(!latest.length)return[];
+    if(latest.length<pageMax)return latest.slice(-requested);
+    const earliest=latest[0].openTime;
+    if(!Number.isFinite(earliest))return fetchHistorySerial(symbol,interval,maxBars,end,signal,market);
+    const pages=parallelPagePlan(interval,requested-latest.length,earliest,m);
     const responses=await Promise.all(pages.map(page=>{
       const params=new URLSearchParams({
         symbol,interval,limit:String(page.limit),
@@ -117,15 +128,13 @@
       });
       return requestJson(endpoint(m)+'?'+params.toString(),4,signal);
     }));
-    const rows=responses.flatMap(parseRows);
-    const dedup=new Map();for(const row of rows)dedup.set(row.time,row);
-    const combined=[...dedup.values()].sort((a,b)=>a.time-b.time).slice(-maxBars);
-    const missingMiddle=responses.some((res,i)=>
-      i<responses.length-1&&(!Array.isArray(res)||res.length<pages[i].limit)
-    );
-    // Historical trading gaps may shift the old cursor beyond the fixed windows.
-    // Preserve the exact legacy result in that exceptional case.
-    if(missingMiddle||combined.length<Number(maxBars)&&responses.at(-1)?.length===pages.at(-1).limit){
+    const dedup=new Map();
+    for(const row of latest)dedup.set(row.time,row);
+    for(const raw of responses)for(const row of parseRows(raw))dedup.set(row.time,row);
+    const combined=[...dedup.values()].sort((a,b)=>a.time-b.time).slice(-requested);
+    if(responses.some((raw,i)=>!Array.isArray(raw)||raw.length<pages[i].limit)||
+       combined.length<requested){
+      // Missing old bars: retain the exact cursor-based historical fallback.
       return fetchHistorySerial(symbol,interval,maxBars,end,signal,market);
     }
     return combined;

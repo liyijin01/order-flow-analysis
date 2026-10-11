@@ -46,7 +46,7 @@ test('D20b2 Binance pagination concurrently matches legacy sequential 5,000 bars
   assert.deepEqual(native(parallel),native(serial));
   assert.equal(parallel.length,5000);
   assert.ok(h.getMaxConcurrent()>=3);
-  assert.equal(h.requests.filter(x=>Number.isFinite(x.start)).length,4);
+  assert.equal(h.requests.filter(x=>Number.isFinite(x.start)).length,3);
 });
 test('D20b2 Binance paging falls back to cursor for historical gaps',async()=>{
   const h=client(true);
