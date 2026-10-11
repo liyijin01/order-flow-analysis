@@ -66,7 +66,7 @@ jobs:
 
       - name: Ban large-array argument spreading
         run: |
-          if grep -R -E 'Math\.(min|max)\(\.\.\.' web; then
+          if grep -R --exclude-dir=vendor -E 'Math\.(min|max)\(\.\.\.' web; then
             echo 'Math.min/max argument spreading is forbidden.' >&2
             exit 1
           fi
