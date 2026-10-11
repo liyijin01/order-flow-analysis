@@ -12,7 +12,7 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
 
 (async()=>{
   const browser=await chromium.launch({channel:'chrome',headless:true});
-  const manifest=[];let cutoff=null,levelsGeneratedAt=null,tpoGeneratedAt=null,ssdStatus=null;
+  const manifest=[];let cutoff=null,levelsGeneratedAt=null,tpoGeneratedAt=null,profileGeneratedAt=null,ssdStatus=null;
   async function capture(symbol,tf,template,fileTf){
     const page=await browser.newPage({viewport:{width:1660,height:1300},deviceScaleFactor:1});
     const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
@@ -24,6 +24,7 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
       cutoff:window.__analysisDebug.model?.cutoffUtc,
       levelsGeneratedAt:window.__analysisDebug.state.bundle?.keyLevels?.generatedAt||null,
       tpoGeneratedAt:window.__analysisDebug.state.bundle?.tpo?.generatedAt||null,
+      profileGeneratedAt:window.__analysisDebug.state.bundle?.profile?.generatedAt||null,
       template:window.__analysisDebug.template(),
       windowMode:window.__analysisDebug.windowSpec().mode,
       visibleBars:window.__analysisDebug.model?.visibleBars||0,
@@ -82,6 +83,7 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
     if(calcMsValue<earliest)throw new Error(symbol+' '+tf+' '+template+' calcLastClosedUtc too stale: '+meta.calcLastClosedUtc+' cutoff '+meta.cutoff);
     cutoff=cutoff||meta.cutoff;if(cutoff!==meta.cutoff)throw new Error('snapshot cutoffs disagree: '+cutoff+' vs '+meta.cutoff);
     levelsGeneratedAt=levelsGeneratedAt||meta.levelsGeneratedAt;tpoGeneratedAt=tpoGeneratedAt||meta.tpoGeneratedAt;
+    profileGeneratedAt=profileGeneratedAt||meta.profileGeneratedAt;
     const outputTf=fileTf||tf,fileName=template==='combined'?symbol+'-'+outputTf+'.png':symbol+'-'+template+'-'+outputTf+'.png',file=path.join(outDir,fileName);
     await page.locator('#analysisCapture').screenshot({path:file});
     const size=fs.statSync(file).size;if(size<50*1024)throw new Error(file+' is only '+size+' bytes');
@@ -152,7 +154,7 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
   const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap','weekly','monthly','mprofile','wprofile','ssd'],files:manifest};
   fs.writeFileSync(latestPath,JSON.stringify(latest,null,2));
   fs.writeFileSync(path.join(outDir,'manifest.json'),JSON.stringify(manifest,null,2));
-  const status={generatedAt:latest.generatedAt,dataCutoffUtc:cutoff,levelsGeneratedAt,tpoGeneratedAt,
+  const status={generatedAt:latest.generatedAt,dataCutoffUtc:cutoff,levelsGeneratedAt,tpoGeneratedAt,profileGeneratedAt,
     ssdGeneratedAt:ssdStatus&&ssdStatus.generatedAt||null,ssdLastDate:ssdStatus&&ssdStatus.lastDate||null,
     pngCount:manifest.length};
   fs.writeFileSync(path.join(path.dirname(latestPath),'status.json'),JSON.stringify(status,null,2));

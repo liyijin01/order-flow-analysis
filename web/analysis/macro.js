@@ -28,9 +28,9 @@
     $('status').textContent='Loading CoinGecko dominance…';
     let payload;
     try{
-      const response=await fetch(dataPath,{cache:'no-store'});
-      if(!response.ok)throw new Error('SSD JSON HTTP '+response.status);
-      payload=await response.json();
+      const result=await D.loadPrecomputed(state.symbol,[config.dataSource]);
+      payload=result.macro;
+      if(!payload)throw new Error(result.errors.macro||'SSD JSON unavailable');
     }catch(error){
       $('status').textContent='SSD 数据不可用：'+String(error.message||error);
       $('status').classList.add('error');

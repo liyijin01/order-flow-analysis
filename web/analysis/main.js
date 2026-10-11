@@ -36,7 +36,7 @@
     }
     const handler=T[state.template];
     if(handler&&typeof handler.needs==='function')add(handler.needs(ctx));
-    return{requiredIntervals:required};
+    return{requiredIntervals:required,precomputed:cfg.precomputed||[]};
   }
 
   function windowSpec(){
@@ -342,7 +342,7 @@
     const progress=$('status');
     if(state.snapshot){
       progress.textContent='Loading archived snapshot…';
-      return{bundle:await D.loadSnapshot(state.symbol),full:true,failures:[]};
+      return{bundle:await D.loadSnapshot(state.symbol,dataNeeds()),full:true,failures:[]};
     }
     const full=forceFull||!state.bundle||state.bundle.symbol!==state.symbol||(Date.now()-state.lastFullLoadAt)>=30*60*1000;
     if(full){

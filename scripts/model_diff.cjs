@@ -18,7 +18,7 @@ function compare(a,b,path){
     if(a!==b)permitted.push({path,base:a,head:b});
     return;
   }
-  if(path.endsWith('.requests'))return;
+  if(path.endsWith('.requests')||path.endsWith('.precomputedRequests'))return;
   if(typeof a==='number'||typeof b==='number'){
     if(typeof a!=='number'||typeof b!=='number'||!relEqual(a,b))diffs.push({path,base:a,head:b});
     return;
@@ -82,10 +82,10 @@ if(permitted.length){
   for(const p of permitted)report+='| `'+p.path+'` | '+String(p.base)+' | '+String(p.head)+' |\n';
 }else report+='No changes.\n';
 report+='\n## Request summary\n\n';
-report+='| Case | Base requests | Head requests | Base limits | Head limits |\n|---|---:|---:|---|---|\n';
+report+='| Case | Base requests | Head requests | Base limits | Head limits | Base precomputed | Head precomputed |\n|---|---:|---:|---|---|---|---|\n';
 for(const key of legacyKeys.sort()){
   const b=requestSummary(baseCases[key]),h=requestSummary(headCases[key]);
-  report+='| `'+key+'` | '+b.count+' | '+h.count+' | '+formatLimits(b.limits)+' | '+formatLimits(h.limits)+' |\n';
+  report+='| `'+key+'` | '+b.count+' | '+h.count+' | '+formatLimits(b.limits)+' | '+formatLimits(h.limits)+' | '+((baseCases[key]&&baseCases[key].precomputedRequests)||[]).join(', ')+' | '+((headCases[key]&&headCases[key].precomputedRequests)||[]).join(', ')+' |\n';
 }
 const maxRequests={
   'quarter|1h':4,'quarter|4h':5,'rvwap|4h':2,'weekly|30m':3,
