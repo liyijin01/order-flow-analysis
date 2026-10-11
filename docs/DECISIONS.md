@@ -100,3 +100,18 @@
 - **单点校准**：用参考图 2026-10-05 前一日收盘 9.118%，`ratio = raw(2026-10-05) / 9.118`，图上展示 `raw / ratio`。校准点缺失时不伪造比例；`|ratio-1|>5%` 输出 warning。它只能匹配这个锚点，无法校正其余历史时刻分母构成差异。
 - **手动关键位来源**：九条线全来自 KBeast 2026-10-05 的 `USDT.D+USDC.D+DAI.D` TradingView 截图，配置内逐条保留 `source: "manual · KBeast 2026-10-05"`，在 `latest.json` 中也声明来源。价位依次为 13.719、12.829、11.886、10.490、9.642、9.064、8.372、5.114、2.463%，自动数据不用于反推或改写这些历史关键位。
 - **非 K 线入口**：模板使用 `dataSource: "macro/ssd"`，普通 SSD 不向 Binance 发 K 线请求；仅带 `overlay=btc` 时按需加载一组 BTCUSDT 1d 收盘价，叠加倒置左价格轴。
+
+## 13. D20b 载入缓存与稳定币日线对齐（2026-10-11）
+
+- **预计算文件按模板声明**：`config/analysis-rules.json` 的各个 `templates.<id>.precomputed` 显式列明 `levels`、`profile`、`tpo` 或 `macro/ssd`。无关模板不下载额外文件；完整模型仍以 37-case `model-diff` 零差异为门槛。
+- **带版本号缓存**：`analysis/status.json` 以 `no-store` 最多每 10 分钟检查一次；预计算文件 URL 的 `?v=` 来自对应的 `generatedAt`，同一 URL/版本在页面会话内复用，版本变化才重新拉取。K 线与预计算请求同时执行；连续 K 线窗口并发分页，并在出现历史缺口时回退旧的顺序游标以保留结果。
+- **图表库与输出**：将 Lightweight Charts 5.2.1 standalone production JS 原字节自托管于 `web/vendor/` 并保留原 SHA-384 SRI；已采用紧凑 JSON 的 `analysis/levels`、`analysis/tpo`、`analysis/data` 和 `profiles-*.json` 保持不变，`analysis/macro/ssd.json` 去掉空格和缩进。
+- **SSD 日期修正**：CoinGecko 00:00 UTC 快照对应前一个 UTC 日历日的日线收盘；缓存一次性把此前 `date` 减一天（`dateBasis: utc-close-day` 防重迁移），单点校准锚点由 2026-10-05 改为 2026-10-04，`raw` 与 `ratio` 保持原值。每日优先分别请求三种稳定币与 125 个分母成分的两日历史 00:00 UTC 点；请求失败才用现价近似并标注 `approx: true`。前一版本已有实时现价点在迁移时同样标注近似。
+- **已知分母漂移**：参考另一份 CMC 前125估算的历史占比，保留 CoinGecko 前125排除包装/流动性质押币的分母规则，不修改算法。归因可能包括 RWA/代币化基金如 `figure-heloc`、`blackrock-usd-institutional-digital-liquidity-fund`，以及旧时刻缺币数量较大：
+
+  | 参考日期 | CMC 估算值 | CoinGecko raw / 参考值 |
+  |---|---:|---:|
+  | 2025-11-18 | 8.405% | 0.987 |
+  | 2026-02-02 | 9.962% | 0.980 |
+  | 2026-10-03 | 9.171% | 0.977 |
+  | 2026-10-04 (TV 校准点) | 9.118% | 0.967 |

@@ -71,10 +71,19 @@ else{
   }
 }
 const ssdKeys=[...caseKeys].filter(key=>key.includes('|ssd|'));
-report+='\n## New SSD template (reported separately)\n\n';
+report+='\n## SSD template comparison (excluded from 37 legacy cases)\n\n';
+report+='| Case | Field | Base | Head |\n|---|---|---|---|\n';
 for(const key of ssdKeys){
-  const item=headCases[key];
-  report+='| '+key+' | '+(item?JSON.stringify(item):'missing')+' |\n';
+  const before=baseCases[key]||{},after=headCases[key]||{};
+  for(const field of ['count','lastDate','value','raw','ratio','dataSource']){
+    const a=before[field],b=after[field];
+    if(a!==b)report+='| '+key+' | '+field+' | '+String(a) + ' | '+String(b)+' |\n';
+  }
+  const av=before.manifestValues||{},bv=after.manifestValues||{};
+  for(const field of ['date','value','raw','ratio']){
+    const a=av[field],b=bv[field];
+    if(a!==b)report+='| '+key+' | manifestValues.'+field+' | '+String(a)+' | '+String(b)+' |\n';
+  }
 }
 report+='\n## Allowed calcLastClosedUtc changes\n\n';
 if(permitted.length){

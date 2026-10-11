@@ -35,3 +35,4 @@
 | D19 | 2026-10-06 | #30 | model-diff 安全网；拆分五个单一方法模板；统一 JS 价值区实现到 `web/shared/value-area.js`；d19 分支加入 chart-smoke | 重构类 PR 必须 model-diff 零差异才能合并 |
 | D19b | 2026-10-09 | #31 | 补强至 37-case model-diff；拆 quarter / combined 与五个图层；按需拉 Binance K 线；smoke 拆为 8 组 21 用例，保留 125 条断言 | 除单独列出的 calcLastClosedUtc 外模型零差异；模板及图层声明数据需求，main.js 不写模板 ID |
 | D20 | 2026-10-10 | #32 | CoinGecko 免费稳定币占比数据缓存、TV 单点校准、手动关键位、宏观模板 SSD-1d PNG 和离线回归 | 分母为当前成分前125（排除包装/流动性质押币）；KBeast 2026-10-05 手动关键位；已有37个模板组合保持零差异 |
+| D20b | 2026-10-11 | #33 | 按模板加载并缓存预计算文件，K 线并行分页，自托管 Lightweight Charts 5.2.1，加载耗时提示、SSD 日期校正与 00:00 UTC 日更 | 37 组旧模板零差异；SSD 日期单独报告；保留缺口回退与人工价位来源 |
