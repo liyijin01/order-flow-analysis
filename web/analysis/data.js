@@ -66,7 +66,7 @@
     });
   }
 
-  async function fetchHistory(symbol,interval,maxBars,endTime,signal,market){
+  async function fetchHistorySerial(symbol,interval,maxBars,endTime,signal,market){
     const m=market||'um',pageMax=maxLimit(m);
     if(interval==='1M'){
       const limit=Math.min(pageMax,Math.max(1,Number(maxBars)||120));
@@ -86,6 +86,58 @@
     }
     const dedup=new Map();for(const b of all)dedup.set(b.time,b);
     return Array.from(dedup.values()).sort((a,b)=>a.time-b.time).slice(-maxBars);
+  }
+
+  function parallelPagePlan(interval,maxBars,firstOpenTime,market){
+    const step=intervalMs(interval),limit=maxLimit(market||'um');
+    const pages=[];
+    // The last returned candle, not wall-clock time, anchors old history pages.
+    // This avoids gaps when the exchange fixture or a market is lagging.
+    for(let offset=0;offset<maxBars;offset+=limit){
+      const count=Math.min(limit,maxBars-offset);
+      pages.push({
+        startTime:Math.floor(firstOpenTime-(offset+count)*step),
+        endTime:Math.floor(firstOpenTime-offset*step-1),
+        limit:count
+      });
+    }
+    return pages;
+  }
+
+  async function fetchHistory(symbol,interval,maxBars,endTime,signal,market){
+    const m=market||'um',pageMax=maxLimit(m),requested=Math.max(1,Number(maxBars)||pageMax);
+    if(interval==='1M'||requested<=pageMax||!intervalMsMap[interval]){
+      return fetchHistorySerial(symbol,interval,maxBars,endTime,signal,market);
+    }
+    const end=Number.isFinite(endTime)?Number(endTime):Date.now();
+    const firstParams=new URLSearchParams({
+      symbol,interval,limit:String(pageMax),endTime:String(Math.floor(end))
+    });
+    const latestRaw=await requestJson(endpoint(m)+'?'+firstParams.toString(),4,signal);
+    if(!Array.isArray(latestRaw)||!latestRaw.length)return[];
+    const latest=parseRows(latestRaw);
+    if(!latest.length)return[];
+    if(latest.length<pageMax)return latest.slice(-requested);
+    const earliest=latest[0].openTime;
+    if(!Number.isFinite(earliest))return fetchHistorySerial(symbol,interval,maxBars,end,signal,market);
+    const pages=parallelPagePlan(interval,requested-latest.length,earliest,m);
+    const responses=await Promise.all(pages.map(page=>{
+      const params=new URLSearchParams({
+        symbol,interval,limit:String(page.limit),
+        startTime:String(page.startTime),endTime:String(page.endTime)
+      });
+      return requestJson(endpoint(m)+'?'+params.toString(),4,signal);
+    }));
+    const dedup=new Map();
+    for(const row of latest)dedup.set(row.time,row);
+    for(const raw of responses)for(const row of parseRows(raw))dedup.set(row.time,row);
+    const combined=[...dedup.values()].sort((a,b)=>a.time-b.time).slice(-requested);
+    if(responses.some((raw,i)=>!Array.isArray(raw)||raw.length<pages[i].limit)||
+       combined.length<requested){
+      // Missing old bars: retain the exact cursor-based historical fallback.
+      return fetchHistorySerial(symbol,interval,maxBars,end,signal,market);
+    }
+    return combined;
   }
 
   async function fetchLatest(symbol,interval,limit,signal,market){
@@ -116,41 +168,93 @@
     return cap;
   }
 
-  async function fetchProfile(symbol,signal){
+  // Requests are keyed by immutable deployment versions; both fulfilled and in-flight
+  // responses are shared across template / symbol switches in the same tab.
+  const assetCache=new Map();
+  let statusCache=null,statusCheckedAt=0;
+  const STATUS_TTL_MS=10*60*1000;
+  const statusKeys={
+    levels:'levelsGeneratedAt',tpo:'tpoGeneratedAt',
+    profile:'profileGeneratedAt','macro/ssd':'ssdGeneratedAt'
+  };
+  async function versions(signal){
+    if(statusCache&&Date.now()-statusCheckedAt<STATUS_TTL_MS)return statusCache;
     try{
-      const r=await fetch('profiles-'+symbol+'.json',{cache:'no-store',signal});
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      return await r.json();
+      const r=await fetch('analysis/status.json',{cache:'no-store',signal});
+      if(!r.ok)throw new Error('status HTTP '+r.status);
+      statusCache=await r.json();
     }catch(e){
       if(isAbort(e,signal))throw e;
-      return null;
+      statusCache=statusCache||{};
     }
+    statusCheckedAt=Date.now();
+    return statusCache;
   }
-
+  function precomputedUrl(name,symbol,status){
+    const key=name==='profile'?'profiles-'+symbol+'.json':
+      name==='macro/ssd'?'analysis/macro/ssd.json':
+      'analysis/'+name+'/'+symbol+'.json';
+    const version=status&&status[statusKeys[name]];
+    return key+(version?'?v='+encodeURIComponent(version):'');
+  }
+  async function fetchCached(url,signal){
+    if(!assetCache.has(url)){
+      const job=fetch(url,{cache:'default'}).then(r=>{
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        return r.json();
+      }).catch(err=>{assetCache.delete(url);throw err;});
+      assetCache.set(url,job);
+    }
+    return assetCache.get(url);
+  }
+  async function fetchProfile(symbol,signal){
+    try{return await fetchCached(precomputedUrl('profile',symbol,await versions(signal)),signal);}
+    catch(e){if(isAbort(e,signal))throw e;return null;}
+  }
   async function fetchKeyLevels(symbol,generatedAt,signal){
-    const suffix=generatedAt?'?v='+encodeURIComponent(generatedAt):'';
-    const r=await fetch('analysis/levels/'+symbol+'.json'+suffix,{signal});
-    if(!r.ok)throw new Error('levels '+symbol+' HTTP '+r.status);
-    return r.json();
+    return fetchCached(precomputedUrl('levels',symbol,{levelsGeneratedAt:generatedAt}),signal);
   }
   async function fetchTpo(symbol,generatedAt,signal){
-    const suffix=generatedAt?'?v='+encodeURIComponent(generatedAt):'';
-    const r=await fetch('analysis/tpo/'+symbol+'.json'+suffix,{signal});
-    if(!r.ok)throw new Error('tpo '+symbol+' HTTP '+r.status);
-    return r.json();
+    return fetchCached(precomputedUrl('tpo',symbol,{tpoGeneratedAt:generatedAt}),signal);
   }
-
-  async function loadSnapshot(symbol){
-    const r=await fetch('analysis/data/'+symbol+'.json',{cache:'no-store'});
-    if(!r.ok)throw new Error('snapshot '+symbol+' HTTP '+r.status);
-    const payload=await r.json(),series={},errors={...(payload.errors||{})};
-    for(const [k,v] of Object.entries(payload.series||{}))series[k]=parseRows(v);
-    let keyLevels=null,tpo=null;
-    try{keyLevels=await fetchKeyLevels(symbol,payload.generatedAt);}
-    catch(e){errors.levels=String(e.message||e);}
-    try{tpo=await fetchTpo(symbol,payload.generatedAt);}
-    catch(e){errors.tpo=String(e.message||e);}
-    return{schema:payload.schema||'analysis-snapshot-v1',symbol,generatedAt:payload.generatedAt,cutoffUtc:payload.cutoffUtc,series,profile:payload.profile||null,keyLevels,tpo,errors};
+  async function loadPrecomputed(symbol,requested,signal){
+    const needs=[...new Set(requested||[])].filter(x=>statusKeys[x]);
+    const result={profile:null,keyLevels:null,tpo:null,macro:null,errors:{},versions:{}};
+    if(!needs.length)return result;
+    const status=await versions(signal);
+    const props={levels:'keyLevels',tpo:'tpo',profile:'profile','macro/ssd':'macro'};
+    await Promise.all(needs.map(async name=>{
+      const url=precomputedUrl(name,symbol,status);
+      result.versions[name]=status[statusKeys[name]]||null;
+      try{result[props[name]]=await fetchCached(url,signal);}
+      catch(e){
+        if(isAbort(e,signal))throw e;
+        result.errors[name==='macro/ssd'?'macro':name]=
+          name==='profile'?'profiles-'+symbol+'.json unavailable':
+            String(e.message||e);
+      }
+    }));
+    return result;
+  }
+  async function loadSnapshot(symbol,needs){
+    const needed=(needs&&needs.precomputed)||['levels','tpo'];
+    const [payload,assets]=await Promise.all([
+      (async()=>{
+        const r=await fetch('analysis/data/'+symbol+'.json',{cache:'no-store'});
+        if(!r.ok)throw new Error('snapshot '+symbol+' HTTP '+r.status);
+        return r.json();
+      })(),
+      loadPrecomputed(symbol,needed.filter(x=>x!=='profile'),null)
+    ]);
+    const series={},errors={...(payload.errors||{}),...assets.errors};
+    for(const [key,value] of Object.entries(payload.series||{}))series[key]=parseRows(value);
+    return{
+      schema:payload.schema||'analysis-snapshot-v1',symbol,
+      generatedAt:payload.generatedAt,cutoffUtc:payload.cutoffUtc,
+      series,profile:payload.profile||null,
+      keyLevels:assets.keyLevels,tpo:assets.tpo,errors,
+      precomputedVersions:assets.versions
+    };
   }
 
   function livePlan(timeframe,history){
@@ -176,29 +280,40 @@
 
   async function loadLive(symbol,timeframe,onProgress,signal,history){
     const progress=typeof onProgress==='function'?onProgress:()=>{},errors={},series={};
-    const {intervals,limits}=livePlan(timeframe,history);
-    let done=0;const total=intervals.length+3;
-    const step=(label)=>{done++;progress({done,total,label});};
-    await Promise.all(intervals.map(interval=>
+    const plan=livePlan(timeframe,history);
+    const {intervals,limits}=plan;
+    const need=history&&history.precomputed||['profile','levels','tpo'];
+    let done=0;const total=intervals.length+need.length;
+    const step=label=>{done++;progress({done,total,label});};
+    const timing={klinesMs:0,precomputedMs:0};
+    const started=performance.now();
+    const candles=Promise.all(intervals.map(interval=>
       fetchHistory(symbol,interval,limits[interval],undefined,signal)
-        .then(v=>{series[interval]=v;step(interval);})
-        .catch(e=>{if(isAbort(e,signal))throw e;errors[interval]=String(e.message||e);step(interval+' failed');})
-    ));
-    const profile=await fetchProfile(symbol,signal);step('exact weekly profile');
-    if(!profile)errors.profile='profiles-'+symbol+'.json unavailable';
-    const generatedAt=new Date().toISOString();let keyLevels=null,tpo=null;
-    try{keyLevels=await fetchKeyLevels(symbol,generatedAt,signal);step('historical key levels');}
-    catch(e){if(isAbort(e,signal))throw e;errors.levels=String(e.message||e);step('historical key levels failed');}
-    try{tpo=await fetchTpo(symbol,generatedAt,signal);step('historical TPO profiles');}
-    catch(e){if(isAbort(e,signal))throw e;errors.tpo=String(e.message||e);step('historical TPO profiles failed');}
+        .then(value=>{series[interval]=value;step(interval);})
+        .catch(e=>{
+          if(isAbort(e,signal))throw e;
+          errors[interval]=String(e.message||e);step(interval+' failed');
+        })
+    )).finally(()=>{timing.klinesMs=performance.now()-started;});
+    const preStart=performance.now();
+    const assetsJob=loadPrecomputed(symbol,need,signal)
+      .finally(()=>{timing.precomputedMs=performance.now()-preStart;});
+    const [,assets]=await Promise.all([candles,assetsJob]);
+    Object.assign(errors,assets.errors);
     if(!(series[timeframe]||[]).length)throw new Error(errors[timeframe]||'display candles unavailable');
-    return{schema:'analysis-live-v2',symbol,generatedAt,cutoffUtc:null,series,profile,keyLevels,tpo,errors};
+    const generatedAt=new Date().toISOString();
+    return{
+      schema:'analysis-live-v2',symbol,generatedAt,cutoffUtc:null,
+      series,profile:assets.profile,keyLevels:assets.keyLevels,tpo:assets.tpo,
+      errors,precomputedVersions:assets.versions,timing
+    };
   }
 
   async function refreshLiveBundle(bundle,symbol,timeframe,signal,history){
     const {intervals,limits}=livePlan(timeframe,history);
     const failures=[],updates={},fullIntervals=new Set(),errors={...(bundle&&bundle.errors||{})};
-    await Promise.all(intervals.map(async interval=>{
+    const started=performance.now(),timing={klinesMs:0,precomputedMs:0};
+    const candleJob=Promise.all(intervals.map(async interval=>{
       const cap=limits[interval],existing=(bundle&&bundle.series&&bundle.series[interval])||[];
       const needsFull=!!errors[interval]||existing.length<cap*.5;
       try{
@@ -210,7 +325,12 @@
         if(isAbort(e,signal))throw e;
         failures.push({interval,error:String(e.message||e)});
       }
-    }));
+    })).finally(()=>{timing.klinesMs=performance.now()-started;});
+    const preStart=performance.now();
+    const need=history&&history.precomputed||['profile','levels','tpo'];
+    const preJob=loadPrecomputed(symbol,need,signal)
+      .finally(()=>{timing.precomputedMs=performance.now()-preStart;});
+    const [,assets]=await Promise.all([candleJob,preJob]);
     const series={...(bundle&&bundle.series||{})};
     for(const interval of intervals){
       if(!updates[interval])continue;
@@ -218,30 +338,21 @@
         ?updates[interval]
         :mergeBars(series[interval]||[],updates[interval],limits[interval]);
     }
-    let profile=bundle&&bundle.profile||null;
-    if(!profile||errors.profile){
-      const recovered=await fetchProfile(symbol,signal);
-      if(recovered){profile=recovered;delete errors.profile;}
-      else{
-        errors.profile='profiles-'+symbol+'.json unavailable';
-        failures.push({interval:'profile',error:errors.profile});
-      }
+    for(const name of ['profile','levels','tpo']){
+      if(!need.includes(name))delete errors[name];
     }
-    const generatedAt=new Date().toISOString();let keyLevels=bundle&&bundle.keyLevels||null,tpo=bundle&&bundle.tpo||null;
-    if(!keyLevels||errors.levels){
-      try{keyLevels=await fetchKeyLevels(symbol,generatedAt,signal);delete errors.levels;}
-      catch(e){
-        if(isAbort(e,signal))throw e;
-        errors.levels=String(e.message||e);failures.push({interval:'levels',error:errors.levels});
-      }
+    for(const key of Object.keys(assets.errors)){
+      errors[key]=assets.errors[key];
+      failures.push({interval:key,error:assets.errors[key]});
     }
-    if(!tpo||errors.tpo){
-      try{tpo=await fetchTpo(symbol,generatedAt,signal);delete errors.tpo;}
-      catch(e){if(isAbort(e,signal))throw e;errors.tpo=String(e.message||e);failures.push({interval:'tpo',error:errors.tpo});}
-    }
+    for(const key of ['profile','levels','tpo'])if(need.includes(key)&&!assets.errors[key])delete errors[key];
     return{
-      bundle:{...(bundle||{}),schema:'analysis-live-v2',symbol,generatedAt,series,profile,keyLevels,tpo,errors},
-      failures
+      bundle:{
+        ...(bundle||{}),schema:'analysis-live-v2',symbol,
+        generatedAt:new Date().toISOString(),series,
+        profile:assets.profile,keyLevels:assets.keyLevels,tpo:assets.tpo,
+        errors,precomputedVersions:assets.versions,timing
+      },failures
     };
   }
 
@@ -264,7 +375,7 @@
   }
 
   global.OrderFlowAnalysisData={
-    intervalMs,intervalSec,displayCounts,calcMap,parseRows,closedBars,fetchHistory,fetchLatest,mergeBars,capFor,
-    fetchProfile,fetchKeyLevels,fetchTpo,loadSnapshot,loadLive,refreshLiveBundle,formatJst,toDisplayTime,formatDisplayTime,formatDisplayTick
+    intervalMs,intervalSec,displayCounts,calcMap,parseRows,closedBars,fetchHistory,fetchHistorySerial,parallelPagePlan,fetchLatest,mergeBars,capFor,
+    fetchProfile,fetchKeyLevels,fetchTpo,loadPrecomputed,versions,loadSnapshot,loadLive,refreshLiveBundle,formatJst,toDisplayTime,formatDisplayTime,formatDisplayTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);

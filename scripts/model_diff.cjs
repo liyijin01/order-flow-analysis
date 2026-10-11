@@ -18,7 +18,7 @@ function compare(a,b,path){
     if(a!==b)permitted.push({path,base:a,head:b});
     return;
   }
-  if(path.endsWith('.requests'))return;
+  if(path.endsWith('.requests')||path.endsWith('.precomputedRequests'))return;
   if(typeof a==='number'||typeof b==='number'){
     if(typeof a!=='number'||typeof b!=='number'||!relEqual(a,b))diffs.push({path,base:a,head:b});
     return;
@@ -71,10 +71,19 @@ else{
   }
 }
 const ssdKeys=[...caseKeys].filter(key=>key.includes('|ssd|'));
-report+='\n## New SSD template (reported separately)\n\n';
+report+='\n## SSD template comparison (excluded from 37 legacy cases)\n\n';
+report+='| Case | Field | Base | Head |\n|---|---|---|---|\n';
 for(const key of ssdKeys){
-  const item=headCases[key];
-  report+='| '+key+' | '+(item?JSON.stringify(item):'missing')+' |\n';
+  const before=baseCases[key]||{},after=headCases[key]||{};
+  for(const field of ['count','lastDate','value','raw','ratio','dataSource']){
+    const a=before[field],b=after[field];
+    if(a!==b)report+='| '+key+' | '+field+' | '+String(a) + ' | '+String(b)+' |\n';
+  }
+  const av=before.manifestValues||{},bv=after.manifestValues||{};
+  for(const field of ['date','value','raw','ratio']){
+    const a=av[field],b=bv[field];
+    if(a!==b)report+='| '+key+' | manifestValues.'+field+' | '+String(a)+' | '+String(b)+' |\n';
+  }
 }
 report+='\n## Allowed calcLastClosedUtc changes\n\n';
 if(permitted.length){
@@ -82,10 +91,10 @@ if(permitted.length){
   for(const p of permitted)report+='| `'+p.path+'` | '+String(p.base)+' | '+String(p.head)+' |\n';
 }else report+='No changes.\n';
 report+='\n## Request summary\n\n';
-report+='| Case | Base requests | Head requests | Base limits | Head limits |\n|---|---:|---:|---|---|\n';
+report+='| Case | Base requests | Head requests | Base limits | Head limits | Base precomputed | Head precomputed |\n|---|---:|---:|---|---|---|---|\n';
 for(const key of legacyKeys.sort()){
   const b=requestSummary(baseCases[key]),h=requestSummary(headCases[key]);
-  report+='| `'+key+'` | '+b.count+' | '+h.count+' | '+formatLimits(b.limits)+' | '+formatLimits(h.limits)+' |\n';
+  report+='| `'+key+'` | '+b.count+' | '+h.count+' | '+formatLimits(b.limits)+' | '+formatLimits(h.limits)+' | '+((baseCases[key]&&baseCases[key].precomputedRequests)||[]).join(', ')+' | '+((headCases[key]&&headCases[key].precomputedRequests)||[]).join(', ')+' |\n';
 }
 const maxRequests={
   'quarter|1h':4,'quarter|4h':5,'rvwap|4h':2,'weekly|30m':3,

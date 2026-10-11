@@ -9,7 +9,7 @@
   const state={
     symbol:'BTCUSDT',timeframe:'1h',template:null,viewMode:'quarter',snapshot:false,rules:null,bundle:null,chart:null,candles:null,volume:null,quarterBands:[],primitive:null,
     loadToken:0,refreshTimer:null,model:null,viewKey:null,lastDisplayCount:0,lastFullLoadAt:0,refreshWarning:null,
-    inFlight:null,abortController:null,lastSuccessAt:0,defaultViewRange:null,resizeToken:0,resizeSettle:null,watermark:null,countdownTimer:null,crosshairTime:null,priceScaleMargins:null
+    inFlight:null,abortController:null,lastSuccessAt:0,defaultViewRange:null,resizeToken:0,resizeSettle:null,watermark:null,countdownTimer:null,crosshairTime:null,priceScaleMargins:null,timing:null
   };
 
   function tfLabel(tf){return({'30m':'30分钟','1h':'1小时','4h':'4小时','1d':'1天','1M':'1月'})[tf]||tf;}
@@ -36,7 +36,7 @@
     }
     const handler=T[state.template];
     if(handler&&typeof handler.needs==='function')add(handler.needs(ctx));
-    return{requiredIntervals:required};
+    return{requiredIntervals:required,precomputed:cfg.precomputed||[]};
   }
 
   function windowSpec(){
@@ -333,7 +333,12 @@
       $('status').textContent='刷新失败，显示 '+D.formatJst(model.last.time).slice(-5)+' 的数据 · '+state.refreshWarning;
       $('status').classList.add('error');
     }else{
-      $('status').textContent='Loaded '+model.display.length+' display candles · '+model.regions.length+' drawn regions · '+model.levels.length+' drawn key lines'+(errs.length?' · 缺失 '+errs.join(', '):'');
+      const t=state.timing,seconds=ms=>(Math.max(0,Number(ms)||0)/1000).toFixed(1)+'s';
+      const timing=t?' · 加载 '+seconds(t.totalMs)+'（K线 '+seconds(t.klinesMs)+
+        ' · 预计算 '+seconds(t.precomputedMs)+' · 计算绘制 '+seconds(t.renderMs)+'）':'';
+      $('status').textContent='Loaded '+model.display.length+' display candles · '+
+        model.regions.length+' drawn regions · '+model.levels.length+' drawn key lines'+
+        (errs.length?' · 缺失 '+errs.join(', '):'')+timing;
       $('status').classList.toggle('error',errs.length>0);
     }
   }
@@ -342,7 +347,7 @@
     const progress=$('status');
     if(state.snapshot){
       progress.textContent='Loading archived snapshot…';
-      return{bundle:await D.loadSnapshot(state.symbol),full:true,failures:[]};
+      return{bundle:await D.loadSnapshot(state.symbol,dataNeeds()),full:true,failures:[]};
     }
     const full=forceFull||!state.bundle||state.bundle.symbol!==state.symbol||(Date.now()-state.lastFullLoadAt)>=30*60*1000;
     if(full){
@@ -357,16 +362,25 @@
   }
 
   async function refresh(forceFull,options){
+    const started=performance.now();
     return R.runRefresh(state,forceFull,options,{
       before:()=>loadRules(),
       load:(token,full,signal)=>getBundle(token,full,signal),
       apply:async(result)=>{
+        const renderStart=performance.now();
         state.bundle=result.bundle;
         state.refreshWarning=result.failures.length?result.failures.map(x=>x.interval).join(', ')+' 更新失败':null;
         let model=buildAnalysis(result.bundle);state.model=model;
         applySeries(model);renderTable(model);
         model=await settleDefaultWindow(result.bundle);
         state.lastSuccessAt=Date.now();
+        const phase=result.bundle.timing||{};
+        state.timing={
+          klinesMs:Number(phase.klinesMs)||0,
+          precomputedMs:Number(phase.precomputedMs)||0,
+          renderMs:performance.now()-renderStart,
+          totalMs:performance.now()-started
+        };
         updateHeader(model);
         return model;
       },
@@ -453,7 +467,7 @@
     $('downloadBtn').addEventListener('click',downloadPng);
     state.chart.subscribeCrosshairMove(param=>{const t=param&&param.time!=null?Number(param.time)-9*3600:null;state.crosshairTime=Number.isFinite(t)?t:null;updateChartInfo(state.model,state.crosshairTime);});
     window.__analysisDebug={
-      state,get model(){return state.model;},refresh:(forceFull)=>refresh(!!forceFull),
+      state,get model(){return state.model;},get timing(){return state.timing;},refresh:(forceFull)=>refresh(!!forceFull),
       axisLabels:()=>state.primitive?state.primitive.debugAxisLabels():[],
       profiles:()=>state.primitive?state.primitive.debugProfiles():[],
       priceCoordinate:p=>state.candles?state.candles.priceToCoordinate(Number(p)):null,

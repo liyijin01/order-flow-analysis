@@ -23,14 +23,18 @@
   }
 
   async function mount(ctx){
+    const started=performance.now();
+    let precalcMs=0,klineMs=0;
     const {state,config,template,L,D}=ctx,root=$('analysisChart');
     const dataPath='analysis/'+config.dataSource+'.json';
     $('status').textContent='Loading CoinGecko dominance…';
     let payload;
     try{
-      const response=await fetch(dataPath,{cache:'no-store'});
-      if(!response.ok)throw new Error('SSD JSON HTTP '+response.status);
-      payload=await response.json();
+      const preStarted=performance.now();
+      const result=await D.loadPrecomputed(state.symbol,[config.dataSource]);
+      precalcMs=performance.now()-preStarted;
+      payload=result.macro;
+      if(!payload)throw new Error(result.errors.macro||'SSD JSON unavailable');
     }catch(error){
       $('status').textContent='SSD 数据不可用：'+String(error.message||error);
       $('status').classList.add('error');
@@ -90,7 +94,9 @@
     if(new URLSearchParams(location.search).get('overlay')==='btc'){
       binanceRequests++;
       try{
+        const startedKline=performance.now();
         const bars=await D.fetchHistory('BTCUSDT','1d',Math.min(1000,Math.max(30,model.points.length+2)));
+        klineMs=performance.now()-startedKline;
         bitcoin=chart.addSeries(L.LineSeries,{
           color:'rgba(185,190,200,.7)',lineWidth:1,priceScaleId:'left',
           priceLineVisible:false,lastValueVisible:false,
@@ -159,7 +165,14 @@
     if(meta)meta.textContent='STABLECOIN DOMINANCE';
     setDataWarning(model,state.snapshot);
     state.chart=chart;state.line=line;state.btcOverlay=bitcoin;
-    $('status').textContent='Loaded '+model.points.length+' daily dominance points · '+model.levels.length+' visible key levels';
+    const totalMs=performance.now()-started;
+    const fmt=ms=>(Math.max(0,Number(ms)||0)/1000).toFixed(1)+'s';
+    state.timing={totalMs,klinesMs:klineMs,precomputedMs:precalcMs,
+      renderMs:Math.max(0,totalMs-precalcMs-klineMs)};
+    $('status').textContent='Loaded '+model.points.length+' daily dominance points · '+
+      model.levels.length+' visible key levels · 加载 '+fmt(totalMs)+
+      '（K线 '+fmt(klineMs)+' · 预计算 '+fmt(precalcMs)+
+      ' · 计算绘制 '+fmt(state.timing.renderMs)+'）';
     $('status').classList.remove('error');
     new ResizeObserver(()=>chart.resize(root.clientWidth,root.clientHeight)).observe(root);
     document.querySelectorAll('[data-tpl]').forEach(button=>button.addEventListener('click',()=>{
@@ -184,7 +197,7 @@
       });
     });
     global.__analysisDebug={
-      state,get model(){return state.model;},template:()=>state.template,
+      state,get model(){return state.model;},get timing(){return state.timing;},template:()=>state.template,
       view:()=>({range:chart.timeScale().getVisibleLogicalRange()}),
       windowSpec:()=>({mode:'full'}),axisLabels:()=>[],
       chartInfo:()=>({line1:$('chartInfo1').textContent,

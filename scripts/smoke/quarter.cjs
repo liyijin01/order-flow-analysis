@@ -72,7 +72,8 @@ const cases=[
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded '),{timeout:60000});
       let stale=await page.locator('#staleData').textContent();
       if(!/预计算数据已 40 小时未更新/.test(stale))throw new Error('D18 stale warning missing: '+stale);
-      age.hours=0;await page.evaluate(()=>window.__analysisDebug.refresh(true));
+      age.hours=0;await page.clock.setFixedTime(Date.now()+11*60*1000);
+      await page.evaluate(()=>window.__analysisDebug.refresh(true));
       await page.waitForFunction(()=>document.getElementById('status')?.textContent.startsWith('Loaded ')&&!document.getElementById('staleData')?.textContent,{timeout:60000});
       stale=await page.locator('#staleData').textContent();
       if(stale)throw new Error('D18 fresh warning did not clear: '+stale);

@@ -52,7 +52,14 @@ function sha1(value){
 async function capture(browser,symbol,template,timeframe,snapshotMode){
   const page=await browser.newPage({viewport:{width:1600,height:1000}});
   await page.clock.setFixedTime(FIXED_TIME);
-  const requests=[];
+  const requests=[],assets=[];
+  page.on('request',request=>{
+    const url=new URL(request.url()),file=url.pathname;
+    if(/\/(?:analysis\/levels|analysis\/tpo|analysis\/macro)\/[^/]+\.json$/.test(file)||
+       /\/profiles-[A-Z]+\.json$/.test(file)){
+      assets.push(file.split('/').slice(-3).join('/')+url.search);
+    }
+  });
   await routeMarket(page,requests);
   await routeKeyLevels(page,'fixture');
   await routeProfiles(page,FIXED_TIME);
@@ -128,6 +135,7 @@ async function capture(browser,symbol,template,timeframe,snapshotMode){
   delete summary.singlePrints;
   summary.hashes={curves:curveHashes,profiles:profileHashes,singlePrints:singlePrintHashes};
   summary.requests=openingRequests;
+  summary.precomputedRequests=[...new Set(assets)].sort();
   await page.close();
   return summary;
 }

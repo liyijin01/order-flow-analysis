@@ -37,13 +37,15 @@ async function routeMarket(page,requests,options){
   await page.route(/https:\/\/fapi\.binance\.com\/fapi\/v1\/klines.*/,async route=>{
     const u=new URL(route.request().url()),symbol=u.searchParams.get('symbol'),interval=u.searchParams.get('interval');
     const endRaw=u.searchParams.get('endTime'),end=endRaw==null?Infinity:Number(endRaw);
+    const startRaw=u.searchParams.get('startTime'),start=startRaw==null?-Infinity:Number(startRaw);
     const limit=Math.min(1500,Number(u.searchParams.get('limit'))||500);
     requests.push({symbol,interval,limit,endTime:endRaw});
     if(opts.delayMs)await new Promise(resolve=>setTimeout(resolve,opts.delayMs));
     if(opts.failFirst30m&&interval==='30m'&&!failed30m){
       failed30m=true;await route.fulfill({status:500,contentType:'text/plain',body:'synthetic 30m failure'});return;
     }
-    const body=rows(symbol,interval).filter(r=>Number(r[0])<=end).slice(-limit);
+    const eligible=rows(symbol,interval).filter(r=>Number(r[0])>=start&&Number(r[0])<=end);
+    const body=startRaw==null?eligible.slice(-limit):eligible.slice(0,limit);
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
   });
 }
@@ -188,6 +190,13 @@ async function routeTpo(page,nowValue){
 
 async function routePrecomputedAge(page,initialHours){
   const state={hours:Number(initialHours)||0};
+  await page.route('**/analysis/status.json',async route=>{
+    const version='smoke-v'+state.hours;
+    await route.fulfill({
+      status:200,contentType:'application/json',
+      body:JSON.stringify({levelsGeneratedAt:version,tpoGeneratedAt:version,profileGeneratedAt:version})
+    });
+  });
   await page.route(/\/analysis\/(levels|tpo)\/[A-Z]+\.json(?:\?.*)?$/,async route=>{
     const response=await route.fetch(),body=await response.json();
     body.generatedAt=new Date(Date.now()-state.hours*3600000).toISOString();
