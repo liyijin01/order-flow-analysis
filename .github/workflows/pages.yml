@@ -209,6 +209,7 @@ jobs:
           cp config/symbols.js config/analysis-rules.json _site/config/
           cp _d1-generated/profiles-*.json _site/
           cp scripts/smoke/ssd-fixture.json _site/analysis/macro/ssd.json
+          printf '{}' > _site/analysis/status.json
       - name: Start local D1 site
         run: |
           python3 -m http.server 8000 --directory _site >/tmp/d1-http.log 2>&1 &
@@ -406,6 +407,7 @@ jobs:
           cp _generated/analysis/tpo/*.json _site/analysis/tpo/
           cp _generated/analysis/macro/*.json _site/analysis/macro/
           cp _generated/flow/data/*.json _site/flow/data/
+          printf '{}' > _site/analysis/status.json
           touch _site/.nojekyll
       - name: Install Playwright core
         run: npm install --no-save playwright-core@1.55.0
