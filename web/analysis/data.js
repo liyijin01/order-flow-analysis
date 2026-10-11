@@ -66,7 +66,7 @@
     });
   }
 
-  async function fetchHistory(symbol,interval,maxBars,endTime,signal,market){
+  async function fetchHistorySerial(symbol,interval,maxBars,endTime,signal,market){
     const m=market||'um',pageMax=maxLimit(m);
     if(interval==='1M'){
       const limit=Math.min(pageMax,Math.max(1,Number(maxBars)||120));
@@ -86,6 +86,49 @@
     }
     const dedup=new Map();for(const b of all)dedup.set(b.time,b);
     return Array.from(dedup.values()).sort((a,b)=>a.time-b.time).slice(-maxBars);
+  }
+
+  function parallelPagePlan(interval,maxBars,endTime,market){
+    const step=intervalMs(interval),limit=maxLimit(market||'um');
+    const align=interval==='1w'?4*86400_000:0;
+    const aligned=Math.floor((endTime-align)/step)*step+align;
+    const pages=[];
+    for(let offset=0;offset<maxBars;offset+=limit){
+      const count=Math.min(limit,maxBars-offset);
+      const start=aligned-(offset+count-1)*step;
+      const end=offset===0?endTime:aligned-(offset-1)*step-1;
+      pages.push({startTime:Math.floor(start),endTime:Math.floor(end),limit:count});
+    }
+    return pages;
+  }
+
+  async function fetchHistory(symbol,interval,maxBars,endTime,signal,market){
+    const m=market||'um',pageMax=maxLimit(m);
+    // Monthly Binance windows have variable lengths; retain the legacy request.
+    if(interval==='1M'||Number(maxBars)<=pageMax||!intervalMsMap[interval]){
+      return fetchHistorySerial(symbol,interval,maxBars,endTime,signal,market);
+    }
+    const end=Number.isFinite(endTime)?Number(endTime):Date.now();
+    const pages=parallelPagePlan(interval,Number(maxBars),end,m);
+    const responses=await Promise.all(pages.map(page=>{
+      const params=new URLSearchParams({
+        symbol,interval,limit:String(page.limit),
+        startTime:String(page.startTime),endTime:String(page.endTime)
+      });
+      return requestJson(endpoint(m)+'?'+params.toString(),4,signal);
+    }));
+    const rows=responses.flatMap(parseRows);
+    const dedup=new Map();for(const row of rows)dedup.set(row.time,row);
+    const combined=[...dedup.values()].sort((a,b)=>a.time-b.time).slice(-maxBars);
+    const missingMiddle=responses.some((res,i)=>
+      i<responses.length-1&&(!Array.isArray(res)||res.length<pages[i].limit)
+    );
+    // Historical trading gaps may shift the old cursor beyond the fixed windows.
+    // Preserve the exact legacy result in that exceptional case.
+    if(missingMiddle||combined.length<Number(maxBars)&&responses.at(-1)?.length===pages.at(-1).limit){
+      return fetchHistorySerial(symbol,interval,maxBars,end,signal,market);
+    }
+    return combined;
   }
 
   async function fetchLatest(symbol,interval,limit,signal,market){
@@ -323,7 +366,7 @@
   }
 
   global.OrderFlowAnalysisData={
-    intervalMs,intervalSec,displayCounts,calcMap,parseRows,closedBars,fetchHistory,fetchLatest,mergeBars,capFor,
+    intervalMs,intervalSec,displayCounts,calcMap,parseRows,closedBars,fetchHistory,fetchHistorySerial,parallelPagePlan,fetchLatest,mergeBars,capFor,
     fetchProfile,fetchKeyLevels,fetchTpo,loadPrecomputed,versions,loadSnapshot,loadLive,refreshLiveBundle,formatJst,toDisplayTime,formatDisplayTime,formatDisplayTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);
