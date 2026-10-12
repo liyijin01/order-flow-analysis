@@ -332,16 +332,26 @@
     }));
     return result;
   }
-  async function loadSnapshot(symbol,needs){
+  async function snapshotVersion(signal){
+    const response=await fetch('analysis/status.json',{cache:'no-store',signal});
+    if(!response.ok)throw new Error('snapshot status HTTP '+response.status);
+    const payload=await response.json();
+    return String(payload.generatedAt||'');
+  }
+  async function loadSnapshot(symbol,needs,signal){
     const needed=(needs&&needs.precomputed)||['levels','tpo'];
-    const [payload,assets]=await Promise.all([
-      (async()=>{
-        const r=await fetch('analysis/data/'+symbol+'.json',{cache:'no-store'});
-        if(!r.ok)throw new Error('snapshot '+symbol+' HTTP '+r.status);
-        return r.json();
-      })(),
-      loadPrecomputed(symbol,needed.filter(x=>x!=='profile'),null)
-    ]);
+    const started=performance.now(),timing={snapshotMs:0,precomputedMs:0,klinesMs:0};
+    const snapshotJob=(async()=>{
+      const response=await fetch('analysis/data/'+symbol+'.json',{cache:'no-store',signal});
+      if(!response.ok)throw new Error('snapshot '+symbol+' HTTP '+response.status);
+      const payload=await response.json();
+      timing.snapshotMs=performance.now()-started;
+      return payload;
+    })();
+    const preStart=performance.now();
+    const assetJob=loadPrecomputed(symbol,needed.filter(x=>x!=='profile'),signal)
+      .finally(()=>{timing.precomputedMs=performance.now()-preStart;});
+    const [payload,assets]=await Promise.all([snapshotJob,assetJob]);
     const series={},errors={...(payload.errors||{}),...assets.errors};
     for(const [key,value] of Object.entries(payload.series||{}))series[key]=parseRows(value);
     return{
@@ -349,7 +359,7 @@
       generatedAt:payload.generatedAt,cutoffUtc:payload.cutoffUtc,
       series,profile:payload.profile||null,
       keyLevels:assets.keyLevels,tpo:assets.tpo,errors,
-      precomputedVersions:assets.versions
+      precomputedVersions:assets.versions,timing
     };
   }
 
@@ -473,6 +483,6 @@
   global.OrderFlowAnalysisData={
     intervalMs,intervalSec,displayCounts,calcMap,parseRows,closedBars,fetchHistory,fetchHistorySerial,parallelPagePlan,fetchLatest,mergeBars,capFor,
     fetchProfile,fetchKeyLevels,fetchTpo,loadPrecomputed,versions,loadSnapshot,loadLive,refreshLiveBundle,
-    requestJson,isLiveUnavailable,getLiveAvailability,probeLive,formatJst,toDisplayTime,formatDisplayTime,formatDisplayTick
+    requestJson,isLiveUnavailable,getLiveAvailability,probeLive,snapshotVersion,formatJst,toDisplayTime,formatDisplayTime,formatDisplayTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);

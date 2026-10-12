@@ -11,6 +11,7 @@
 button,select{font:inherit;font-size:11px;color:#dce3ef;background:#232b3c;border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:7px 10px}
 button{cursor:pointer}button.active{background:#34425b;border-color:#8aa4cd;color:#fff}button:disabled{opacity:.55}
 #status{font-size:10px;color:#8e98aa;min-height:16px;margin-bottom:8px}.error{color:#ff9f9f!important}
+.fallback-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 11px;margin-bottom:9px;background:#382d29;border:1px solid #8a6241;border-radius:4px;color:#ffe4c6;font-size:11px;line-height:1.6}.fallback-banner[hidden],body.snapshot .fallback-banner{display:none!important}.fallback-banner button{flex-shrink:0;border:1px solid #a07c56;background:#4c3a2b;color:#fff0dc}
 #flowCapture{background:#1b2130;border:1px solid rgba(255,255,255,.09);padding:10px}.capture-title{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;margin-bottom:6px}
 #boardTitle{font-size:20px;font-weight:700}.capture-meta,#infoLine{font-size:10px;color:#8e98aa}#infoLine{margin-bottom:7px;color:#cbd3e1}
 #flowChartWrap{position:relative}#flowChart{width:100%;height:980px;border:1px solid rgba(255,255,255,.09);background:#1b2130}
@@ -31,6 +32,7 @@ body.snapshot main{max-width:1600px;padding:0}body.snapshot .topbar,body.snapsho
   <button id="resetViewBtn">重置视图</button><button id="downloadBtn">下载 PNG</button>
 </div>
 <div id="status">Loading…</div>
+<div id="fallbackBanner" class="fallback-banner" role="status" aria-live="polite" hidden></div>
 <section id="flowCapture">
   <div class="capture-title"><div id="boardTitle">BTCUSDT.P · 15m</div><div class="capture-meta">AVWAP / PERP CVD / SPOT CVD / DEPTH</div></div>
   <div id="infoLine">Loading market data…</div>
@@ -53,5 +55,6 @@ body.snapshot main{max-width:1600px;padding:0}body.snapshot .topbar,body.snapsho
 <script src="web/chart/render/primitives/vline.js"></script>
 <script src="web/flow/engine.js"></script>
 <script src="web/flow/data.js"></script>
+<script src="web/analysis/ui.js"></script>
 <script src="web/flow/main.js"></script>
 </body></html>

@@ -52,5 +52,26 @@
       item.appendChild(mark);item.appendChild(document.createTextNode(e.label));root.appendChild(item);
     }
   }
-  global.OrderFlowAnalysisUi={formatJstClock,formatCutoffJst,formatRemaining,legendEntries,renderLegend};
+  function setFallbackBanner(root,active,cutoffUtc,retry){
+    if(!root)return;
+    root.hidden=!active;
+    if(!active)return;
+    let message=root.querySelector('.fallback-message'),button=root.querySelector('button');
+    if(!message){
+      message=document.createElement('span');
+      message.className='fallback-message';root.appendChild(message);
+    }
+    if(!button){
+      button=document.createElement('button');button.type='button';
+      button.textContent='重试实时';root.appendChild(button);
+    }
+    message.textContent='实时数据不可用：无法从 Binance 合约接口取数（可能是当前网络位置受限）。已显示每日快照，数据截至 '+
+      formatCutoffJst(cutoffUtc)+' JST。';
+    button.onclick=async()=>{
+      button.disabled=true;
+      try{await retry();}
+      finally{button.disabled=false;}
+    };
+  }
+  global.OrderFlowAnalysisUi={formatJstClock,formatCutoffJst,formatRemaining,legendEntries,renderLegend,setFallbackBanner};
 })(typeof globalThis!=='undefined'?globalThis:window);

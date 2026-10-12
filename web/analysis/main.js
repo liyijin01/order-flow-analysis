@@ -7,7 +7,7 @@
   const WATERMARK_COLOR='rgba(196,140,60,.30)';
   const $=id=>document.getElementById(id);
   const state={
-    symbol:'BTCUSDT',timeframe:'1h',template:null,viewMode:'quarter',snapshot:false,rules:null,bundle:null,chart:null,candles:null,volume:null,quarterBands:[],primitive:null,
+    symbol:'BTCUSDT',timeframe:'1h',template:null,viewMode:'quarter',snapshot:false,explicitSnapshot:false,fallback:false,restoreRequested:false,fallbackVersion:null,rules:null,bundle:null,chart:null,candles:null,volume:null,quarterBands:[],primitive:null,
     loadToken:0,refreshTimer:null,model:null,viewKey:null,lastDisplayCount:0,lastFullLoadAt:0,refreshWarning:null,
     inFlight:null,abortController:null,lastSuccessAt:0,defaultViewRange:null,resizeToken:0,resizeSettle:null,watermark:null,countdownTimer:null,crosshairTime:null,priceScaleMargins:null,timing:null
   };
@@ -290,6 +290,45 @@
       handler.infoLine({state,model,line2,fmtPrice,weekLabel,monthLabelFromStart},bar,add);
     }
   }
+  let stopRefreshLoop=null,refreshLoopMode=null;
+  function renderFallbackBanner(){
+    Ui.setFallbackBanner($('fallbackBanner'),state.fallback,state.bundle&&state.bundle.cutoffUtc,async()=>{
+      const recovered=await D.probeLive();
+      if(recovered&&state.fallback&&!state.restoreRequested){
+        state.restoreRequested=true;
+        void refresh(true,{cancelPrevious:true});
+      }
+    });
+  }
+  async function pollFallbackSnapshot(){
+    if(!state.fallback||state.inFlight||document.hidden)return;
+    try{
+      const revision=await D.snapshotVersion();
+      if(!state.fallbackVersion){state.fallbackVersion=revision;return;}
+      if(revision&&revision!==state.fallbackVersion){
+        await refresh(true,{scheduled:true});
+        state.fallbackVersion=revision;
+      }
+    }catch(error){console.warn('Archived snapshot status unavailable');}
+  }
+  function configureRefreshLoop(){
+    if(state.explicitSnapshot)return;
+    const mode=state.fallback?'fallback':'live';
+    if(refreshLoopMode===mode)return;
+    if(stopRefreshLoop)stopRefreshLoop();
+    refreshLoopMode=mode;
+    const seconds=Math.max(1,Number(state.rules.display.refreshSeconds)||60);
+    stopRefreshLoop=R.startRefreshLoop(state,mode==='fallback'?600000:seconds*1000,
+      mode==='fallback'?pollFallbackSnapshot:refresh);
+  }
+  function enterFallback(){
+    state.snapshot=true;state.fallback=true;state.restoreRequested=false;
+  }
+  function exitFallback(){
+    if(state.explicitSnapshot)return;
+    state.snapshot=false;state.fallback=false;state.restoreRequested=false;state.fallbackVersion=null;
+  }
+
   function updateCountdown(){
     const el=$('closeCountdown');el.style.display='none';el.textContent='';
     if(state.snapshot||profileTemplate()||!state.model){if(state.primitive)state.primitive.setCountdown(null);return;}
@@ -334,7 +373,8 @@
       $('status').classList.add('error');
     }else{
       const t=state.timing,seconds=ms=>(Math.max(0,Number(ms)||0)/1000).toFixed(1)+'s';
-      const timing=t?' · 加载 '+seconds(t.totalMs)+'（K线 '+seconds(t.klinesMs)+
+      const timing=t?' · 加载 '+seconds(t.totalMs)+'（'+
+        (state.snapshot?'快照 '+seconds(t.snapshotMs):'K线 '+seconds(t.klinesMs))+
         ' · 预计算 '+seconds(t.precomputedMs)+' · 计算绘制 '+seconds(t.renderMs)+'）':'';
       $('status').textContent='Loaded '+model.display.length+' display candles · '+
         model.regions.length+' drawn regions · '+model.levels.length+' drawn key lines'+
@@ -345,20 +385,36 @@
 
   async function getBundle(token,forceFull,signal){
     const progress=$('status');
-    if(state.snapshot){
+    const archived=async()=>{
       progress.textContent='Loading archived snapshot…';
-      return{bundle:await D.loadSnapshot(state.symbol,dataNeeds()),full:true,failures:[]};
+      return{bundle:await D.loadSnapshot(state.symbol,dataNeeds(),signal),full:true,failures:[]};
+    };
+    if(state.snapshot&&!state.restoreRequested)return archived();
+    if(!state.explicitSnapshot&&!state.restoreRequested&&D.getLiveAvailability().unavailable){
+      enterFallback();return archived();
     }
-    const full=forceFull||!state.bundle||state.bundle.symbol!==state.symbol||(Date.now()-state.lastFullLoadAt)>=30*60*1000;
-    if(full){
-      const bundle=await D.loadLive(state.symbol,state.timeframe,p=>{
-        if(token===state.loadToken)progress.textContent='Loading '+p.done+'/'+p.total+' · '+p.label;
-      },signal,dataNeeds());
-      state.lastFullLoadAt=Date.now();
-      return{bundle,full:true,failures:[]};
+    try{
+      const full=forceFull||state.restoreRequested||!state.bundle||
+        state.bundle.symbol!==state.symbol||(Date.now()-state.lastFullLoadAt)>=30*60*1000;
+      if(full){
+        const bundle=await D.loadLive(state.symbol,state.timeframe,p=>{
+          if(token===state.loadToken)progress.textContent='Loading '+p.done+'/'+p.total+' · '+p.label;
+        },signal,dataNeeds());
+        state.lastFullLoadAt=Date.now();
+        exitFallback();
+        return{bundle,full:true,failures:[]};
+      }
+      const inc=await D.refreshLiveBundle(state.bundle,state.symbol,state.timeframe,signal,dataNeeds());
+      exitFallback();
+      return{bundle:inc.bundle,full:false,failures:inc.failures||[]};
+    }catch(error){
+      if(signal&&signal.aborted)throw error;
+      if(D.isLiveUnavailable(error)||D.getLiveAvailability().unavailable){
+        enterFallback();return archived();
+      }
+      if(state.restoreRequested){enterFallback();return archived();}
+      throw error;
     }
-    const inc=await D.refreshLiveBundle(state.bundle,state.symbol,state.timeframe,signal,dataNeeds());
-    return{bundle:inc.bundle,full:false,failures:inc.failures||[]};
   }
 
   async function refresh(forceFull,options){
@@ -377,11 +433,16 @@
         const phase=result.bundle.timing||{};
         state.timing={
           klinesMs:Number(phase.klinesMs)||0,
+          snapshotMs:Number(phase.snapshotMs)||0,
           precomputedMs:Number(phase.precomputedMs)||0,
           renderMs:performance.now()-renderStart,
           totalMs:performance.now()-started
         };
         updateHeader(model);
+        renderFallbackBanner();configureRefreshLoop();
+        if(state.fallback&&!state.fallbackVersion){
+          void D.snapshotVersion().then(rev=>{if(state.fallback)state.fallbackVersion=rev;}).catch(()=>{});
+        }
         return model;
       },
       error:(e)=>{
@@ -404,7 +465,7 @@
     updateSelectionState();
     $('infoLine').textContent=symbolMeta().displayName+' · '+tfLabel(state.timeframe)+' · 加载中…';
     $('status').textContent='Loading…';$('status').classList.remove('error');
-    const q=new URLSearchParams(location.search);q.set('symbol',state.symbol);q.set('tf',state.timeframe);q.set('tpl',state.template);if(templateConfig().keepsViewParam===true)q.set('view',state.viewMode);else q.delete('view');if(state.snapshot)q.set('snapshot','1');
+    const q=new URLSearchParams(location.search);q.set('symbol',state.symbol);q.set('tf',state.timeframe);q.set('tpl',state.template);if(templateConfig().keepsViewParam===true)q.set('view',state.viewMode);else q.delete('view');if(state.explicitSnapshot)q.set('snapshot','1');
     history.replaceState(null,'',location.pathname+'?'+q.toString());refresh(true,{cancelPrevious:true});
   }
 
@@ -413,7 +474,7 @@
     state.template=template;state.viewMode='quarter';
     const cfg=templateConfig();if(!(cfg.timeframes||[]).includes(state.timeframe))state.timeframe=cfg.defaultTimeframe||(cfg.timeframes||[])[0]||state.timeframe;
     state.viewKey=null;state.defaultViewRange=null;state.bundle=null;state.lastFullLoadAt=0;state.refreshWarning=null;updateSelectionState();syncVolumeLayer();
-    const q=new URLSearchParams(location.search);q.set('symbol',state.symbol);q.set('tf',state.timeframe);q.set('tpl',state.template);if(templateConfig().keepsViewParam===true)q.set('view',state.viewMode);else q.delete('view');if(state.snapshot)q.set('snapshot','1');
+    const q=new URLSearchParams(location.search);q.set('symbol',state.symbol);q.set('tf',state.timeframe);q.set('tpl',state.template);if(templateConfig().keepsViewParam===true)q.set('view',state.viewMode);else q.delete('view');if(state.explicitSnapshot)q.set('snapshot','1');
     history.replaceState(null,'',location.pathname+'?'+q.toString());refresh(true,{cancelPrevious:true});
   }
 
@@ -445,7 +506,7 @@
     state.symbol=SYMBOLS[q.get('symbol')]?q.get('symbol'):'BTCUSDT';
     state.viewMode=['quarter','recent'].includes(q.get('view'))?q.get('view'):'quarter';
 
-    state.snapshot=q.get('snapshot')==='1';
+    state.explicitSnapshot=q.get('snapshot')==='1';state.snapshot=state.explicitSnapshot;
     if(state.snapshot)document.body.classList.add('snapshot');
     await loadRules();
     const ids=Object.keys(state.rules.templates||{}),defaultTemplate=state.rules.display.defaultTemplate||ids[0];
@@ -484,11 +545,15 @@
       candleStyle:()=>state.candles?state.candles.options():null,
       chartInfo:()=>({line1:$('chartInfo1').textContent,line2:$('chartInfo2').textContent,countdown:state.primitive&&state.primitive.model&&state.primitive.model.countdown?state.primitive.model.countdown.text:'',watermark:symbolMeta().displayName+', '+displayTfLabel(),watermarkColor:WATERMARK_COLOR})
     };
+    window.addEventListener('orderflow-live-restored',()=>{
+      if(!state.fallback||state.explicitSnapshot)return;
+      state.restoreRequested=true;
+      void refresh(true,{cancelPrevious:true});
+    });
     await refresh(true);
-    if(!state.snapshot){
+    if(!state.explicitSnapshot){
       state.countdownTimer=setInterval(updateCountdown,1000);updateCountdown();
-      const refreshMs=Number(state.rules.display.refreshSeconds||60)*1000;
-      R.startRefreshLoop(state,refreshMs,refresh);
+      configureRefreshLoop();
     }
   }
   init();
