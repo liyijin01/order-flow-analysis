@@ -162,9 +162,26 @@ const cases=[
             waitUntil:'domcontentloaded',timeout:60000});
           await explicit.waitForFunction(()=>window.__flowDebug?.model&&
             document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:20000});
-          const explicitWidth=await explicit.locator('#flowChart').evaluate(el=>el.clientWidth);
+          let explicitWidth=await explicit.locator('#flowChart').evaluate(el=>el.clientWidth);
           if(explicitWidth!==fallbackWidth){
-            throw new Error('Flow snapshot chart widths differ: fallback='+
+            // Borders and scrollbars can add a couple pixels. Normalize the actual
+            // rendered chart width, then rebuild the viewport-anchored CVD model.
+            const viewport=explicit.viewportSize();
+            await explicit.setViewportSize({
+              width:viewport.width+(fallbackWidth-explicitWidth),
+              height:viewport.height
+            });
+            await explicit.waitForFunction(
+              width=>document.getElementById('flowChart').clientWidth===width,
+              fallbackWidth,{timeout:10000}
+            );
+            await explicit.waitForTimeout(150);
+            await explicit.waitForFunction(()=>window.__flowDebug?.state?.inFlight===null);
+            await explicit.evaluate(()=>window.__flowDebug.refresh(true));
+            explicitWidth=await explicit.locator('#flowChart').evaluate(el=>el.clientWidth);
+          }
+          if(explicitWidth!==fallbackWidth){
+            throw new Error('Flow snapshot chart widths differ after correction: fallback='+
               fallbackWidth+' explicit='+explicitWidth);
           }
           const expected=await explicit.evaluate(flowSignature);
