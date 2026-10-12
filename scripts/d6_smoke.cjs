@@ -184,6 +184,8 @@ function assertCvdConsistency(meta,label){
       await page.close();
     }
 
+    await require('./smoke/fallback.cjs').flowFallback.run(browser);
+    console.log('PASS flow fallback with restricted Binance interface');
     console.log('D6 browser smoke passed: six panes, AVWAP/CVD/depth, switching, abort, hidden/recovery, mobile and export.');
   }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1);});

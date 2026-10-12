@@ -280,6 +280,14 @@ jobs:
           sleep 2
       - name: Flow browser regression
         run: node scripts/d6_smoke.cjs
+      - name: Upload D20c Flow fallback screenshot
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: d20c-flow-fallback-screenshot
+          path: d20c-fallback/flow-fallback.png
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Generate six real-market flow PNGs
         env:
           FLOW_PNG_DIR: _d6-artifacts/png

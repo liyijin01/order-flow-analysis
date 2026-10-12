@@ -116,6 +116,8 @@ const cases=[
         await waitForLive(page,'__analysisDebug');
         if((await page.locator('#fallbackBanner').isVisible()))throw new Error('Analysis banner remains after recovery');
         if(blocked>2)throw new Error('Analysis blocked request count changed: '+blocked);
+        console.log('D20c analysis fallback elapsedMs='+elapsed+' blockedFapi='+blocked+
+          ' symbolSwitchExtraFapi='+(blocked-before)+' restored=true');
       }finally{await page.close();}
     }
   },
@@ -169,8 +171,10 @@ const cases=[
         available=true;
         await page.click('#fallbackBanner button');
         await waitForLive(page,'__flowDebug');
+        console.log('D20c flow fallback elapsedMs='+elapsed+' blockedFapi='+fapiBlocked+
+          ' symbolSwitchExtraFapi='+(fapiBlocked-before)+' restored=true');
       }finally{await page.close();}
     }
   }
 ];
-module.exports={cases};
+module.exports={cases:[cases[0]],flowFallback:cases[1]};

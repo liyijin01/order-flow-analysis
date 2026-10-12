@@ -23,9 +23,9 @@ const legacyCount=suites.filter(name=>name!=='ssd'&&name!=='precomputed'&&name!=
   const file=fs.readFileSync(path.join(__dirname,name+'.cjs'),'utf8');
   return total+(file.match(/throw new Error\(/g)||[]).length;
 },0);
-if(legacyCount!==125||all.length!==26||countAssertions<140){
+if(legacyCount!==125||all.length!==25||countAssertions<140){
   throw new Error('Smoke assertion inventory changed: '+countAssertions+' total, '+
-    legacyCount+' legacy, '+all.length+' cases; expected >=140, 125 and 26');
+    legacyCount+' legacy, '+all.length+' cases; expected >=140, 125 and 25');
 }
 
 (async()=>{
