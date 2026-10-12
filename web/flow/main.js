@@ -5,7 +5,7 @@
   const SYMBOLS=window.ORDER_FLOW_SYMBOLS||{},P=window.OrderFlowAnnotationPrimitives;
   const $=id=>document.getElementById(id);
   const state={
-    symbol:'BTCUSDT',timeframe:'15m',anchorMode:'swing',manualAnchorIso:null,snapshot:false,rules:null,bundle:null,model:null,
+    symbol:'BTCUSDT',timeframe:'15m',anchorMode:'swing',manualAnchorIso:null,snapshot:false,explicitSnapshot:false,fallback:false,restoreRequested:false,fallbackVersion:null,timing:null,rules:null,bundle:null,model:null,
     chart:null,candles:null,band:null,anchorLine:null,s2u:null,s2l:null,perpCvd:null,perpLive:null,spotCvd:null,spotLive:null,
     depthBid:null,depthAsk:null,depthDelta:[],depthCutoff:[],loadToken:0,inFlight:null,abortController:null,refreshTimer:null,
     lastSuccessAt:0,lastFullLoadAt:0,refreshWarning:null,viewKey:null,lastDisplayCount:0,defaultViewRange:null,resizeToken:0,resizeSettle:null
@@ -259,7 +259,13 @@
     }
     const errs=Object.keys(model.errors||{});
     const invalid=model.depthInvalidDays.length?' · depth invalid days '+model.depthInvalidDays.length:'';
-    $('status').textContent=state.refreshWarning?'刷新失败：'+state.refreshWarning:'Loaded '+model.display.length+' bars · AVWAP '+state.anchorMode+' · depth rejected '+model.depthRejected+'/'+model.depthTotal+invalid+(errs.length?' · 缺失 '+errs.join(', '):'');
+    const t=state.timing,seconds=ms=>(Math.max(0,Number(ms)||0)/1000).toFixed(1)+'s';
+    const timing=state.snapshot&&t?' · 加载 '+seconds(t.totalMs)+'（快照 '+seconds(t.snapshotMs)+
+      ' · 预计算 '+seconds(t.precomputedMs)+' · 计算绘制 '+seconds(t.renderMs)+'）':'';
+    $('status').textContent=state.refreshWarning?'刷新失败：'+state.refreshWarning:
+      'Loaded '+model.display.length+' bars · AVWAP '+state.anchorMode+
+      ' · depth rejected '+model.depthRejected+'/'+model.depthTotal+invalid+
+      (errs.length?' · 缺失 '+errs.join(', '):'')+timing;
     $('status').classList.toggle('error',!!state.refreshWarning||errs.length>0);
   }
 
@@ -285,22 +291,91 @@
     const spec=R.applyDefaultView(state.chart,state.rules,state.timeframe,rebuilt.display.length,state);rebuilt.visibleBars=spec.visible;
   }
 
-  async function getBundle(token,full,signal){
-    if(state.snapshot)return{bundle:await FD.loadSnapshot(state.symbol,signal),full:true,failures:[]};
-    const doFull=full||!state.bundle||state.bundle.symbol!==state.symbol||Date.now()-state.lastFullLoadAt>=30*60*1000;
-    if(doFull){
-      const bundle=await FD.loadLive(state.symbol,state.anchorMode,manualMs(),p=>{if(token===state.loadToken)$('status').textContent='Loading '+p.done+'/'+p.total+' · '+p.label;},signal);
-      state.lastFullLoadAt=Date.now();return{bundle,full:true,failures:[]};
-    }
-    return FD.refreshLiveBundle(state.bundle,state.symbol,state.anchorMode,manualMs(),signal);
+  const Ui=window.OrderFlowAnalysisUi;
+  let stopRefreshLoop=null,refreshLoopMode=null;
+  function renderFallbackBanner(){
+    Ui.setFallbackBanner($('fallbackBanner'),state.fallback,state.bundle&&state.bundle.cutoffUtc,async()=>{
+      const recovered=await D.probeLive();
+      if(recovered&&state.fallback&&!state.restoreRequested){
+        state.restoreRequested=true;void refresh(true,{cancelPrevious:true});
+      }
+    });
   }
+  async function pollFallbackSnapshot(){
+    if(!state.fallback||state.inFlight||document.hidden)return;
+    try{
+      const revision=await D.snapshotVersion();
+      if(!state.fallbackVersion){state.fallbackVersion=revision;return;}
+      if(revision&&revision!==state.fallbackVersion){
+        await refresh(true,{scheduled:true});
+        state.fallbackVersion=revision;
+      }
+    }catch(error){console.warn('Flow archived snapshot status unavailable');}
+  }
+  function configureRefreshLoop(){
+    if(state.explicitSnapshot)return;
+    const mode=state.fallback?'fallback':'live';
+    if(mode===refreshLoopMode)return;
+    if(stopRefreshLoop)stopRefreshLoop();
+    refreshLoopMode=mode;
+    const ms=Math.max(1,Number(state.rules.display.refreshSeconds)||60)*1000;
+    stopRefreshLoop=R.startRefreshLoop(state,mode==='fallback'?600000:ms,
+      mode==='fallback'?pollFallbackSnapshot:refresh);
+  }
+  function enterFallback(){state.snapshot=true;state.fallback=true;state.restoreRequested=false;}
+  function exitFallback(){
+    if(state.explicitSnapshot)return;
+    state.snapshot=false;state.fallback=false;state.restoreRequested=false;state.fallbackVersion=null;
+  }
+
+  async function getBundle(token,full,signal){
+    const archived=async()=>({
+      bundle:await FD.loadSnapshot(state.symbol,signal),full:true,failures:[]
+    });
+    if(state.snapshot&&!state.restoreRequested)return archived();
+    if(!state.explicitSnapshot&&!state.restoreRequested&&D.getLiveAvailability().unavailable){
+      enterFallback();return archived();
+    }
+    try{
+      const doFull=full||state.restoreRequested||!state.bundle||
+        state.bundle.symbol!==state.symbol||Date.now()-state.lastFullLoadAt>=30*60*1000;
+      if(doFull){
+        const payload=await FD.loadLive(state.symbol,state.anchorMode,manualMs(),p=>{
+          if(token===state.loadToken)$('status').textContent='Loading '+p.done+'/'+p.total+' · '+p.label;
+        },signal);
+        state.lastFullLoadAt=Date.now();exitFallback();
+        return{bundle:payload,full:true,failures:[]};
+      }
+      const result=await FD.refreshLiveBundle(state.bundle,state.symbol,state.anchorMode,manualMs(),signal);
+      exitFallback();return result;
+    }catch(error){
+      if(signal&&signal.aborted)throw error;
+      if(D.isLiveUnavailable(error)||D.getLiveAvailability().unavailable){
+        enterFallback();return archived();
+      }
+      if(state.restoreRequested){enterFallback();return archived();}
+      throw error;
+    }
+  }
+
   async function refresh(forceFull,options){
+    const started=performance.now();
     return R.runRefresh(state,forceFull,options,{
       before:()=>loadRules(),load:(token,full,signal)=>getBundle(token,full,signal),
       apply:async result=>{
+        const renderStart=performance.now();
         state.bundle=result.bundle;state.refreshWarning=result.failures&&result.failures.length?result.failures.map(x=>x.interval).join(', ')+' 更新失败':null;
         const model=buildModel(result.bundle);state.model=model;const needsSettle=applySeries(model);renderModelDetails(model);if(needsSettle)await settleDefault();
-        const finalModel=state.model;state.lastSuccessAt=Date.now();renderModelDetails(finalModel);updateHeader(finalModel);return finalModel;
+        const finalModel=state.model;state.lastSuccessAt=Date.now();
+        const phase=result.bundle.timing||{};
+        state.timing={snapshotMs:Number(phase.snapshotMs)||0,precomputedMs:Number(phase.precomputedMs)||0,
+          klinesMs:Number(phase.klinesMs)||0,renderMs:performance.now()-renderStart,
+          totalMs:performance.now()-started};
+        renderModelDetails(finalModel);updateHeader(finalModel);renderFallbackBanner();configureRefreshLoop();
+        if(state.fallback&&!state.fallbackVersion){
+          void D.snapshotVersion().then(rev=>{if(state.fallback)state.fallbackVersion=rev;}).catch(()=>{});
+        }
+        return finalModel;
       },
       error:e=>{console.error(e);state.refreshWarning=String(e.message||e);$('status').textContent='加载失败：'+state.refreshWarning;$('status').classList.add('error');return null;}
     });
@@ -311,7 +386,7 @@
     if(symbol&&SYMBOLS[symbol])state.symbol=symbol;if(['15m','30m'].includes(tf))state.timeframe=tf;
     if(['swing','week','quarter','manual'].includes(anchorMode))state.anchorMode=anchorMode;
     if(symbolChanged){state.bundle=null;state.lastFullLoadAt=0;}
-    const q=new URLSearchParams(location.search);q.set('symbol',state.symbol);q.set('tf',state.timeframe);q.set('anchor',state.anchorMode);if(state.manualAnchorIso)q.set('avwapAnchor',state.manualAnchorIso);if(state.snapshot)q.set('snapshot','1');
+    const q=new URLSearchParams(location.search);q.set('symbol',state.symbol);q.set('tf',state.timeframe);q.set('anchor',state.anchorMode);if(state.manualAnchorIso)q.set('avwapAnchor',state.manualAnchorIso);if(state.explicitSnapshot)q.set('snapshot','1');
     history.replaceState(null,'',location.pathname+'?'+q.toString());refresh(symbolChanged,{cancelPrevious:true});
   }
 
@@ -332,7 +407,7 @@
   async function init(){
     const q=new URLSearchParams(location.search);
     state.symbol=SYMBOLS[q.get('symbol')]?q.get('symbol'):'BTCUSDT';state.timeframe=['15m','30m'].includes(q.get('tf'))?q.get('tf'):'15m';
-    state.anchorMode=['swing','week','quarter','manual'].includes(q.get('anchor'))?q.get('anchor'):'swing';state.manualAnchorIso=q.get('avwapAnchor');state.snapshot=q.get('snapshot')==='1';
+    state.anchorMode=['swing','week','quarter','manual'].includes(q.get('anchor'))?q.get('anchor'):'swing';state.manualAnchorIso=q.get('avwapAnchor');state.explicitSnapshot=q.get('snapshot')==='1';state.snapshot=state.explicitSnapshot;
     if(state.snapshot)document.body.classList.add('snapshot');
     await loadRules();createChart();
     document.querySelectorAll('[data-symbol]').forEach(b=>b.addEventListener('click',()=>setSelection(b.dataset.symbol,state.timeframe,state.anchorMode)));
@@ -341,8 +416,12 @@
     $('resetViewBtn').addEventListener('click',resetView);$('downloadBtn').addEventListener('click',downloadPng);
     window.__flowDebug={state,get model(){return state.model;},refresh:(full)=>refresh(!!full),view,resetView,paneCount:()=>state.chart.panes().length,
       seriesTimes:()=>({price:state.model?state.model.display.map(x=>x.time):[],perp:state.model?state.model.perp.points.map(x=>x.time):[],spot:state.model?state.model.spot.points.map(x=>x.time):[],depth:state.model?state.model.depth.rows.map(x=>x.time):[]})};
+    window.addEventListener('orderflow-live-restored',()=>{
+      if(!state.fallback||state.explicitSnapshot)return;
+      state.restoreRequested=true;void refresh(true,{cancelPrevious:true});
+    });
     await refresh(true);
-    if(!state.snapshot)R.startRefreshLoop(state,Number(state.rules.display.refreshSeconds||60)*1000,refresh);
+    if(!state.explicitSnapshot)configureRefreshLoop();
   }
   init();
 })();

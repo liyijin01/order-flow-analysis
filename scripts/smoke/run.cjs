@@ -3,7 +3,7 @@ const fs=require('fs');
 const path=require('path');
 const {chromium}=require('playwright-core');
 
-const suites=['quarter','combined','common','rvwap','weekly','monthly','mprofile','wprofile','ssd','precomputed'];
+const suites=['quarter','combined','common','rvwap','weekly','monthly','mprofile','wprofile','ssd','precomputed','fallback'];
 const requested=process.argv[2];
 if(requested&&!suites.includes(requested)){
   console.error('Unknown smoke suite: '+requested+'. Available: '+suites.join(', '));
@@ -19,13 +19,13 @@ const countAssertions=suites.reduce((total,name)=>{
   const file=fs.readFileSync(path.join(__dirname,name+'.cjs'),'utf8');
   return total+(file.match(/throw new Error\(/g)||[]).length;
 },0);
-const legacyCount=suites.filter(name=>name!=='ssd'&&name!=='precomputed').reduce((total,name)=>{
+const legacyCount=suites.filter(name=>name!=='ssd'&&name!=='precomputed'&&name!=='fallback').reduce((total,name)=>{
   const file=fs.readFileSync(path.join(__dirname,name+'.cjs'),'utf8');
   return total+(file.match(/throw new Error\(/g)||[]).length;
 },0);
-if(legacyCount!==125||all.length!==24||countAssertions<140){
+if(legacyCount!==125||all.length!==25||countAssertions<140){
   throw new Error('Smoke assertion inventory changed: '+countAssertions+' total, '+
-    legacyCount+' legacy, '+all.length+' cases; expected >=140, 125 and 24');
+    legacyCount+' legacy, '+all.length+' cases; expected >=140, 125 and 25');
 }
 
 (async()=>{
