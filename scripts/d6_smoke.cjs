@@ -18,13 +18,13 @@ function marketRows(symbol,interval){
 }
 
 async function routeMarket(page,requests,opts={}){
-  let spotFailed=false;
+  let spotFailed=0;
   await page.route(/https:\/\/(?:fapi\.binance\.com\/fapi\/v1\/klines|api\.binance\.com\/api\/v3\/klines).*/,async route=>{
     const u=new URL(route.request().url()),symbol=u.searchParams.get('symbol'),interval=u.searchParams.get('interval')||'15m',limit=Number(u.searchParams.get('limit'))||500;
     const spot=u.hostname==='api.binance.com',endRaw=u.searchParams.get('endTime'),end=endRaw==null?Infinity:Number(endRaw);
     requests.push({symbol,interval,spot,limit,endTime:endRaw});
     if(opts.delaySymbol===symbol)await new Promise(r=>setTimeout(r,opts.delayMs||900));
-    if(opts.failFirstSpot&&spot&&!spotFailed){spotFailed=true;await route.fulfill({status:500,body:'synthetic spot failure'});return;}
+    if(opts.failFirstSpot&&spot&&spotFailed<4){spotFailed++;await route.fulfill({status:500,body:'synthetic spot failure'});return;}
     const body=marketRows(symbol,interval).filter(r=>Number(r[0])<=end).slice(-limit);
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
   });
