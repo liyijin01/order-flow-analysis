@@ -20,23 +20,119 @@
   function endpoint(market){return market==='spot'?'https://api.binance.com/api/v3/klines':'https://fapi.binance.com/fapi/v1/klines';}
   function maxLimit(market){return market==='spot'?1000:1500;}
 
-  async function requestJson(url,retries,signal){
-    let error=null;
-    for(let i=0;i<(retries||4);i++){
-      let response;
-      try{response=await fetch(url,{cache:'no-store',signal});}
-      catch(e){
-        if(isAbort(e,signal))throw e;
-        error=e;if(i+1<(retries||4))await sleep(500*(2**i),signal);continue;
-      }
-      if(response.ok)return response.json();
-      if(response.status===429||response.status===418){
-        const ra=Number(response.headers.get('Retry-After'));
-        await sleep(Number.isFinite(ra)&&ra>0?ra*1000:1000*(2**i),signal);error=new Error('HTTP '+response.status);continue;
-      }
-      throw new Error('HTTP '+response.status);
+  // A restricted Binance response is shared across this tab's requests and pages.
+  // A single confirmed failure stops sibling futures and prevents retry storms.
+  const activeLiveControllers=new Set();
+  const liveAvailability={unavailable:false,reason:null,since:0};
+  let liveCheckTimer=null,liveCheckPromise=null;
+  const PROBE_INTERVAL_MS=5*60*1000;
+  function liveUnavailableError(reason){
+    const error=new Error('Binance live interface unavailable: '+String(reason||liveAvailability.reason||'network/CORS'));
+    error.name='LiveUnavailableError';
+    error.code='LIVE_UNAVAILABLE';
+    return error;
+  }
+  function isLiveUnavailable(error){
+    return !!(error&&(error.code==='LIVE_UNAVAILABLE'||error.name==='LiveUnavailableError'));
+  }
+  function markLiveUnavailable(reason){
+    if(liveAvailability.unavailable)return;
+    liveAvailability.unavailable=true;
+    liveAvailability.reason=String(reason||'network/CORS');
+    liveAvailability.since=Date.now();
+    for(const controller of activeLiveControllers)controller.abort();
+    if(!liveCheckTimer){
+      liveCheckTimer=setInterval(()=>{void probeLive();},PROBE_INTERVAL_MS);
+      if(liveCheckTimer&&typeof liveCheckTimer.unref==='function')liveCheckTimer.unref();
     }
-    throw error||new Error('request failed');
+  }
+  function resetLiveAvailability(){
+    if(!liveAvailability.unavailable)return;
+    liveAvailability.unavailable=false;
+    liveAvailability.reason=null;
+    liveAvailability.since=0;
+    if(liveCheckTimer){clearInterval(liveCheckTimer);liveCheckTimer=null;}
+    if(typeof global.dispatchEvent==='function'&&typeof global.Event==='function'){
+      global.dispatchEvent(new global.Event('orderflow-live-restored'));
+    }
+  }
+  async function probeLive(){
+    if(liveCheckPromise)return liveCheckPromise;
+    liveCheckPromise=(async()=>{
+      const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),4500);
+      try{
+        const response=await fetch('https://fapi.binance.com/fapi/v1/time',{
+          signal:controller.signal,cache:'no-store'
+        });
+        if(!response.ok)return false;
+        resetLiveAvailability();
+        return true;
+      }catch(_error){return false;}
+      finally{clearTimeout(timeout);}
+    })();
+    try{return await liveCheckPromise;}
+    finally{liveCheckPromise=null;}
+  }
+  function getLiveAvailability(){
+    return{unavailable:liveAvailability.unavailable,reason:liveAvailability.reason,
+      since:liveAvailability.since};
+  }
+  async function requestJson(url,retries,signal){
+    if(signal&&signal.aborted){const e=new Error('Aborted');e.name='AbortError';throw e;}
+    if(liveAvailability.unavailable)throw liveUnavailableError();
+    const controller=new AbortController();
+    const abortFromParent=()=>controller.abort();
+    if(signal)signal.addEventListener('abort',abortFromParent,{once:true});
+    activeLiveControllers.add(controller);
+    const maxAttempts=Math.max(1,Number(retries)||4);
+    let error=null;
+    try{
+      for(let i=0;i<maxAttempts;i++){
+        if(signal&&signal.aborted){const e=new Error('Aborted');e.name='AbortError';throw e;}
+        if(liveAvailability.unavailable)throw liveUnavailableError();
+        let response;
+        try{
+          response=await fetch(url,{cache:'no-store',signal:controller.signal});
+        }catch(e){
+          if(signal&&signal.aborted){const aborted=new Error('Aborted');aborted.name='AbortError';throw aborted;}
+          if(liveAvailability.unavailable)throw liveUnavailableError();
+          if(e instanceof TypeError||e&&e.name==='TypeError'){
+            error=e;
+            if(i===0&&maxAttempts>1){await sleep(300,signal);continue;}
+            markLiveUnavailable('network/CORS');
+            throw liveUnavailableError('network/CORS');
+          }
+          // Transport timeouts, connection resets and transient errors use the
+          // historical 500ms, 1s, 2s backoff.
+          error=new Error(String(e&&e.message||e||'network timeout'));
+          if(i+1<maxAttempts){await sleep(500*(2**i),signal);continue;}
+          throw error;
+        }
+        if(response.ok)return response.json();
+        if(response.status===451||response.status===403){
+          error=new Error('HTTP '+response.status);
+          if(i===0&&maxAttempts>1){await sleep(300,signal);continue;}
+          markLiveUnavailable('HTTP '+response.status);
+          throw liveUnavailableError('HTTP '+response.status);
+        }
+        if(response.status===429||response.status===418){
+          const ra=Number(response.headers&&response.headers.get('Retry-After'));
+          error=new Error('HTTP '+response.status);
+          if(i+1<maxAttempts)await sleep(Number.isFinite(ra)&&ra>0?ra*1000:1000*(2**i),signal);
+          continue;
+        }
+        if(response.status>=500&&response.status<600){
+          error=new Error('HTTP '+response.status);
+          if(i+1<maxAttempts)await sleep(500*(2**i),signal);
+          continue;
+        }
+        throw new Error('HTTP '+response.status);
+      }
+      throw error||new Error('request failed');
+    }finally{
+      activeLiveControllers.delete(controller);
+      if(signal)signal.removeEventListener('abort',abortFromParent);
+    }
   }
 
   function normalizeMs(v){
@@ -291,7 +387,7 @@
       fetchHistory(symbol,interval,limits[interval],undefined,signal)
         .then(value=>{series[interval]=value;step(interval);})
         .catch(e=>{
-          if(isAbort(e,signal))throw e;
+          if(isLiveUnavailable(e)||isAbort(e,signal))throw e;
           errors[interval]=String(e.message||e);step(interval+' failed');
         })
     )).finally(()=>{timing.klinesMs=performance.now()-started;});
@@ -322,7 +418,7 @@
           :await fetchLatest(symbol,interval,3,signal);
         if(needsFull){fullIntervals.add(interval);delete errors[interval];}
       }catch(e){
-        if(isAbort(e,signal))throw e;
+        if(isLiveUnavailable(e)||isAbort(e,signal))throw e;
         failures.push({interval,error:String(e.message||e)});
       }
     })).finally(()=>{timing.klinesMs=performance.now()-started;});
@@ -376,6 +472,7 @@
 
   global.OrderFlowAnalysisData={
     intervalMs,intervalSec,displayCounts,calcMap,parseRows,closedBars,fetchHistory,fetchHistorySerial,parallelPagePlan,fetchLatest,mergeBars,capFor,
-    fetchProfile,fetchKeyLevels,fetchTpo,loadPrecomputed,versions,loadSnapshot,loadLive,refreshLiveBundle,formatJst,toDisplayTime,formatDisplayTime,formatDisplayTick
+    fetchProfile,fetchKeyLevels,fetchTpo,loadPrecomputed,versions,loadSnapshot,loadLive,refreshLiveBundle,
+    requestJson,isLiveUnavailable,getLiveAvailability,probeLive,formatJst,toDisplayTime,formatDisplayTime,formatDisplayTick
   };
 })(typeof globalThis!=='undefined'?globalThis:window);
