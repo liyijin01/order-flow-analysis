@@ -153,14 +153,26 @@ const cases=[
         if(fapiBlocked>4)throw new Error('Flow excessive fapi attempts: '+fapiBlocked);
         const snapshotDigest=await page.evaluate(flowSignature);
         await recordScreenshot(page,'flow-fallback.png');
-        const explicit=await browser.newPage({viewport:{width:1600,height:1100}});
+        // Snapshot-only CSS uses a wider chart than the normal flow page.
+        // CVD is anchored to the visible window; compare at identical chart widths.
+        const fallbackWidth=await page.locator('#flowChart').evaluate(el=>el.clientWidth);
+        const explicit=await browser.newPage({viewport:{width:fallbackWidth+20,height:1100}});
         try{
           await explicit.goto(base+'flow.html?snapshot=1&symbol=BTCUSDT&tf=15m&anchor=swing',{
             waitUntil:'domcontentloaded',timeout:60000});
           await explicit.waitForFunction(()=>window.__flowDebug?.model&&
             document.getElementById('status')?.textContent.startsWith('Loaded '),undefined,{timeout:20000});
-          if(snapshotDigest!==await explicit.evaluate(flowSignature)){
-            throw new Error('Flow fallback values differ from explicit snapshot');
+          const explicitWidth=await explicit.locator('#flowChart').evaluate(el=>el.clientWidth);
+          if(explicitWidth!==fallbackWidth){
+            throw new Error('Flow snapshot chart widths differ: fallback='+
+              fallbackWidth+' explicit='+explicitWidth);
+          }
+          const expected=await explicit.evaluate(flowSignature);
+          if(snapshotDigest!==expected){
+            const actual=JSON.parse(snapshotDigest),baseline=JSON.parse(expected);
+            const changed=Object.keys(actual).filter(key=>
+              JSON.stringify(actual[key])!==JSON.stringify(baseline[key]));
+            throw new Error('Flow fallback values differ from explicit snapshot: '+changed.join(','));
           }
         }finally{await explicit.close();}
         const before=fapiBlocked;
