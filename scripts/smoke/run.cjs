@@ -19,7 +19,7 @@ const countAssertions=suites.reduce((total,name)=>{
   const file=fs.readFileSync(path.join(__dirname,name+'.cjs'),'utf8');
   return total+(file.match(/throw new Error\(/g)||[]).length;
 },0);
-const legacyCount=suites.filter(name=>name!=='ssd'&&name!=='precomputed'&&name!=='fallback').reduce((total,name)=>{
+const legacyCount=suites.filter(name=>name!=='ssd'&&name!=='precomputed'&&name!=='fallback'&&name!=='brief').reduce((total,name)=>{
   const file=fs.readFileSync(path.join(__dirname,name+'.cjs'),'utf8');
   return total+(file.match(/throw new Error\(/g)||[]).length;
 },0);
