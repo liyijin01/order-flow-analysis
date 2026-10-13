@@ -165,7 +165,7 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
   fs.writeFileSync(latestPath,JSON.stringify(latest,null,2));
   fs.writeFileSync(path.join(outDir,'manifest.json'),JSON.stringify(manifest,null,2));
   const briefResults=writeBriefFiles({
-    outputRoot:path.dirname(path.dirname(path.dirname(latestPath))),
+    outputRoot:path.dirname(path.dirname(latestPath)),
     raw:briefRaw,manifest,generatedAt:latest.generatedAt,dataCutoffUtc:cutoff
   });
   for(const symbol of symbols){

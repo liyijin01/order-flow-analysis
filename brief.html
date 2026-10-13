@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>每日简报 | Order Flow Lab</title>
+<link rel="stylesheet" href="web/brief/brief.css">
+</head><body><main>
+<header><a href="index.html">← 首页</a><h1 id="headline">每日简报</h1><nav aria-label="币种">
+<button type="button" data-symbol="BTCUSDT">BTC</button><button type="button" data-symbol="ETHUSDT">ETH</button><button type="button" data-symbol="SOLUSDT">SOL</button></nav></header>
+<p id="freshness" role="status"></p><section aria-labelledby="summaryTitle"><h2 id="summaryTitle">概要</h2><p id="summary">读取简报…</p></section>
+<section aria-labelledby="ladderTitle"><h2 id="ladderTitle">合流价位梯</h2><div id="ladder"></div><details id="singles"><summary>展开单来源价位</summary><div id="singleLadder"></div></details></section>
+<section aria-labelledby="statesTitle"><h2 id="statesTitle">状态表</h2><div class="scroll"><table><thead><tr><th>名称</th><th>当前值</th><th>参考值</th><th>状态</th><th>距离 %</th><th>模板</th></tr></thead><tbody id="states"></tbody></table></div></section>
+<section aria-labelledby="chartsTitle"><h2 id="chartsTitle">当天图表</h2><div id="pngs" class="gallery"></div></section>
+<footer>Binance USD-M · 快照数据 · UTC 边界 / JST 显示</footer>
+</main><script src="web/brief/brief.js"></script></body></html>
