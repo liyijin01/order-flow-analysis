@@ -6,6 +6,7 @@ on:
     paths:
       - 'index.html'
       - 'analysis.html'
+      - 'brief.html'
       - 'flow.html'
       - 'chart.html'
       - 'config/**'
