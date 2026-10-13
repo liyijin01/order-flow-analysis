@@ -40,3 +40,22 @@ test('seven PNGs and SSD state',()=>{
  const data=briefFor('BTCUSDT',raw,files,'2026-10-13T00:00:00Z','2026-10-12T23:59:59Z');
  assert.equal(data.pngs.length,7);assert.equal(data.states.length,7);assert.equal(data.zones[0].strength,'strong');
 });
+
+test('past-year VAH/VAL is included in RVWAP brief states',()=>{
+ const scope={OrderFlowBrief:B,OrderFlowTemplates:{}};
+ vm.runInNewContext(fs.readFileSync(new URL('../analysis/templates/rvwap.js',import.meta.url),'utf8'),scope);
+ const ts=Date.UTC(2026,9,12)/1000;
+ const model={last:{time:ts},current:100,
+   rvwap:{rolling:{'365':[{time:ts,value:98}]},yearSegments:[{start:Date.UTC(2026,0,1)/1000,end:Date.UTC(2027,0,1)/1000,points:[{time:ts,vwap:97}]}]},
+   yearLevels:[{price:110,label:'2024 VAH'},{price:99,label:'2025 VAL'},{price:100.01,label:'2024 VWAP'}]};
+ const states=scope.OrderFlowTemplates.rvwap.briefStates({model});
+ assert.equal(states.length,3);
+ assert.ok(states.some(s=>s.name==='现价 vs 2025 VAL'));
+});
+test('daily brief linked and published by Pages workflow',()=>{
+ const index=fs.readFileSync(new URL('../../index.html',import.meta.url),'utf8');
+ const flow=fs.readFileSync(new URL('../../.github/workflows/pages.yml',import.meta.url),'utf8');
+ assert.ok(index.includes('href="brief.html"'));
+ assert.ok(flow.includes('cp index.html chart.html analysis.html flow.html brief.html _site/'));
+ assert.ok(flow.includes('cp -R web/chart web/analysis web/brief web/flow'));
+});
