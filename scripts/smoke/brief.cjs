@@ -14,7 +14,7 @@ function fixture(symbol){
 }
 module.exports={cases:[{name:'D21 brief static and mobile',ordinal:100,async run(browser){
  const page=await browser.newPage({viewport:{width:1100,height:900}});
- const requests=[];page.on('request',r=>{if(/binance\\.com|binance\\.vision/.test(r.url()))requests.push(r.url());});
+ const requests=[];page.on('request',r=>{if(/binance\.com|binance\.vision/.test(r.url()))requests.push(r.url());});
  await page.route(/\/analysis\/brief\/([A-Z]+)\.json(?:\?.*)?$/,route=>{
   const match=route.request().url().match(/brief\/([A-Z]+)\.json/);
   return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(fixture(match[1]))});
