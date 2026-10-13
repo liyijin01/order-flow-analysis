@@ -203,8 +203,10 @@ jobs:
       - name: Prepare local D1 site
         run: |
           mkdir -p _site/web/chart/render/primitives _site/config _site/analysis/macro
-          cp analysis.html _site/
+          cp analysis.html brief.html _site/
           cp -R web/analysis web/shared web/vendor _site/web/
+          mkdir -p _site/web/brief
+          cp -R web/brief/. _site/web/brief/
           cp web/chart/indicators.js _site/web/chart/
           cp web/chart/render/primitives/base.js web/chart/render/primitives/band.js _site/web/chart/render/primitives/
           cp config/symbols.js config/analysis-rules.json _site/config/
