@@ -97,11 +97,13 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
       visibleBars:meta.visibleBars,logicalSlots:meta.logicalSlots,calcLastClosedUtc:meta.calcLastClosedUtc,
       supply:meta.supply,demand:meta.demand,drawn:meta.drawn,offView:meta.offView,regions:meta.regions,levels:meta.levels,keyLevels:meta.keyLevels,values:meta.values,reference:meta.reference
     });
-    const brief=await page.evaluate(()=>{
-      const d=window.__analysisDebug,handler=window.OrderFlowTemplates[d.template()],m=d.model;
-      return{currentPrice:m.current,levels:handler.briefLevels({model:m}),states:handler.briefStates({model:m})};
-    });
-    (briefRaw[symbol]||=(Object.create(null)))[template]=brief;
+    if(template!=='combined'){
+      const brief=await page.evaluate(()=>{
+        const d=window.__analysisDebug,handler=window.OrderFlowTemplates[d.template()],m=d.model;
+        return{currentPrice:m.current,levels:handler.briefLevels({model:m}),states:handler.briefStates({model:m})};
+      });
+      (briefRaw[symbol]||=(Object.create(null)))[template]=brief;
+    }
     await page.close();
   }
   async function captureSsd(){
