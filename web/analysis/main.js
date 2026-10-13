@@ -375,7 +375,7 @@
       const t=state.timing,seconds=ms=>(Math.max(0,Number(ms)||0)/1000).toFixed(1)+'s';
       const timing=t?' · 加载 '+seconds(t.totalMs)+'（'+
         (state.snapshot?'快照 '+seconds(t.snapshotMs):'K线 '+seconds(t.klinesMs))+
-        ' · 预计算 '+seconds(t.precomputedMs)+' · 计算绘制 '+seconds(t.renderMs)+'）':'';
+        ' · 预计算 '+seconds(t.precomputedMs)+' · 计算 '+seconds(t.computeMs)+' · 绘制 '+(t.drawPaused?'后台暂停':seconds(t.drawMs))+'）':'';
       $('status').textContent='Loaded '+model.display.length+' display candles · '+
         model.regions.length+' drawn regions · '+model.levels.length+' drawn key lines'+
         (errs.length?' · 缺失 '+errs.join(', '):'')+timing;
@@ -423,19 +423,22 @@
       before:()=>loadRules(),
       load:(token,full,signal)=>getBundle(token,full,signal),
       apply:async(result)=>{
-        const renderStart=performance.now();
+        const calculateStart=performance.now();
         state.bundle=result.bundle;
         state.refreshWarning=result.failures.length?result.failures.map(x=>x.interval).join(', ')+' 更新失败':null;
         let model=buildAnalysis(result.bundle);state.model=model;
+        const computeMs=performance.now()-calculateStart;
+        const drawStart=performance.now(),drawPaused=document.hidden;
         applySeries(model);renderTable(model);
-        model=await settleDefaultWindow(result.bundle);
+        if(!drawPaused)model=await settleDefaultWindow(result.bundle);
         state.lastSuccessAt=Date.now();
         const phase=result.bundle.timing||{};
         state.timing={
           klinesMs:Number(phase.klinesMs)||0,
           snapshotMs:Number(phase.snapshotMs)||0,
           precomputedMs:Number(phase.precomputedMs)||0,
-          renderMs:performance.now()-renderStart,
+          computeMs,drawMs:drawPaused?0:performance.now()-drawStart,drawPaused,
+          renderMs:computeMs+(drawPaused?0:performance.now()-drawStart),
           totalMs:performance.now()-started
         };
         updateHeader(model);

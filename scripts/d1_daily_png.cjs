@@ -1,5 +1,6 @@
 const {chromium}=require('playwright-core');
 const fs=require('fs'),path=require('path');
+const {writeBriefFiles}=require('./d21_build_brief.cjs');
 
 const base=process.env.ANALYSIS_URL||'http://127.0.0.1:8000/analysis.html';
 const outDir=path.resolve(process.env.ANALYSIS_PNG_DIR||'_site/analysis/png');
@@ -12,7 +13,7 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
 
 (async()=>{
   const browser=await chromium.launch({channel:'chrome',headless:true});
-  const manifest=[];let cutoff=null,levelsGeneratedAt=null,tpoGeneratedAt=null,profileGeneratedAt=null,ssdStatus=null;
+  const manifest=[];const briefRaw={};let cutoff=null,levelsGeneratedAt=null,tpoGeneratedAt=null,profileGeneratedAt=null,ssdStatus=null;
   async function capture(symbol,tf,template,fileTf){
     const page=await browser.newPage({viewport:{width:1660,height:1300},deviceScaleFactor:1});
     const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
@@ -96,6 +97,13 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
       visibleBars:meta.visibleBars,logicalSlots:meta.logicalSlots,calcLastClosedUtc:meta.calcLastClosedUtc,
       supply:meta.supply,demand:meta.demand,drawn:meta.drawn,offView:meta.offView,regions:meta.regions,levels:meta.levels,keyLevels:meta.keyLevels,values:meta.values,reference:meta.reference
     });
+    if(template!=='combined'){
+      const brief=await page.evaluate(()=>{
+        const d=window.__analysisDebug,handler=window.OrderFlowTemplates[d.template()],m=d.model;
+        return{currentPrice:m.current,levels:handler.briefLevels({model:m}),states:handler.briefStates({model:m})};
+      });
+      (briefRaw[symbol]||=(Object.create(null)))[template]=brief;
+    }
     await page.close();
   }
   async function captureSsd(){
@@ -137,6 +145,10 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
         regions:0,levels:meta.visibleLevels,keyLevels:meta.visibleLevels,
         values:meta.values,source:'CoinGecko',manualLevelSource:meta.levelSource
       });
+      (briefRaw.SSD||=(Object.create(null))).ssd=await page.evaluate(()=>{
+        const d=window.__analysisDebug,t=window.OrderFlowTemplates.ssd,m=d.model;
+        return{levels:t.briefLevels({model:m}),states:t.briefStates({model:m})};
+      });
       return{generatedAt:meta.generatedAt,lastDate:meta.date};
     }finally{await page.close();}
   }
@@ -154,7 +166,16 @@ const calcMs={'30m':4*3600_000,'1h':4*3600_000,'4h':86400_000,'1d':7*86400_000,'
   const latest={schema:'analysis-latest-v3',generatedAt:new Date().toISOString(),dataCutoffUtc:cutoff,symbols,timeframes:combinedTfs,templates:['combined','quarter','rvwap','weekly','monthly','mprofile','wprofile','ssd'],files:manifest};
   fs.writeFileSync(latestPath,JSON.stringify(latest,null,2));
   fs.writeFileSync(path.join(outDir,'manifest.json'),JSON.stringify(manifest,null,2));
-  const status={generatedAt:latest.generatedAt,dataCutoffUtc:cutoff,levelsGeneratedAt,tpoGeneratedAt,profileGeneratedAt,
+  const briefResults=writeBriefFiles({
+    outputRoot:path.dirname(path.dirname(latestPath)),
+    raw:briefRaw,manifest,generatedAt:latest.generatedAt,dataCutoffUtc:cutoff
+  });
+  for(const symbol of symbols){
+    const data=briefResults[symbol];
+    for(const file of data.pngs)if(!fs.existsSync(path.join(outDir,file)))
+      throw new Error('Missing brief PNG '+symbol+' '+file);
+  }
+  const status={briefGeneratedAt:latest.generatedAt,generatedAt:latest.generatedAt,dataCutoffUtc:cutoff,levelsGeneratedAt,tpoGeneratedAt,profileGeneratedAt,
     ssdGeneratedAt:ssdStatus&&ssdStatus.generatedAt||null,ssdLastDate:ssdStatus&&ssdStatus.lastDate||null,
     pngCount:manifest.length};
   fs.writeFileSync(path.join(path.dirname(latestPath),'status.json'),JSON.stringify(status,null,2));

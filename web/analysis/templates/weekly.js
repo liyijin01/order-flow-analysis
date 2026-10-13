@@ -191,4 +191,23 @@
       };
     }
   };
+  const B=global.OrderFlowBrief;
+  registry.weekly.briefLevels=function({model}){
+    const out=B.lines(model,'weekly').concat(B.regions(model,'weekly'));
+    const week=model.weekly||{},seg=(week.segments||[]).find(x=>x.start===week.currentStart);
+    const p=seg&&seg.points&&seg.points[seg.points.length-1];
+    if(p){B.line(out,p.vwap,'本周 VWAP','weekly');B.line(out,p.upper,'本周 +1σ','weekly');B.line(out,p.lower,'本周 −1σ','weekly');}
+    B.line(out,week.yearOpen,'Y O','weekly');
+    return out;
+  };
+  registry.weekly.briefStates=function({model}){
+    const week=model.weekly||{},seg=(week.segments||[]).find(x=>x.start===week.currentStart);
+    const p=seg&&seg.points&&seg.points[seg.points.length-1];
+    const projection=(week.projections||[]).find(x=>x.weekStart===week.currentStart);
+    return B.present([
+      p&&B.lineState('现价 vs 本周 VWAP',model.current,p.vwap,'weekly'),
+      projection&&B.rangeState('现价 vs 上周价值区',model.current,projection.pwLower,projection.pwUpper,'weekly'),
+      B.lineState('现价 vs 年开盘价 Y O',model.current,week.yearOpen,'weekly')
+    ]);
+  };
 })(typeof globalThis!=='undefined'?globalThis:window);

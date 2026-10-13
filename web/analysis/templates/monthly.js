@@ -111,4 +111,16 @@
       };
     }
   };
+  const B=global.OrderFlowBrief;
+  registry.monthly.briefLevels=function({model}){
+    return B.lines(model,'monthly').concat(B.regions(model,'monthly'));
+  };
+  registry.monthly.briefStates=function({model}){
+    const s=model.monthly||{};
+    return B.present([
+      s.upper&&B.lineState('现价 vs 上方线 '+s.upper.label,model.current,s.upper.price,'monthly'),
+      s.lower&&B.lineState('现价 vs 下方线 '+s.lower.label,model.current,s.lower.price,'monthly'),
+      s.imbalance&&B.rangeState('现价 vs imbalance 区',model.current,s.imbalance.low,s.imbalance.high,'monthly')
+    ]);
+  };
 })(typeof globalThis!=='undefined'?globalThis:window);

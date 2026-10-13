@@ -28,4 +28,25 @@
     manifestValues(){return null;}
   };
   registry.quarter={...definition};
+  const B=global.OrderFlowBrief;
+  registry.quarter.briefLevels=function({model}){
+    const out=B.lines(model,'quarter').concat(B.regions(model,'quarter'));
+    const current=(model.quarterVwaps||[]).find(x=>x.start===E.utcQuarterStart(model.last.time));
+    const point=current&&current.points&&current.points[current.points.length-1];
+    if(point){
+      B.line(out,point.vwap,'本季 VWAP','quarter');
+      B.line(out,point.upper,'本季 +1σ','quarter');
+      B.line(out,point.lower,'本季 −1σ','quarter');
+    }
+    return out;
+  };
+  registry.quarter.briefStates=function({model}){
+    const current=(model.quarterVwaps||[]).find(x=>x.start===E.utcQuarterStart(model.last.time));
+    const point=current&&current.points&&current.points[current.points.length-1];
+    const pq=model.pqStats;
+    return B.present([
+      point&&B.lineState('现价 vs 本季 VWAP',model.current,point.vwap,'quarter'),
+      pq&&B.rangeState('现价 vs 上季价值区',model.current,pq.lower,pq.upper,'quarter')
+    ]);
+  };
 })(typeof globalThis!=='undefined'?globalThis:window);
