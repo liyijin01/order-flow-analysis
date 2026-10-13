@@ -33,7 +33,11 @@ function briefFor(symbol,data,manifest,generatedAt,dataCutoffUtc){
   if(!ssd||!Array.isArray(ssd.states)||!ssd.states.length)throw new Error('Missing SSD states');
   const states=values.flatMap(v=>v.states||[]).concat(ssd.states);
   if(!levels.length||!states.length)throw new Error('Empty brief levels/states: '+symbol);
-  const pngs=manifest.filter(x=>x.symbol===symbol&&PRICE_TEMPLATES.includes(x.template)).map(x=>x.file);
+  const selected=new Set();
+  const pngs=manifest.filter(x=>{
+    if(x.symbol!==symbol||!PRICE_TEMPLATES.includes(x.template)||selected.has(x.template))return false;
+    selected.add(x.template);return true;
+  }).map(x=>x.file);
   const ssdPng=manifest.find(x=>x.template==='ssd'&&x.symbol==='SSD');
   if(!ssdPng)throw new Error('Missing SSD PNG');
   pngs.push(ssdPng.file);
