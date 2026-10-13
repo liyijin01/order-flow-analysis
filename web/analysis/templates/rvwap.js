@@ -124,7 +124,7 @@
     const rolling=model.rvwap&&model.rvwap.rolling||{};
     const seg=(model.rvwap&&model.rvwap.yearSegments||[]).find(s=>model.last.time>=s.start&&model.last.time<s.end);
     const point=seg&&seg.points&&seg.points[seg.points.length-1];
-    const years=(model.yearLevels||[]).filter(x=>/\\b(VAH|VAL)$/.test(String(x.label||'')));
+    const years=(model.yearLevels||[]).filter(x=>/\b(VAH|VAL)$/.test(String(x.label||'')));
     years.sort((a,b)=>Math.abs(a.price-model.current)-Math.abs(b.price-model.current));
     return B.present([
       B.lineState('现价 vs 365D RVWAP',model.current,B.last(rolling['365']),'rvwap'),

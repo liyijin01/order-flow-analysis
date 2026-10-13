@@ -416,9 +416,9 @@ jobs:
       - name: Prepare static site
         run: |
           mkdir -p _site/web _site/config _site/analysis/data _site/analysis/levels _site/analysis/tpo _site/analysis/macro _site/flow/data
-          cp index.html chart.html analysis.html flow.html _site/
+          cp index.html chart.html analysis.html flow.html brief.html _site/
           cp web/core.js web/live.js web/render.js web/app.js _site/web/
-          cp -R web/chart web/analysis web/flow web/shared web/vendor _site/web/
+          cp -R web/chart web/analysis web/brief web/flow web/shared web/vendor _site/web/
           cp config/symbols.js config/analysis-rules.json config/annotation-rules.json config/flow-rules.json _site/config/
           cp _generated/profiles-*.json _site/
           cp _generated/analysis/data/*.json _site/analysis/data/
