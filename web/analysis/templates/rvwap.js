@@ -110,4 +110,26 @@
       return null;
     }
   };
+  const B=global.OrderFlowBrief;
+  registry.rvwap.briefLevels=function({model}){
+    const out=B.lines(model,'rvwap').concat(B.regions(model,'rvwap'));
+    const rolling=model.rvwap&&model.rvwap.rolling||{};
+    for(const days of [30,60,90,365])B.line(out,B.last(rolling[String(days)]),days+'D RVWAP','rvwap');
+    const seg=(model.rvwap&&model.rvwap.yearSegments||[]).find(s=>model.last.time>=s.start&&model.last.time<s.end);
+    const p=seg&&seg.points&&seg.points[seg.points.length-1];
+    if(p){B.line(out,p.vwap,'Y VWAP','rvwap');B.line(out,p.upper,'Y VAH','rvwap');B.line(out,p.lower,'Y VAL','rvwap');}
+    return out;
+  };
+  registry.rvwap.briefStates=function({model}){
+    const rolling=model.rvwap&&model.rvwap.rolling||{};
+    const seg=(model.rvwap&&model.rvwap.yearSegments||[]).find(s=>model.last.time>=s.start&&model.last.time<s.end);
+    const point=seg&&seg.points&&seg.points[seg.points.length-1];
+    const years=(model.yearLevels||[]).filter(x=>/\\b(VAH|VAL)$/.test(String(x.label||'')));
+    years.sort((a,b)=>Math.abs(a.price-model.current)-Math.abs(b.price-model.current));
+    return B.present([
+      B.lineState('现价 vs 365D RVWAP',model.current,B.last(rolling['365']),'rvwap'),
+      point&&B.lineState('现价 vs 今年 VWAP',model.current,point.vwap,'rvwap'),
+      years[0]&&B.lineState('现价 vs '+years[0].label,model.current,years[0].price,'rvwap')
+    ]);
+  };
 })(typeof globalThis!=='undefined'?globalThis:window);

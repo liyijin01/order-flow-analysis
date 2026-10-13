@@ -65,4 +65,20 @@
   }
   registry.ssd={dataSource:'macro/ssd',needs:()=>({}),buildMacro,manifestValues,
     businessDay,visibleLevels,nearestLevels};
+  const B=global.OrderFlowBrief;
+  registry.ssd.briefLevels=function({model}){
+    const out=[];
+    for(const level of model.levels||[])B.line(out,level.price,level.label||String(level.price)+'%','ssd');
+    return out;
+  };
+  registry.ssd.briefStates=function({model}){
+    const current=Number(model.current),points=model.points||[],last=points[points.length-1];
+    const target=last&&new Date(Date.parse(last.date+'T00:00:00Z')-5*86400000).toISOString().slice(0,10);
+    const previous=points.find(p=>p.date===target);
+    const delta=previous?current-Number(previous.value):null;
+    return B.present([
+      B.lineState('稳定币占比 vs 9.064%',current,9.064,'ssd'),
+      B.valid(delta)?{name:'稳定币占比 5 天变化（pp）',value:delta,reference:0,state:delta>0?'above':delta<0?'below':'inside',distancePct:null,template:'ssd'}:null
+    ]);
+  };
 })(typeof globalThis!=='undefined'?globalThis:window);

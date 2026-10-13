@@ -295,4 +295,15 @@
       };
     }
   };
+  const B=global.OrderFlowBrief;
+  registry.wprofile.briefLevels=function({model}){
+    return B.lines(model,'wprofile').concat(B.regions(model,'wprofile'));
+  };
+  registry.wprofile.briefStates=function({model}){
+    const w=model.wprofile||{};
+    return B.present([
+      w.reference&&B.rangeState('现价 vs 参考周区间',model.current,w.reference.low,w.reference.high,'wprofile'),
+      w.current&&B.lineState('现价 vs 当前周 POC',model.current,w.current.poc,'wprofile')
+    ]);
+  };
 })(typeof globalThis!=='undefined'?globalThis:window);

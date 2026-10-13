@@ -281,4 +281,15 @@
       };
     }
   };
+  const B=global.OrderFlowBrief;
+  registry.mprofile.briefLevels=function({model}){
+    return B.lines(model,'mprofile').concat(B.regions(model,'mprofile'));
+  };
+  registry.mprofile.briefStates=function({model}){
+    const m=model.mprofile||{};
+    return B.present([
+      m.box&&B.rangeState('现价 vs '+new Date(m.box.startSec*1000).toISOString().slice(0,7)+' 价值区',model.current,m.box.val,m.box.vah,'mprofile'),
+      m.current&&B.lineState('现价 vs 当前月 POC',model.current,m.current.poc,'mprofile')
+    ]);
+  };
 })(typeof globalThis!=='undefined'?globalThis:window);
